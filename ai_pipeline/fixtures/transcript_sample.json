@@ -1,0 +1,24 @@
+{
+  "segments": [
+    {
+      "start_time": 0,
+      "end_time": 6.4,
+      "text": "Cloud computing cung cấp tài nguyên như máy chủ, lưu trữ và cơ sở dữ liệu qua Internet theo nhu cầu."
+    },
+    {
+      "start_time": 6.4,
+      "end_time": 13.2,
+      "text": "Thay vì đầu tư và tự vận hành toàn bộ phần cứng, tổ chức có thể sử dụng hạ tầng của nhà cung cấp dịch vụ đám mây."
+    },
+    {
+      "start_time": 13.2,
+      "end_time": 20.1,
+      "text": "Mô hình Infrastructure as a Service cho phép khách hàng thuê máy ảo, mạng và lưu trữ, đồng thời vẫn quản lý hệ điều hành."
+    },
+    {
+      "start_time": 20.1,
+      "end_time": 27.8,
+      "text": "Một lợi ích quan trọng là khả năng mở rộng linh hoạt: tài nguyên có thể tăng hoặc giảm theo nhu cầu sử dụng."
+    }
+  ]
+}
