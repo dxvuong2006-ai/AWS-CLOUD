@@ -1,0 +1,37 @@
+{
+  "questions": [
+    {
+      "question": "What is a key characteristic of cloud computing?",
+      "options": [
+        "Computing resources are delivered over a network on demand",
+        "All data must be stored on a user's local device",
+        "Applications can only run on dedicated physical servers",
+        "Resources cannot be scaled after deployment"
+      ],
+      "correct_answer": "Computing resources are delivered over a network on demand",
+      "explanation": "Cloud computing provides access to computing resources such as storage and processing over a network, typically on demand."
+    },
+    {
+      "question": "Which cloud service model provides virtual machines, storage, and networking while allowing customers to manage the operating system?",
+      "options": [
+        "Software as a Service (SaaS)",
+        "Platform as a Service (PaaS)",
+        "Infrastructure as a Service (IaaS)",
+        "Function as a Service (FaaS)"
+      ],
+      "correct_answer": "Infrastructure as a Service (IaaS)",
+      "explanation": "IaaS provides fundamental infrastructure resources, while the customer is generally responsible for managing the operating system and applications."
+    },
+    {
+      "question": "What is a common benefit of scaling a cloud application horizontally?",
+      "options": [
+        "Increasing the capacity of one server by adding more CPU and memory",
+        "Adding more instances to distribute the workload",
+        "Removing the need to monitor application performance",
+        "Guaranteeing that the application will never experience an outage"
+      ],
+      "correct_answer": "Adding more instances to distribute the workload",
+      "explanation": "Horizontal scaling adds instances so that workload can be distributed across more resources; it does not guarantee that outages will never occur."
+    }
+  ]
+}
