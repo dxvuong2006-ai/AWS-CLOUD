@@ -1,0 +1,21 @@
+services:
+  learncloud-db:
+    image: postgres:16
+    container_name: learncloud-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: learncloud
+      POSTGRES_USER: learncloud
+      POSTGRES_PASSWORD: learncloud_dev_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - learncloud_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U learncloud -d learncloud"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  learncloud_data:

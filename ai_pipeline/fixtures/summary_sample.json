@@ -1,0 +1,18 @@
+{
+  "title": "Cloud Computing và khả năng mở rộng tài nguyên",
+  "summary": "Cloud computing cung cấp máy chủ, lưu trữ và cơ sở dữ liệu qua Internet theo nhu cầu, giúp tổ chức sử dụng hạ tầng của nhà cung cấp thay vì tự đầu tư và vận hành toàn bộ phần cứng. Với mô hình Infrastructure as a Service (IaaS), khách hàng thuê máy ảo, mạng và lưu trữ nhưng vẫn quản lý hệ điều hành. Tài nguyên đám mây có thể tăng hoặc giảm linh hoạt theo nhu cầu sử dụng.",
+  "key_concepts": [
+    {
+      "term": "Cloud computing",
+      "definition": "Mô hình cung cấp tài nguyên điện toán như máy chủ, lưu trữ và cơ sở dữ liệu qua Internet theo nhu cầu."
+    },
+    {
+      "term": "Infrastructure as a Service (IaaS)",
+      "definition": "Mô hình dịch vụ đám mây cho phép khách hàng thuê máy ảo, mạng và lưu trữ, đồng thời tự quản lý hệ điều hành."
+    },
+    {
+      "term": "Khả năng mở rộng linh hoạt",
+      "definition": "Khả năng tăng hoặc giảm tài nguyên đám mây theo nhu cầu sử dụng."
+    }
+  ]
+}
