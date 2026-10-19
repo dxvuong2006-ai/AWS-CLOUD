@@ -1,0 +1,105 @@
+:root {
+  /* Bảng màu theo spec */
+  --bg: #F6F7FA;
+  --surface: #FFFFFF;
+  --border: #E7E9EE;
+  --text: #0F172A;
+  --text-muted: #64748B;
+  --accent: #3453D9;
+  --accent-bg: #EEF2FF;
+  --success: #157347;
+  --warning: #A5600A;
+  --error: #B3261E;
+
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Bố cục trang */
+.page {
+  padding: 40px;
+  max-width: 1200px;
+}
+
+.page h1 {
+  font-size: 25px;
+  margin: 0 0 20px;
+}
+
+/* Thẻ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* Ô nhập */
+input {
+  width: 100%;
+  max-width: 360px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Nút chính */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Màn học lesson (dùng ở mục 13) */
+.learning-layout {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
