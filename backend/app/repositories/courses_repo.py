@@ -15,6 +15,10 @@ def create_course(
 
     return course
 
+# lấy danh sách theo id khóa học
+def get_course_by_id(db: Session, course_id: int) -> Course | None:
+    return db.query(Course).filter(Course.id == course_id).first()
+
 # Lấy danh sách khóa học đã publish
 def get_published_courses(db: Session) -> list[Course]:
     return (
