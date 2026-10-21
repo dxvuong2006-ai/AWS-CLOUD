@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
 from app.api.lessons import router as lessons_router
 from app.api.sections import router as sections_router
@@ -9,6 +10,18 @@ app = FastAPI(
     title="LearnCloud",
     description="Backend API for the LearnCloud learning platform",
     version="0.1.0",
+)
+
+# CORS: Cho phép frontend React gọi API FastAPI
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(courses_router)
