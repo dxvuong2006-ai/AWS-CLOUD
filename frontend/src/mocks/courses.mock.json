@@ -1,0 +1,51 @@
+[
+  {
+    "id": "1",
+    "title": "Nhập môn Điện toán đám mây",
+    "description": "AWS cơ bản qua video ngắn",
+    "lessons": 3,
+    "status": "PUBLISHED",
+    "sections": [
+      {
+        "id": "s1",
+        "title": "Giới thiệu",
+        "lessons": [
+          { "id": "l1", "title": "Cloud là gì?", "duration": 420 },
+          { "id": "l2", "title": "IaaS, PaaS, SaaS", "duration": 600 }
+        ]
+      },
+      {
+        "id": "s2",
+        "title": "Dịch vụ lưu trữ",
+        "lessons": [
+          { "id": "l3", "title": "S3 và presigned URL", "duration": 540 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "2",
+    "title": "Docker từ con số 0",
+    "description": "Container và docker-compose",
+    "lessons": 2,
+    "status": "PUBLISHED",
+    "sections": [
+      {
+        "id": "s1",
+        "title": "Container cơ bản",
+        "lessons": [
+          { "id": "l1", "title": "Image và container", "duration": 480 },
+          { "id": "l2", "title": "Dockerfile đầu tiên", "duration": 660 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "3",
+    "title": "Mạng máy tính căn bản",
+    "description": "TCP/IP, DNS, HTTP",
+    "lessons": 0,
+    "status": "DRAFT",
+    "sections": []
+  }
+]
