@@ -42,3 +42,8 @@ def require_student(user: User = Depends(get_current_user)) -> User:
     if str(getattr(user, "role", "")).upper() != "STUDENT":
         raise HTTPException(status_code=403, detail="Student role required.")
     return user
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if str(user.role).upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return user
