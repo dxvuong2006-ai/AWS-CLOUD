@@ -82,11 +82,24 @@ Trong bảng dưới đây, ký hiệu `Dũng → Hùng` nghĩa là Dũng tạo/
 
 ### Frontend — `frontend/` (Hùng; các file hỗ trợ được ghi riêng)
 
+Các vai trò dưới đây mô tả trách nhiệm dự kiến của từng tệp, không khẳng định
+endpoint/backend đã hoàn tất hoặc trang đã được nối vào router. Tệp mock chỉ
+dùng để dựng giao diện; không dùng mock để che lỗi khi request API thất bại.
+
 | Tệp/thư mục | Phụ trách | Vai trò |
 | --- | --- | --- |
-| `package.json`, `vite.config.js` | Hùng | Dependency và cấu hình phát triển/build Vite. |
-| `src/main.jsx`, `src/App.jsx` | Hùng | Điểm vào React và component gốc. |
-| `src/routes/AppRoutes.jsx` | Hùng | Khai báo điều hướng giữa các trang. |
+| `package.json` | Hùng | Khai báo package, thư viện và các lệnh chạy/build frontend. |
+| `vite.config.js` | Hùng | Cấu hình Vite cho máy chủ phát triển và quá trình build. |
+| `src/main.jsx` | Hùng | Điểm vào trình duyệt; khởi tạo React và nạp CSS toàn cục. |
+| `src/App.jsx` | Hùng | Component gốc, kết nối phần ứng dụng với cấu hình route. |
+| `src/index.css` | Hùng | Font, reset và các kiểu CSS toàn cục; nạp design tokens. |
+| `src/styles/tokens.css` | Hùng | Khai báo biến giao diện dùng chung như màu, cỡ chữ, bo góc và khoảng cách. |
+| `tailwind.config.js` (nếu dùng Tailwind) | Hùng | Cấu hình theme Tailwind theo design tokens; hiện không có file này trong frontend. |
+| `src/routes/AppRoutes.jsx` | Hùng | Khai báo đường dẫn và gắn trang/layout tương ứng. |
+| `src/routes/ProtectedRoute.jsx` | Hùng | Chặn hiển thị route theo trạng thái đăng nhập/vai trò; backend vẫn phải xác thực và phân quyền độc lập. |
+| `src/components/layout/Sidebar.jsx` | Dũng → Hùng | Điều hướng theo vai trò, đánh dấu mục hiện tại và hiển thị tài khoản ở cuối thanh bên. |
+| `src/components/layout/AppLayout.jsx` | Dũng → Hùng | Khung trang dùng chung, kết hợp Sidebar với vùng nội dung. |
+| `src/components/layout/PageHeader.jsx` | Dũng → Hùng | Tiêu đề, mô tả, breadcrumb và nhóm hành động đầu trang. |
 | `src/api/client.js` | Hùng | HTTP client chung, base URL, header demo và xử lý lỗi HTTP. |
 | `src/api/courses.api.js` | Hùng | Request liên quan danh sách/chi tiết course. |
 | `src/api/lessons.api.js` | Hùng | Request lesson và nội dung học. |
@@ -94,29 +107,67 @@ Trong bảng dưới đây, ký hiệu `Dũng → Hùng` nghĩa là Dũng tạo/
 | `src/api/progress.api.js` | Hùng | Đọc/cập nhật tiến độ học. |
 | `src/api/uploads.api.js` | Hùng | Luồng request upload/presigned URL theo API contract. |
 | `src/api/tutor.api.js` | Hùng | Gọi endpoint Tutor. |
-| `src/components/layout/Navbar.jsx` | Dũng → Hùng | Điều hướng/layout dùng chung. |
+| `src/api/analytics.api.js` | Hùng; phối hợp Tuấn | Gọi `GET /instructor/courses/{id}/analytics`; response cần theo API contract. |
+| `src/api/review.api.js` | Hùng; phối hợp Tuấn | Lấy, cập nhật và duyệt nội dung AI của lesson. |
+| `src/api/admin.api.js` | Hùng; phối hợp backend | API quản trị tài khoản khi backend cung cấp endpoint tương ứng; contract hiện tại chưa liệt kê API admin. |
+| `src/components/ui/Button.jsx` | Dũng → Hùng | Nút dùng chung, hỗ trợ kiểu chính/phụ/cảnh báo và kích thước nhỏ. |
+| `src/components/ui/Card.jsx` | Dũng → Hùng | Khung thẻ nội dung dùng chung cho các trang. |
+| `src/components/ui/KpiCard.jsx` | Dũng → Hùng | Thẻ hiển thị chỉ số tổng quan, nhãn và giá trị. |
+| `src/components/ui/StatusChip.jsx` | Dũng → Hùng | Hiển thị trạng thái nghiệp vụ bằng nhãn và màu thống nhất. |
+| `src/components/ui/DataTable.jsx` | Dũng → Hùng | Bảng dữ liệu dùng chung cho danh sách khóa học, học viên và tài khoản. |
+| `src/components/ui/Segmented.jsx` | Dũng → Hùng | Bộ lọc chọn một trạng thái/nhóm trong các lựa chọn phân đoạn. |
+| `src/components/ui/SearchInput.jsx` | Dũng → Hùng | Ô nhập từ khóa để tìm kiếm/lọc danh sách. |
+| `src/components/ui/Spinner.jsx` | Dũng → Hùng | Báo hiệu tác vụ hoặc dữ liệu đang tải. |
+| `src/components/ui/EmptyState.jsx` | Dũng → Hùng | Trình bày trạng thái danh sách chưa có dữ liệu và hành động liên quan. |
+| `src/components/ui/ErrorMessage.jsx` | Dũng → Hùng | Hiển thị lỗi rõ ràng và nút thử lại nếu được cung cấp. |
+| `src/components/ui/ui.css` | Dũng → Hùng | Kiểu giao diện nền cho layout và các component UI dùng chung. |
+| `src/components/layout/Navbar.jsx` | Dũng → Hùng | Điều hướng dạng thanh trên hiện có; phối hợp với Sidebar nếu layout mới được dùng. |
 | `src/components/courses/CourseCard.jsx` | Dũng → Hùng | Thẻ tóm tắt course trong danh sách. |
 | `src/components/courses/CourseOutline.jsx` | Hùng | Outline section/lesson của course. |
 | `src/components/learning/VideoPlayer.jsx` | Hùng | Phát nội dung video của lesson. |
 | `src/components/learning/TranscriptPanel.jsx` | Hùng | Hiển thị transcript, có thể gắn timestamp. |
 | `src/components/learning/SummaryPanel.jsx` | Hùng | Hiển thị summary và key concepts. |
+| `src/components/learning/FlashcardDeck.jsx` | Hùng | Lật thẻ, chuyển thẻ và theo dõi vị trí khi ôn tập flashcard. |
 | `src/components/quiz/QuizForm.jsx` | Hùng | Thu thập câu trả lời; không tự chấm hoặc làm lộ đáp án. |
 | `src/components/quiz/QuizResult.jsx` | Hùng | Hiển thị kết quả do backend chấm và hành động tiếp theo. |
+| `src/components/quiz/QuizNavigator.jsx` | Hùng | Chuyển tới câu hỏi checkpoint và biểu thị câu đã trả lời. |
 | `src/components/progress/ProgressBar.jsx` | Dũng → Hùng | Hiển thị tiến độ học. |
 | `src/components/instructor/VideoUploadForm.jsx` | Hùng | UI upload video theo contract. |
 | `src/components/instructor/AIContentReview.jsx` | Hùng | UI review/approve nội dung AI. |
+| `src/components/instructor/CourseTable.jsx` | Hùng | Bảng khóa học giảng viên, trạng thái và thao tác xem/sửa/báo cáo. |
+| `src/components/instructor/CourseForm.jsx` | Hùng | Nhập tên, mô tả và mục tiêu học tập của course. |
+| `src/components/instructor/SectionEditor.jsx` | Hùng | Thêm, sắp xếp và xóa section/lesson khi soạn course. |
+| `src/components/instructor/ProcessingStatus.jsx` | Hùng | Hiển thị trạng thái pipeline lesson và thao tác chạy lại khi thất bại. |
+| `src/components/instructor/StudentProgressTable.jsx` | Hùng | Bảng tiến độ, điểm và hoạt động của học viên theo course. |
+| `src/components/instructor/SectionPassRate.jsx` | Hùng | Trực quan hóa tỷ lệ đạt checkpoint theo section. |
 | `src/components/tutor/TutorPanel.jsx` | Hùng | UI Tutor remediation. |
 | `src/pages/LoginPage.jsx` | Hùng | Chọn user mẫu trong MVP; chưa tích hợp Cognito. |
 | `src/pages/CourseListPage.jsx` | Hùng | Trang danh sách course. |
 | `src/pages/CourseDetailPage.jsx` | Hùng | Trang chi tiết và outline course. |
 | `src/pages/LearningPage.jsx` | Hùng | Trang học lesson, video, progress và checkpoint. |
 | `src/pages/InstructorDashboardPage.jsx` | Hùng | Trang quản lý course dành cho instructor. |
+| `src/pages/InstructorCoursesPage.jsx` | Hùng | Danh sách course riêng của instructor, tìm kiếm và lọc trạng thái. |
+| `src/pages/CourseEditorPage.jsx` | Hùng | Soạn metadata course và cấu trúc section/lesson. |
+| `src/pages/StudentReportPage.jsx` | Hùng; phối hợp Tuấn | Báo cáo tiến độ và tỷ lệ đạt theo section/học viên. |
+| `src/pages/ReviewQueuePage.jsx` | Hùng | Danh sách lesson chờ duyệt, điều hướng tới trang review. |
 | `src/pages/LessonReviewPage.jsx` | Hùng | Trang duyệt nội dung lesson/AI. |
+| `src/pages/MyCoursesPage.jsx` | Hùng | Danh sách course học viên đã đăng ký và tiến độ tổng quan. |
+| `src/pages/ProgressPage.jsx` | Hùng | Tiến độ học viên theo course/section. |
+| `src/pages/FlashcardPage.jsx` | Hùng | Trang ôn tập flashcard (tính năng tùy chọn). |
+| `src/pages/AdminUsersPage.jsx` | Hùng; phối hợp backend | Tìm kiếm và quản lý trạng thái tài khoản; phụ thuộc API admin chưa có trong contract MVP. |
+| `src/pages/AdminMonitoringPage.jsx` | Hùng; phối hợp Huy | Hiển thị job/cảnh báo nếu có nguồn dữ liệu; có thể thay bằng CloudWatch console. |
 | `src/hooks/useCourses.js` | Hùng | Đóng gói trạng thái và thao tác tải course. |
 | `src/hooks/useLessonProgress.js` | Hùng | Đóng gói thao tác progress của lesson. |
+| `src/hooks/useProcessingStatus.js` | Hùng | Hỏi lại trạng thái xử lý lesson cho tới khi pipeline hoàn tất hoặc thất bại. |
 | `src/context/AuthContext.jsx` | Hùng | Lưu user/role demo và trạng thái phiên giao diện. |
 | `src/utils/scoreBand.js` | Dũng → Hùng | Ánh xạ band điểm sang thông điệp giao diện; backend vẫn là nơi quyết định quyền. |
+| `src/utils/statusLabels.js` | Dũng → Hùng | Ánh xạ status backend sang nhãn tiếng Việt và tone của StatusChip. |
+| `src/utils/format.js` | Dũng → Hùng | Định dạng thời lượng, ngày và phần trăm. |
 | `src/mocks/courses.mock.json` | Hùng | Dữ liệu giả cho UI trước khi API course hoàn thiện. |
+| `src/mocks/lessons.mock.json` | Hùng; phối hợp Tuấn | Fixture lesson, transcript, summary và key concepts cho UI học/review. |
+| `src/mocks/quiz.mock.json` | Hùng; phối hợp Tuấn | Fixture câu hỏi và kết quả quiz/checkpoint; không thay thế chấm điểm backend. |
+| `src/mocks/analytics.mock.json` | Hùng; phối hợp Tuấn | Fixture chỉ số tổng quan và tỷ lệ đạt theo section cho báo cáo course. |
+| `src/mocks/students.mock.json` | Hùng; phối hợp Tuấn | Fixture danh sách học viên, tiến độ, điểm và hoạt động gần nhất. |
 
 ### Backend — `backend/` (Huy, trừ progress/quiz/Tutor/review)
 
