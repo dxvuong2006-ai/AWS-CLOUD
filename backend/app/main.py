@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api import quizzes
 from app.api.courses import router as courses_router
 
 app = FastAPI(
@@ -8,6 +9,7 @@ app = FastAPI(
 )
 
 app.include_router(courses_router)
+app.include_router(quizzes.router)
 
 @app.get("/health", tags=["Health"])
 def health_check():
