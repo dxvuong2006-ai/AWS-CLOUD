@@ -3,8 +3,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from ._common import clean_text
+else:
+    from _common import clean_text
 
-_WHITESPACE_RE = re.compile(r"\s+")
 _VIETNAMESE_RE = re.compile(
     r"[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩị"
     r"óòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]",
@@ -40,12 +43,6 @@ _ENGLISH_WORDS = {
 }
 
 
-def _clean_text(value: Any) -> str:
-    if not isinstance(value, str):
-        return ""
-    return _WHITESPACE_RE.sub(" ", value).strip()
-
-
 def _to_timestamp(value: Any) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
@@ -57,7 +54,7 @@ def _to_timestamp(value: Any) -> float | None:
 
 def _collect_segments(data: Any) -> list[dict[str, Any]]:
     if isinstance(data, str):
-        text = _clean_text(data)
+        text = clean_text(data)
         return [{"text": text}] if text else []
 
     if isinstance(data, list):
@@ -78,14 +75,14 @@ def _collect_segments(data: Any) -> list[dict[str, Any]]:
     segments = []
     for item in items:
         if isinstance(item, str):
-            text = _clean_text(item)
+            text = clean_text(item)
             if text:
                 segments.append({"text": text})
             continue
         if not isinstance(item, dict):
             continue
 
-        text = _clean_text(item.get("text"))
+        text = clean_text(item.get("text"))
         if not text:
             continue
 

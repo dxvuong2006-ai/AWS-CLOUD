@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.models.section import Section
 from app.repositories import quizzes_repo
+from app.repositories import sections_repo
 
 
 class SectionLockedError(Exception):
@@ -10,15 +11,6 @@ class SectionLockedError(Exception):
 
 class PrerequisiteQuizNotPassedError(Exception):
     pass
-
-
-def _get_course_sections(db: Session, course_id: int) -> list[Section]:
-    return (
-        db.query(Section)
-        .filter(Section.course_id == course_id)
-        .order_by(Section.position.asc())
-        .all()
-    )
 
 
 def _is_section_unlocked(
@@ -37,16 +29,15 @@ def _is_section_unlocked(
     if section_index == 0:
         return True
 
-    previous_section = sections[section_index - 1]
-    previous_quiz = quizzes_repo.get_quiz_by_section(db, previous_section.id)
-    if previous_quiz is None:
-        return True
-
-    return quizzes_repo.has_passed_quiz(
-        db,
-        student_id=student_id,
-        quiz_id=previous_quiz.id,
-    )
+    for previous_section in sections[:section_index]:
+        previous_quiz = quizzes_repo.get_quiz_by_section(db, previous_section.id)
+        if previous_quiz is not None and not quizzes_repo.has_passed_quiz(
+            db,
+            student_id=student_id,
+            quiz_id=previous_quiz.id,
+        ):
+            return False
+    return True
 
 
 def is_section_unlocked(
@@ -56,7 +47,7 @@ def is_section_unlocked(
     course_id: int,
     section_id: int,
 ) -> bool:
-    sections = _get_course_sections(db, course_id)
+    sections = sections_repo.list_sections_by_course(db, course_id)
     return _is_section_unlocked(
         db,
         student_id=student_id,
@@ -79,7 +70,7 @@ def assert_section_unlocked(
         section_id=section_id,
     ):
         raise SectionLockedError(
-            "Previous section quiz must be passed with >= 80% to unlock this section."
+            "Previous section requirements must be met to unlock this section."
         )
 
 
@@ -89,16 +80,21 @@ def get_course_unlock_status(
     student_id: int,
     course_id: int,
 ) -> list[dict]:
-    sections = _get_course_sections(db, course_id)
-    return [
-        {
-            "section_id": section.id,
-            "is_unlocked": _is_section_unlocked(
-                db,
-                student_id=student_id,
-                sections=sections,
-                section_id=section.id,
-            ),
-        }
-        for section in sections
-    ]
+    sections = sections_repo.list_sections_by_course(db, course_id)
+    status = []
+    is_unlocked = True
+    for section in sections:
+        status.append(
+            {
+                "section_id": section.id,
+                "is_unlocked": is_unlocked,
+            }
+        )
+        previous_quiz = quizzes_repo.get_quiz_by_section(db, section.id)
+        if previous_quiz is not None and not quizzes_repo.has_passed_quiz(
+            db,
+            student_id=student_id,
+            quiz_id=previous_quiz.id,
+        ):
+            is_unlocked = False
+    return status

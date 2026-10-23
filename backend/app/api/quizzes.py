@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_student
-from app.models.section import Section
 from app.models.user import User
+from app.repositories import sections_repo
 from app.schemas.quiz import (
     QuizAttemptResponse,
     QuizDetailResponse,
@@ -25,6 +25,10 @@ router = APIRouter(tags=["Quizzes"])
 @router.get(
     "/sections/{section_id}/quiz",
     response_model=QuizDetailResponse,
+    responses={
+        403: {"description": "Section is locked or quiz is not approved."},
+        404: {"description": "Section or quiz was not found."},
+    },
 )
 def get_section_quiz(
     section_id: int,
@@ -32,7 +36,7 @@ def get_section_quiz(
     current_user: User = Depends(require_student),
 ):
     try:
-        section = db.query(Section).filter(Section.id == section_id).first()
+        section = sections_repo.get_section_by_id(db, section_id)
         if section is None:
             raise HTTPException(status_code=404, detail="Section not found.")
 
@@ -55,6 +59,11 @@ def get_section_quiz(
 @router.post(
     "/quizzes/{quiz_id}/attempts",
     response_model=QuizAttemptResponse,
+    responses={
+        400: {"description": "Quiz submission is invalid."},
+        403: {"description": "Section is locked or quiz is not approved."},
+        404: {"description": "Quiz or its section was not found."},
+    },
 )
 def submit_quiz(
     quiz_id: int,

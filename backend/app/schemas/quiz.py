@@ -1,13 +1,16 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class QuestionResponse(BaseModel):
     id: int
     quiz_id: int
     question: str
-    options: list[str] = Field(validation_alias="options_json")
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
     position: int
 
     model_config = ConfigDict(from_attributes=True)
@@ -17,7 +20,10 @@ class QuestionResultResponse(BaseModel):
     id: int
     quiz_id: int
     question: str
-    options: list[str] = Field(validation_alias="options_json")
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
     selected_answer: str
     correct_answer: str
     is_correct: bool

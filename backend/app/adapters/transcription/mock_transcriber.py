@@ -1,27 +1,20 @@
-import json
-from pathlib import Path
-
-
-_TRANSCRIPT_FIXTURE = (
-    Path(__file__).resolve().parents[4]
-    / "ai_pipeline"
-    / "fixtures"
-    / "transcript_sample.json"
-)
+from app.adapters._fixtures import load_json_fixture
 
 
 class MockTranscriber:
+    """Return a fixed transcript fixture for development and tests."""
+
     def transcribe(
         self,
         media_path: str,
         language_code: str = "vi-VN",
     ) -> dict:
-        with _TRANSCRIPT_FIXTURE.open(encoding="utf-8") as fixture_file:
-            transcript = json.load(fixture_file)
+        """Return the sample payload; media_path and language_code are ignored."""
+        transcript = load_json_fixture("transcript_sample.json")
         if not isinstance(transcript, dict):
-            raise ValueError(
-                f"Expected a JSON object in fixture: {_TRANSCRIPT_FIXTURE}"
-            )
+            raise ValueError("Expected a JSON object in transcript_sample.json.")
+        if not isinstance(transcript.get("segments"), list):
+            raise ValueError("Transcript fixture must contain a segments list.")
         return transcript
 
     def get_job_status(self, job_id: str) -> dict:

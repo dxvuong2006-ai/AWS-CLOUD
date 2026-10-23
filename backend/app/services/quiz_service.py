@@ -1,7 +1,10 @@
 from sqlalchemy.orm import Session
 
 from app.repositories import quizzes_repo
+from app.repositories import sections_repo
 from app.schemas.quiz import QuizSubmitRequest
+from app.services import unlock_service
+from app.services.unlock_service import SectionLockedError
 
 
 class QuizNotFoundError(Exception):
@@ -53,11 +56,43 @@ def submit_quiz(
     quiz_id: int,
     submission: QuizSubmitRequest,
 ) -> dict:
-    quiz = quizzes_repo.get_quiz_by_id(db, quiz_id)
+    try:
+        return _submit_quiz(
+            db,
+            student_id=student_id,
+            quiz_id=quiz_id,
+            submission=submission,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _submit_quiz(
+    db: Session,
+    *,
+    student_id: int,
+    quiz_id: int,
+    submission: QuizSubmitRequest,
+) -> dict:
+    quiz = quizzes_repo.lock_quiz_for_submission(db, quiz_id=quiz_id)
     if quiz is None:
         raise QuizNotFoundError("Quiz not found.")
     if not quiz.is_approved:
         raise QuizNotApprovedError("Quiz is not approved yet.")
+
+    section = sections_repo.get_section_by_id(db, quiz.section_id)
+    if section is None:
+        raise QuizNotFoundError("Section for this quiz was not found.")
+    try:
+        unlock_service.assert_section_unlocked(
+            db,
+            student_id=student_id,
+            course_id=section.course_id,
+            section_id=section.id,
+        )
+    except SectionLockedError as exc:
+        raise QuizAccessDeniedError(str(exc)) from exc
 
     questions = quizzes_repo.get_questions_by_quiz(db, quiz_id)
     if not questions:
@@ -130,6 +165,8 @@ def submit_quiz(
         attempt_id=attempt.id,
         answers_data=answers_data,
     )
+    db.commit()
+    db.refresh(attempt)
 
     return {
         "id": attempt.id,
@@ -150,20 +187,19 @@ def get_student_quiz_history(
     skip: int = 0,
     limit: int = 50,
 ) -> list[dict]:
-    attempts = quizzes_repo.list_attempts_by_student(
+    attempts = quizzes_repo.list_attempts_by_student_with_quiz_title(
         db,
         student_id=student_id,
         skip=skip,
         limit=limit,
     )
     history: list[dict] = []
-    for attempt in attempts:
-        quiz = quizzes_repo.get_quiz_by_id(db, attempt.quiz_id)
+    for attempt, quiz_title in attempts:
         history.append(
             {
                 "id": attempt.id,
                 "quiz_id": attempt.quiz_id,
-                "quiz_title": quiz.title if quiz is not None else None,
+                "quiz_title": quiz_title,
                 "score": attempt.score,
                 "passed": attempt.passed,
                 "attempt_number": attempt.attempt_number,

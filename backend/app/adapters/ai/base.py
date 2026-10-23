@@ -12,11 +12,11 @@ class BaseAIAdapter(metaclass=ABCMeta):
         ...
 
     @abstractmethod
-    def generate_quiz(self, transcript: str) -> dict:
+    def generate_quiz(self, transcript: str, num_questions: int = 3) -> dict:
         """Generate a structured multiple-choice quiz from a transcript."""
         ...
 
     @abstractmethod
-    def extract_key_concepts(self, transcript: str) -> list:
+    def extract_key_concepts(self, transcript: str) -> list[dict[str, str]]:
         """Extract key terms and their definitions from a transcript."""
         ...

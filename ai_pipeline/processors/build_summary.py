@@ -1,13 +1,32 @@
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from ._common import (
+        call_ai_client,
+        clean_text,
+        extract_definition_concepts,
+        parse_json_response,
+        render_prompt,
+        split_sentences,
+        validate_schema,
+    )
+else:
+    from _common import (
+        call_ai_client,
+        clean_text,
+        extract_definition_concepts,
+        parse_json_response,
+        render_prompt,
+        split_sentences,
+        validate_schema,
+    )
+
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "summary.txt"
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+")
-_WHITESPACE_RE = re.compile(r"\s+")
+_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "summary.schema.json"
 _IMPORTANT_TERMS = (
     "là",
     "bao gồm",
@@ -27,20 +46,6 @@ _IMPORTANT_TERMS = (
 logger = logging.getLogger(__name__)
 
 
-def _clean_text(text: str) -> str:
-    return _WHITESPACE_RE.sub(" ", text).strip()
-
-
-def _split_sentences(transcript_text: str) -> list[str]:
-    return [
-        sentence
-        for sentence in (
-            _clean_text(part) for part in _SENTENCE_SPLIT_RE.split(transcript_text)
-        )
-        if sentence
-    ]
-
-
 def _sentence_score(sentence: str) -> int:
     lower_sentence = sentence.lower()
     score = min(len(sentence.split()), 30)
@@ -50,145 +55,100 @@ def _sentence_score(sentence: str) -> int:
     return score
 
 
-def _concept_term(sentence: str, index: int) -> str:
-    lower_sentence = sentence.lower()
-    for marker in _IMPORTANT_TERMS:
-        marker_index = lower_sentence.find(marker)
-        if marker_index > 0:
-            term = sentence[:marker_index].strip(" ,:;-")
-            if term:
-                return term[:80]
-
-    words = sentence.split()
-    if len(words) > 8:
-        return " ".join(words[:6]).strip(" ,:;-") or f"Ý chính {index}"
-    return f"Ý chính {index}"
-
-
 def _fallback_summary(transcript_text: str) -> dict:
-    sentences = _split_sentences(transcript_text)
-    if not sentences and _clean_text(transcript_text):
-        sentences = [_clean_text(transcript_text)]
+    sentences = split_sentences(transcript_text)
+    if not sentences and clean_text(transcript_text):
+        sentences = [clean_text(transcript_text)]
 
     if not sentences:
-        return {
-            "title": "Tóm tắt bài giảng",
-            "summary": "Không có nội dung transcript để tóm tắt.",
-            "key_concepts": [
+        title = "Tóm tắt bài giảng"
+        summary = "Không có nội dung transcript để tóm tắt."
+        concepts = [
+            {
+                "term": "Transcript",
+                "definition": "Không có nội dung transcript được cung cấp.",
+            }
+        ]
+    else:
+        ranked = sorted(
+            enumerate(sentences),
+            key=lambda item: (-_sentence_score(item[1]), item[0]),
+        )
+        selected = sorted(ranked[: min(3, len(ranked))])
+        important_sentences = [sentence for _, sentence in selected]
+
+        title = sentences[0].rstrip(".!?。！？")
+        title_words = title.split()
+        if len(title_words) > 12:
+            title = " ".join(title_words[:12]).rstrip(" ,:;-") + "..."
+
+        concepts = extract_definition_concepts(" ".join(important_sentences))
+        if not concepts:
+            concepts = [
                 {
-                    "term": "Transcript",
-                    "definition": "Không có nội dung transcript được cung cấp.",
+                    "term": "Ý chính",
+                    "definition": important_sentences[0],
                 }
-            ],
-        }
+            ]
+        summary = " ".join(important_sentences)
 
-    ranked_sentences = sorted(
-        enumerate(sentences),
-        key=lambda item: (-_sentence_score(item[1]), item[0]),
-    )
-    selected = sorted(ranked_sentences[: min(3, len(ranked_sentences))])
-    important_sentences = [sentence for _, sentence in selected]
-    title = sentences[0].rstrip(".!?。！？")
-    title_words = title.split()
-    if len(title_words) > 12:
-        title = " ".join(title_words[:12]).rstrip(" ,:;-") + "..."
-
-    concepts = [
+    return validate_schema(
         {
-            "term": _concept_term(sentence, index),
-            "definition": sentence,
-        }
-        for index, sentence in enumerate(important_sentences, start=1)
-    ]
-    return {
-        "title": title or "Tóm tắt bài giảng",
-        "summary": " ".join(important_sentences),
-        "key_concepts": concepts,
-    }
-
-
-def _extract_client_text(response: Any) -> Any:
-    if isinstance(response, (dict, list)):
-        return response
-    if isinstance(response, str):
-        text = response.strip()
-        if text.startswith("```"):
-            text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return text
-    return response
+            "title": title or "Tóm tắt bài giảng",
+            "summary": summary,
+            "key_concepts": concepts,
+        },
+        _SCHEMA_PATH,
+    )
 
 
 def _validate_summary(response: Any) -> dict:
-    result = _extract_client_text(response)
+    result = parse_json_response(response)
     if not isinstance(result, dict):
         raise ValueError("AI summary must be a JSON object.")
 
-    title = result.get("title")
-    summary = result.get("summary")
+    title = clean_text(result.get("title"))
+    summary = clean_text(result.get("summary"))
     concepts = result.get("key_concepts")
-    if not isinstance(title, str) or not title.strip():
-        raise ValueError("AI summary title must be a non-empty string.")
-    if not isinstance(summary, str) or not summary.strip():
-        raise ValueError("AI summary text must be a non-empty string.")
-    if not isinstance(concepts, list) or not concepts:
-        raise ValueError("AI summary must contain at least one key concept.")
+    if not isinstance(concepts, list):
+        raise ValueError("AI summary must contain a key_concepts list.")
 
     validated_concepts = []
     for concept in concepts:
         if not isinstance(concept, dict):
             raise ValueError("Each key concept must be a JSON object.")
-        term = concept.get("term")
-        definition = concept.get("definition")
-        if (
-            not isinstance(term, str)
-            or not term.strip()
-            or not isinstance(definition, str)
-            or not definition.strip()
-        ):
+        term = clean_text(concept.get("term"))
+        definition = clean_text(concept.get("definition"))
+        if not term or not definition:
             raise ValueError("Key concepts require non-empty term and definition.")
-        validated_concepts.append(
-            {"term": term.strip(), "definition": definition.strip()}
-        )
+        validated_concepts.append({"term": term, "definition": definition})
 
-    return {
-        "title": title.strip(),
-        "summary": summary.strip(),
-        "key_concepts": validated_concepts,
-    }
-
-
-def _generate_with_client(ai_client: Any, transcript_text: str, prompt: str) -> Any:
-    generate_summary = getattr(ai_client, "generate_summary", None)
-    if callable(generate_summary):
-        return generate_summary(transcript_text)
-
-    generate = getattr(ai_client, "generate", None)
-    if callable(generate):
-        return generate(prompt)
-
-    invoke = getattr(ai_client, "invoke", None)
-    if callable(invoke):
-        return invoke(prompt)
-
-    if callable(ai_client):
-        return ai_client(prompt)
-
-    raise TypeError(
-        "ai_client must provide generate_summary, generate, invoke, or __call__."
+    if not title or not summary:
+        raise ValueError("AI summary title and summary must be non-empty.")
+    return validate_schema(
+        {
+            "title": title,
+            "summary": summary,
+            "key_concepts": validated_concepts,
+        },
+        _SCHEMA_PATH,
     )
 
 
 def build_summary(transcript_text: str, ai_client=None) -> dict:
-    """Build a schema-compatible summary, falling back to transcript extraction."""
-    template = _PROMPT_PATH.read_text(encoding="utf-8")
-    prompt = template.replace("{{transcript}}", transcript_text)
-
+    """Build a Draft-07-valid summary, using transcript extraction as fallback."""
     if ai_client is not None:
         try:
-            response = _generate_with_client(ai_client, transcript_text, prompt)
+            prompt = render_prompt(
+                _PROMPT_PATH,
+                transcript_text=transcript_text,
+            )
+            response = call_ai_client(
+                ai_client,
+                prompt=prompt,
+                transcript_text=transcript_text,
+                transcript_methods=("generate_summary",),
+            )
             return _validate_summary(response)
         except Exception as exc:
             logger.warning("AI summary generation failed; using fallback: %s", exc)
@@ -197,10 +157,14 @@ def build_summary(transcript_text: str, ai_client=None) -> dict:
 
 
 if __name__ == "__main__":
-    from normalize_transcript import normalize_transcript
+    if __package__:
+        from ai_pipeline.processors.normalize_transcript import normalize_transcript
+    else:
+        from normalize_transcript import normalize_transcript
 
-    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
-    transcript_path = fixtures_dir / "transcript_sample.json"
+    transcript_path = (
+        Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
+    )
     if transcript_path.exists():
         with transcript_path.open(encoding="utf-8") as transcript_file:
             transcript_data = json.load(transcript_file)

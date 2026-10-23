@@ -7,6 +7,29 @@ def get_quiz_by_id(db: Session, quiz_id: int) -> Quiz | None:
     return db.query(Quiz).filter(Quiz.id == quiz_id).first()
 
 
+def lock_quiz_for_submission(db: Session, *, quiz_id: int) -> Quiz | None:
+    dialect = db.get_bind().dialect.name
+    quiz_query = db.query(Quiz).filter(Quiz.id == quiz_id)
+
+    if dialect == "postgresql":
+        return quiz_query.with_for_update().first()
+
+    if dialect == "sqlite":
+        # SQLite ignores SELECT FOR UPDATE; a no-op write serializes writers.
+        updated_rows = quiz_query.update(
+            {Quiz.id: Quiz.id},
+            synchronize_session=False,
+        )
+        if not updated_rows:
+            return None
+        db.expire_all()
+        return get_quiz_by_id(db, quiz_id)
+
+    raise RuntimeError(
+        f"Quiz submission locking is not configured for {dialect}."
+    )
+
+
 def get_quiz_by_section(db: Session, section_id: int) -> Quiz | None:
     return db.query(Quiz).filter(Quiz.section_id == section_id).first()
 
@@ -108,13 +131,8 @@ def create_attempt(
         passed=passed,
         attempt_number=attempt_number,
     )
-    try:
-        db.add(attempt)
-        db.commit()
-        db.refresh(attempt)
-    except Exception:
-        db.rollback()
-        raise
+    db.add(attempt)
+    db.flush()
     return attempt
 
 
@@ -133,12 +151,7 @@ def save_attempt_answers(
         )
         for answer in answers_data
     ]
-    try:
-        db.add_all(answers)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db.add_all(answers)
 
 
 def has_passed_quiz(
@@ -168,6 +181,24 @@ def list_attempts_by_student(
 ) -> list[QuizAttempt]:
     return (
         db.query(QuizAttempt)
+        .filter(QuizAttempt.student_id == student_id)
+        .order_by(QuizAttempt.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def list_attempts_by_student_with_quiz_title(
+    db: Session,
+    *,
+    student_id: int,
+    skip: int = 0,
+    limit: int = 50,
+) -> list[tuple[QuizAttempt, str | None]]:
+    return (
+        db.query(QuizAttempt, Quiz.title)
+        .outerjoin(Quiz, Quiz.id == QuizAttempt.quiz_id)
         .filter(QuizAttempt.student_id == student_id)
         .order_by(QuizAttempt.created_at.desc())
         .offset(skip)

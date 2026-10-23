@@ -1,41 +1,55 @@
-"""Local mock implementation of the AI adapter backed by pipeline fixtures."""
+"""Development/test AI adapter backed by fixed pipeline fixtures."""
 
-import json
-from pathlib import Path
-
+from app.adapters._fixtures import load_json_fixture
 from app.adapters.ai.base import BaseAIAdapter
 
 
-_FIXTURES_DIR = (
-    Path(__file__).resolve().parents[4] / "ai_pipeline" / "fixtures"
-)
-
-
 def _load_fixture(filename: str) -> dict:
-    """Load a JSON object from the repository's AI pipeline fixtures."""
-    fixture_path = _FIXTURES_DIR / filename
-    with fixture_path.open(encoding="utf-8") as fixture_file:
-        data = json.load(fixture_file)
+    data = load_json_fixture(filename)
     if not isinstance(data, dict):
-        raise ValueError(f"Expected a JSON object in fixture: {fixture_path}")
+        raise ValueError(f"Expected a JSON object in fixture: {filename}")
     return data
 
 
 class MockAIAdapter(BaseAIAdapter):
-    """Return deterministic AI outputs from local sample fixtures."""
+    """Return fixed sample outputs; never use this adapter in production."""
 
     def generate_summary(self, transcript: str) -> dict:
-        """Return the fixed sample summary, independent of the transcript."""
+        """Return the sample summary, independent of the supplied transcript."""
         return _load_fixture("summary_sample.json")
 
-    def generate_quiz(self, transcript: str) -> dict:
-        """Return the fixed sample quiz, independent of the transcript."""
-        return _load_fixture("quiz_sample.json")
+    def generate_quiz(self, transcript: str, num_questions: int = 3) -> dict:
+        """Return the requested number of sample questions when available."""
+        if (
+            isinstance(num_questions, bool)
+            or not isinstance(num_questions, int)
+            or num_questions < 1
+        ):
+            raise ValueError("num_questions must be a positive integer.")
 
-    def extract_key_concepts(self, transcript: str) -> list:
+        quiz = _load_fixture("quiz_sample.json")
+        questions = quiz.get("questions")
+        if not isinstance(questions, list):
+            raise ValueError("Quiz fixture must contain a questions list.")
+        if num_questions > len(questions):
+            raise ValueError(
+                f"Requested {num_questions} questions, but the quiz fixture "
+                f"contains only {len(questions)}."
+            )
+        return {**quiz, "questions": questions[:num_questions]}
+
+    def extract_key_concepts(self, transcript: str) -> list[dict[str, str]]:
         """Return fixed sample concepts, independent of the transcript."""
-        summary = _load_fixture("summary_sample.json")
-        concepts = summary.get("key_concepts")
+        concepts = _load_fixture("summary_sample.json").get("key_concepts")
         if not isinstance(concepts, list):
             raise ValueError("Summary fixture must contain a key_concepts list.")
+        if any(
+            not isinstance(concept, dict)
+            or not isinstance(concept.get("term"), str)
+            or not isinstance(concept.get("definition"), str)
+            for concept in concepts
+        ):
+            raise ValueError(
+                "Each key concept fixture item must contain string term and definition."
+            )
         return concepts
