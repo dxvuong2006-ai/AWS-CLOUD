@@ -11,6 +11,13 @@ BEGIN;
 
 -- ============================================================
 -- 1. USERS
+-- Demo accounts for local development.
+--
+-- password_hash is initially NULL.
+-- To use POST /auth/login, set passwords using:
+-- backend/scripts/set_user_password.py
+--
+-- Never store plaintext passwords in seed.sql.
 -- ============================================================
 
 INSERT INTO users (cognito_sub, name, email, role)

@@ -5,6 +5,7 @@ from app.api.lessons import router as lessons_router
 from app.api.sections import router as sections_router
 from app.api.enrollments import router as enrollments_router
 from app.api.uploads import router as uploads_router
+from app.api.auth import router as auth_router
 
 app = FastAPI(
     title="LearnCloud",
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(courses_router)
 app.include_router(sections_router)
 app.include_router(lessons_router)

@@ -17,3 +17,12 @@ def create(db: Session, *, course_id: int, title: str, position: int) -> Section
     except Exception:
         db.rollback()
         raise
+
+# danh sách section theo 1 khóa học
+def list_by_course(db: Session, course_id: int) -> list[Section]:
+    return (
+        db.query(Section)
+        .filter(Section.course_id == course_id)
+        .order_by(Section.position.asc(), Section.id.asc())
+        .all()
+    )
