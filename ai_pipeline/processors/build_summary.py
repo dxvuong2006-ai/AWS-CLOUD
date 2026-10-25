@@ -13,6 +13,7 @@ if __package__:
         split_sentences,
         validate_schema,
     )
+    from .build_key_concepts import validate_key_concepts
 else:
     from _common import (
         call_ai_client,
@@ -23,10 +24,13 @@ else:
         split_sentences,
         validate_schema,
     )
+    from build_key_concepts import validate_key_concepts
 
 
 _PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "summary.txt"
-_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "summary.schema.json"
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "summary.schema.json"
+)
 _IMPORTANT_TERMS = (
     "là",
     "bao gồm",
@@ -57,8 +61,6 @@ def _sentence_score(sentence: str) -> int:
 
 def _fallback_summary(transcript_text: str) -> dict:
     sentences = split_sentences(transcript_text)
-    if not sentences and clean_text(transcript_text):
-        sentences = [clean_text(transcript_text)]
 
     if not sentences:
         title = "Tóm tắt bài giảng"
@@ -74,7 +76,7 @@ def _fallback_summary(transcript_text: str) -> dict:
             enumerate(sentences),
             key=lambda item: (-_sentence_score(item[1]), item[0]),
         )
-        selected = sorted(ranked[: min(3, len(ranked))])
+        selected = sorted(ranked[:3])
         important_sentences = [sentence for _, sentence in selected]
 
         title = sentences[0].rstrip(".!?。！？")
@@ -82,7 +84,8 @@ def _fallback_summary(transcript_text: str) -> dict:
         if len(title_words) > 12:
             title = " ".join(title_words[:12]).rstrip(" ,:;-") + "..."
 
-        concepts = extract_definition_concepts(" ".join(important_sentences))
+        summary = " ".join(important_sentences)
+        concepts = extract_definition_concepts(summary)
         if not concepts:
             concepts = [
                 {
@@ -90,7 +93,6 @@ def _fallback_summary(transcript_text: str) -> dict:
                     "definition": important_sentences[0],
                 }
             ]
-        summary = " ".join(important_sentences)
 
     return validate_schema(
         {
@@ -109,19 +111,7 @@ def _validate_summary(response: Any) -> dict:
 
     title = clean_text(result.get("title"))
     summary = clean_text(result.get("summary"))
-    concepts = result.get("key_concepts")
-    if not isinstance(concepts, list):
-        raise ValueError("AI summary must contain a key_concepts list.")
-
-    validated_concepts = []
-    for concept in concepts:
-        if not isinstance(concept, dict):
-            raise ValueError("Each key concept must be a JSON object.")
-        term = clean_text(concept.get("term"))
-        definition = clean_text(concept.get("definition"))
-        if not term or not definition:
-            raise ValueError("Key concepts require non-empty term and definition.")
-        validated_concepts.append({"term": term, "definition": definition})
+    concepts = validate_key_concepts(result.get("key_concepts"))
 
     if not title or not summary:
         raise ValueError("AI summary title and summary must be non-empty.")
@@ -129,14 +119,17 @@ def _validate_summary(response: Any) -> dict:
         {
             "title": title,
             "summary": summary,
-            "key_concepts": validated_concepts,
+            "key_concepts": concepts,
         },
         _SCHEMA_PATH,
     )
 
 
 def build_summary(transcript_text: str, ai_client=None) -> dict:
-    """Build a Draft-07-valid summary, using transcript extraction as fallback."""
+    (
+        "Build a Draft-07-valid summary, using transcript extraction "
+        "as fallback."
+    )
     if ai_client is not None:
         try:
             prompt = render_prompt(
@@ -151,19 +144,25 @@ def build_summary(transcript_text: str, ai_client=None) -> dict:
             )
             return _validate_summary(response)
         except Exception as exc:
-            logger.warning("AI summary generation failed; using fallback: %s", exc)
+            logger.warning(
+                "AI summary generation failed; using fallback: %s", exc
+            )
 
     return _fallback_summary(transcript_text)
 
 
 if __name__ == "__main__":
     if __package__:
-        from ai_pipeline.processors.normalize_transcript import normalize_transcript
+        from ai_pipeline.processors.normalize_transcript import (
+            normalize_transcript,
+        )
     else:
         from normalize_transcript import normalize_transcript
 
     transcript_path = (
-        Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "transcript_sample.json"
     )
     if transcript_path.exists():
         with transcript_path.open(encoding="utf-8") as transcript_file:

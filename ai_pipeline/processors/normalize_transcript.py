@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -47,9 +48,10 @@ def _to_timestamp(value: Any) -> float | None:
     if isinstance(value, bool) or value is None:
         return None
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        timestamp = float(value)
+    except (TypeError, ValueError, OverflowError):
         return None
+    return timestamp if math.isfinite(timestamp) and timestamp >= 0 else None
 
 
 def _collect_segments(data: Any) -> list[dict[str, Any]]:
@@ -89,7 +91,7 @@ def _collect_segments(data: Any) -> list[dict[str, Any]]:
         segment = {"text": text}
         start = _to_timestamp(item.get("start", item.get("start_time")))
         end = _to_timestamp(item.get("end", item.get("end_time")))
-        if start is not None and end is not None:
+        if start is not None and end is not None and end >= start:
             segment["start"] = start
             segment["end"] = end
         segments.append(segment)
@@ -123,7 +125,9 @@ def normalize_transcript(raw_data: dict | list | str) -> dict:
         except json.JSONDecodeError:
             data = raw_data
 
-    declared_language = data.get("language") if isinstance(data, dict) else None
+    declared_language = (
+        data.get("language") if isinstance(data, dict) else None
+    )
     normalized_segments = _collect_segments(data)
     text_parts = [segment["text"] for segment in normalized_segments]
     full_text = " ".join(text_parts)

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
+from app.models.quiz import MIN_PASSING_SCORE
 from app.repositories import quizzes_repo
-from app.repositories import sections_repo
 from app.schemas.quiz import QuizSubmitRequest
 from app.services import unlock_service
 from app.services.unlock_service import SectionLockedError
@@ -23,6 +23,41 @@ class InvalidSubmissionError(Exception):
     pass
 
 
+def _assert_quiz_section_access(
+    db: Session,
+    *,
+    student_id: int,
+    section_id: int,
+) -> None:
+    section = quizzes_repo.get_section_by_id(db, section_id)
+    if section is None:
+        raise QuizNotFoundError("Section not found.")
+    try:
+        unlock_service.assert_section_unlocked(
+            db,
+            student_id=student_id,
+            course_id=section.course_id,
+            section_id=section.id,
+        )
+    except SectionLockedError as exc:
+        raise QuizAccessDeniedError(str(exc)) from exc
+
+
+def get_unlocked_quiz_for_student(
+    db: Session,
+    *,
+    student_id: int,
+    section_id: int,
+) -> dict:
+    """Authorize section access before returning the student's quiz."""
+    _assert_quiz_section_access(
+        db,
+        student_id=student_id,
+        section_id=section_id,
+    )
+    return get_quiz_for_student(db, section_id=section_id)
+
+
 def get_quiz_for_student(db: Session, *, section_id: int) -> dict:
     quiz = quizzes_repo.get_quiz_by_section(db, section_id)
     if quiz is None:
@@ -35,7 +70,7 @@ def get_quiz_for_student(db: Session, *, section_id: int) -> dict:
         "id": quiz.id,
         "section_id": quiz.section_id,
         "title": quiz.title,
-        "passing_score": quiz.passing_score,
+        "passing_score": max(MIN_PASSING_SCORE, quiz.passing_score),
         "questions": [
             {
                 "id": question.id,
@@ -56,16 +91,13 @@ def submit_quiz(
     quiz_id: int,
     submission: QuizSubmitRequest,
 ) -> dict:
-    try:
+    with quizzes_repo.submission_transaction(db):
         return _submit_quiz(
             db,
             student_id=student_id,
             quiz_id=quiz_id,
             submission=submission,
         )
-    except Exception:
-        db.rollback()
-        raise
 
 
 def _submit_quiz(
@@ -81,18 +113,11 @@ def _submit_quiz(
     if not quiz.is_approved:
         raise QuizNotApprovedError("Quiz is not approved yet.")
 
-    section = sections_repo.get_section_by_id(db, quiz.section_id)
-    if section is None:
-        raise QuizNotFoundError("Section for this quiz was not found.")
-    try:
-        unlock_service.assert_section_unlocked(
-            db,
-            student_id=student_id,
-            course_id=section.course_id,
-            section_id=section.id,
-        )
-    except SectionLockedError as exc:
-        raise QuizAccessDeniedError(str(exc)) from exc
+    _assert_quiz_section_access(
+        db,
+        student_id=student_id,
+        section_id=quiz.section_id,
+    )
 
     questions = quizzes_repo.get_questions_by_quiz(db, quiz_id)
     if not questions:
@@ -102,7 +127,8 @@ def _submit_quiz(
     for answer in submission.answers:
         if answer.question_id in answers_by_question_id:
             raise InvalidSubmissionError(
-                f"Multiple answers submitted for question {answer.question_id}."
+                "Multiple answers submitted for question "
+                f"{answer.question_id}."
             )
         answers_by_question_id[answer.question_id] = answer.selected_answer
 
@@ -118,7 +144,15 @@ def _submit_quiz(
     answers_data: list[dict] = []
     for question in questions:
         selected_answer = answers_by_question_id.get(question.id, "")
-        is_correct = selected_answer == question.correct_answer
+        if selected_answer and selected_answer not in question.options_json:
+            raise InvalidSubmissionError(
+                f"Answer for question {question.id} "
+                "must match one of its options."
+            )
+        is_correct = (
+            bool(selected_answer)
+            and selected_answer == question.correct_answer
+        )
         if is_correct:
             correct_count += 1
 
@@ -143,7 +177,7 @@ def _submit_quiz(
         )
 
     score = (correct_count / len(questions)) * 100
-    passed = score >= quiz.passing_score
+    passed = score >= max(MIN_PASSING_SCORE, quiz.passing_score)
     attempt_number = (
         quizzes_repo.count_user_attempts(
             db,
@@ -165,9 +199,7 @@ def _submit_quiz(
         attempt_id=attempt.id,
         answers_data=answers_data,
     )
-    db.commit()
-    db.refresh(attempt)
-
+    # Snapshot flushed values before the repository commits and expires them.
     return {
         "id": attempt.id,
         "quiz_id": attempt.quiz_id,
@@ -193,17 +225,15 @@ def get_student_quiz_history(
         skip=skip,
         limit=limit,
     )
-    history: list[dict] = []
-    for attempt, quiz_title in attempts:
-        history.append(
-            {
-                "id": attempt.id,
-                "quiz_id": attempt.quiz_id,
-                "quiz_title": quiz_title,
-                "score": attempt.score,
-                "passed": attempt.passed,
-                "attempt_number": attempt.attempt_number,
-                "created_at": attempt.created_at,
-            }
-        )
-    return history
+    return [
+        {
+            "id": attempt.id,
+            "quiz_id": attempt.quiz_id,
+            "quiz_title": quiz_title,
+            "score": attempt.score,
+            "passed": attempt.passed,
+            "attempt_number": attempt.attempt_number,
+            "created_at": attempt.created_at,
+        }
+        for attempt, quiz_title in attempts
+    ]

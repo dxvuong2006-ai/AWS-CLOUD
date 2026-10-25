@@ -1,6 +1,31 @@
-from sqlalchemy.orm import Session
+from collections.abc import Iterator
+from contextlib import contextmanager
 
-from app.models.quiz import Question, Quiz, QuizAnswer, QuizAttempt
+from sqlalchemy.orm import Query, Session
+
+from app.models.quiz import (
+    MIN_PASSING_SCORE,
+    Question,
+    Quiz,
+    QuizAnswer,
+    QuizAttempt,
+)
+from app.models.section import Section
+
+
+@contextmanager
+def submission_transaction(db: Session) -> Iterator[None]:
+    """Persist the locked quiz's attempt and answers as one unit of work."""
+    try:
+        yield
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
+def get_section_by_id(db: Session, section_id: int) -> Section | None:
+    return db.query(Section).filter(Section.id == section_id).first()
 
 
 def get_quiz_by_id(db: Session, quiz_id: int) -> Quiz | None:
@@ -12,7 +37,7 @@ def lock_quiz_for_submission(db: Session, *, quiz_id: int) -> Quiz | None:
     quiz_query = db.query(Quiz).filter(Quiz.id == quiz_id)
 
     if dialect == "postgresql":
-        return quiz_query.with_for_update().first()
+        return quiz_query.with_for_update().populate_existing().first()
 
     if dialect == "sqlite":
         # SQLite ignores SELECT FOR UPDATE; a no-op write serializes writers.
@@ -52,7 +77,7 @@ def create_quiz(
     *,
     section_id: int,
     title: str,
-    passing_score: float = 80.0,
+    passing_score: float = MIN_PASSING_SCORE,
     is_approved: bool = False,
 ) -> Quiz:
     quiz = Quiz(
@@ -161,14 +186,51 @@ def has_passed_quiz(
     quiz_id: int,
 ) -> bool:
     return (
+        _passed_attempts_query(db, student_id=student_id)
+        .filter(QuizAttempt.quiz_id == quiz_id)
+        .first()
+        is not None
+    )
+
+
+def _passed_attempts_query(
+    db: Session, *, student_id: int
+) -> Query[QuizAttempt]:
+    return (
         db.query(QuizAttempt)
         .filter(
             QuizAttempt.student_id == student_id,
-            QuizAttempt.quiz_id == quiz_id,
             QuizAttempt.passed.is_(True),
+            QuizAttempt.score >= MIN_PASSING_SCORE,
         )
-        .first()
-        is not None
+    )
+
+
+def list_section_quiz_progress(
+    db: Session,
+    *,
+    student_id: int,
+    course_id: int,
+) -> list[tuple[int, bool]]:
+    """Allow sections without quizzes; require a passing attempt for each quiz."""
+    passed_attempt = (
+        _passed_attempts_query(db, student_id=student_id)
+        .filter(QuizAttempt.quiz_id == Quiz.id)
+        .exists()
+    )
+    unmet_quiz = (
+        db.query(Quiz.id)
+        .filter(
+            Quiz.section_id == Section.id,
+            ~passed_attempt,
+        )
+        .exists()
+    )
+    return (
+        db.query(Section.id, (~unmet_quiz).label("requirements_met"))
+        .filter(Section.course_id == course_id)
+        .order_by(Section.position.asc(), Section.id.asc())
+        .all()
     )
 
 

@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_student
 from app.models.user import User
-from app.repositories import sections_repo
 from app.schemas.quiz import (
     QuizAttemptResponse,
     QuizDetailResponse,
@@ -17,7 +16,6 @@ from app.services.quiz_service import (
     QuizNotApprovedError,
     QuizNotFoundError,
 )
-from app.services.unlock_service import SectionLockedError
 
 router = APIRouter(tags=["Quizzes"])
 
@@ -36,21 +34,12 @@ def get_section_quiz(
     current_user: User = Depends(require_student),
 ):
     try:
-        section = sections_repo.get_section_by_id(db, section_id)
-        if section is None:
-            raise HTTPException(status_code=404, detail="Section not found.")
-
-        unlock_service.assert_section_unlocked(
+        return quiz_service.get_unlocked_quiz_for_student(
             db,
             student_id=current_user.id,
-            course_id=section.course_id,
             section_id=section_id,
         )
-        return quiz_service.get_quiz_for_student(
-            db,
-            section_id=section_id,
-        )
-    except (SectionLockedError, QuizNotApprovedError, QuizAccessDeniedError) as exc:
+    except (QuizNotApprovedError, QuizAccessDeniedError) as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except QuizNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

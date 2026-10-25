@@ -25,16 +25,24 @@ else:
     from normalize_transcript import normalize_transcript
 
 
-_PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "quiz_generation.txt"
-_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "quiz_sample.json"
+_PROMPT_PATH = (
+    Path(__file__).resolve().parents[1] / "prompts" / "quiz_generation.txt"
+)
+_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "quiz_sample.json"
+)
 _TRANSCRIPT_FIXTURE_PATH = (
     Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
 )
-_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "quiz.schema.json"
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "quiz.schema.json"
+)
 logger = logging.getLogger(__name__)
 
 
-def _validate_quiz(response: Any, *, expected_count: int | None = None) -> dict:
+def _validate_quiz(
+    response: Any, *, expected_count: int | None = None
+) -> dict:
     result = parse_json_response(response)
     if not isinstance(result, dict) or set(result) != {"questions"}:
         raise ValueError("Quiz output must contain only a questions array.")
@@ -43,7 +51,9 @@ def _validate_quiz(response: Any, *, expected_count: int | None = None) -> dict:
     if not isinstance(questions, list) or not questions:
         raise ValueError("Quiz output must contain at least one question.")
     if expected_count is not None and len(questions) != expected_count:
-        raise ValueError(f"Quiz output must contain exactly {expected_count} questions.")
+        raise ValueError(
+            f"Quiz output must contain exactly {expected_count} questions."
+        )
 
     validated_questions = []
     for item in questions:
@@ -53,7 +63,9 @@ def _validate_quiz(response: Any, *, expected_count: int | None = None) -> dict:
             "correct_answer",
             "explanation",
         }:
-            raise ValueError("Each question must contain only the schema properties.")
+            raise ValueError(
+                "Each question must contain only the schema properties."
+            )
 
         question = clean_text(item["question"])
         options = item["options"]
@@ -64,22 +76,31 @@ def _validate_quiz(response: Any, *, expected_count: int | None = None) -> dict:
         if (
             not isinstance(options, list)
             or len(options) != 4
-            or any(not isinstance(option, str) or not option.strip() for option in options)
+            or any(
+                not isinstance(option, str) or not option.strip()
+                for option in options
+            )
         ):
-            raise ValueError("Each question must have exactly four non-empty options.")
+            raise ValueError(
+                "Each question must have exactly four non-empty options."
+            )
 
-        stripped_options = [option.strip() for option in options]
-        if len(set(stripped_options)) != 4:
-            raise ValueError("Question options must remain distinct after trimming.")
-        if not correct_answer or correct_answer not in stripped_options:
-            raise ValueError("Correct answer must exactly match one of the options.")
+        normalized_options = [clean_text(option) for option in options]
+        if len(set(normalized_options)) != 4:
+            raise ValueError(
+                "Question options must remain distinct after trimming."
+            )
+        if not correct_answer or correct_answer not in normalized_options:
+            raise ValueError(
+                "Correct answer must exactly match one of the options."
+            )
         if not explanation:
             raise ValueError("Explanation must be a non-empty string.")
 
         validated_questions.append(
             {
                 "question": question,
-                "options": stripped_options,
+                "options": normalized_options,
                 "correct_answer": correct_answer,
                 "explanation": explanation,
             }
@@ -124,7 +145,10 @@ def build_quiz(
     ai_client=None,
     num_questions: int = 3,
 ) -> dict:
-    """Generate a Draft-07-valid quiz or use a matching local development fixture."""
+    (
+        "Generate a Draft-07-valid quiz or use a matching local "
+        "development fixture."
+    )
     if (
         isinstance(num_questions, bool)
         or not isinstance(num_questions, int)
@@ -147,13 +171,17 @@ def build_quiz(
         )
         return _validate_quiz(response, expected_count=num_questions)
 
-    logger.info("No AI client configured; using the local development quiz fixture.")
+    logger.info(
+        "No AI client configured; using the local development quiz fixture."
+    )
     return _load_fallback(transcript_text, num_questions)
 
 
 if __name__ == "__main__":
     transcript_path = (
-        Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "transcript_sample.json"
     )
     if transcript_path.exists():
         with transcript_path.open(encoding="utf-8") as transcript_file:

@@ -23,17 +23,17 @@ else:
     )
 
 
-_PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "key_concepts.txt"
-_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "summary.schema.json"
+_PROMPT_PATH = (
+    Path(__file__).resolve().parents[1] / "prompts" / "key_concepts.txt"
+)
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "summary.schema.json"
+)
 logger = logging.getLogger(__name__)
 
 
-def _validate_concepts(response: Any) -> list[dict[str, str]]:
-    response = parse_json_response(response)
-    if isinstance(response, dict):
-        result = response.get("key_concepts")
-    else:
-        result = response
+def validate_key_concepts(result: Any) -> list[dict[str, str]]:
+    """Normalize and validate concept fields shared by pipeline outputs."""
     if not isinstance(result, list):
         raise ValueError("AI response must contain a key_concepts list.")
 
@@ -44,11 +44,24 @@ def _validate_concepts(response: Any) -> list[dict[str, str]]:
         term = clean_text(item.get("term"))
         definition = clean_text(item.get("definition"))
         if not term or not definition:
-            raise ValueError("Each key concept needs a non-empty term and definition.")
+            raise ValueError(
+                "Each key concept needs a non-empty term and definition."
+            )
         concepts.append({"term": term, "definition": definition})
 
     if not concepts:
         raise ValueError("AI response must contain at least one key concept.")
+    return concepts
+
+
+def _validate_concepts(response: Any) -> list[dict[str, str]]:
+    response = parse_json_response(response)
+    result = (
+        response.get("key_concepts")
+        if isinstance(response, dict)
+        else response
+    )
+    concepts = validate_key_concepts(result)
     validate_schema(
         {
             "title": "Concept validation",
@@ -83,32 +96,32 @@ def build_key_concepts(transcript_text: str, ai_client=None) -> list[dict]:
                 ai_client,
                 prompt=prompt,
                 transcript_text=transcript_text,
-                transcript_methods=("extract_key_concepts", "generate_key_concepts"),
+                transcript_methods=(
+                    "extract_key_concepts",
+                    "generate_key_concepts",
+                ),
             )
             return _validate_concepts(response)
         except Exception as exc:
-            logger.warning("AI key concept extraction failed; using fallback: %s", exc)
+            logger.warning(
+                "AI key concept extraction failed; using fallback: %s", exc
+            )
 
-    concepts = _fallback_concepts(transcript_text)
-    validate_schema(
-        {
-            "title": "Concept validation",
-            "summary": "Concept extraction result.",
-            "key_concepts": concepts,
-        },
-        _SCHEMA_PATH,
-    )
-    return concepts
+    return _validate_concepts(_fallback_concepts(transcript_text))
 
 
 if __name__ == "__main__":
     if __package__:
-        from ai_pipeline.processors.normalize_transcript import normalize_transcript
+        from ai_pipeline.processors.normalize_transcript import (
+            normalize_transcript,
+        )
     else:
         from normalize_transcript import normalize_transcript
 
     transcript_path = (
-        Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
+        Path(__file__).resolve().parents[1]
+        / "fixtures"
+        / "transcript_sample.json"
     )
     if transcript_path.exists():
         with transcript_path.open(encoding="utf-8") as transcript_file:

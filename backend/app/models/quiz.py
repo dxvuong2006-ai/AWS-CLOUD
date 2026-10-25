@@ -16,6 +16,9 @@ from sqlalchemy import (
 from app.database import Base
 
 
+MIN_PASSING_SCORE = 80.0
+
+
 class Quiz(Base):
     __tablename__ = "quizzes"
 
@@ -27,7 +30,7 @@ class Quiz(Base):
         index=True,
     )
     title = Column(String(255), nullable=False)
-    passing_score = Column(Float, default=80.0, nullable=False)
+    passing_score = Column(Float, default=MIN_PASSING_SCORE, nullable=False)
     is_approved = Column(Boolean, default=False, nullable=False)
 
 
