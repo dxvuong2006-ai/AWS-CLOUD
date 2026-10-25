@@ -1,12 +1,12 @@
 import json
-import inspect
-import re
+import inspect # Kiểm tra thông tin chữ ký của phương thức
+import re      # Tìm kiếm và xử lí vấn bản 
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft7Validator
+from jsonschema import Draft7Validator  #Kiểm tra dữ liệu JSON theo schema
 
-
+# Khai báo các biểu thức Regex
 _WHITESPACE_RE = re.compile(r"\s+")
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。！？])\s+")
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
@@ -26,7 +26,8 @@ def split_sentences(text: str) -> list[str]:
         if sentence
     ]
 
-
+# Cần xem xét đang không dùng 
+# Tự động phát hiện các khái niệm được định nghĩa trong văn bản
 def extract_definition_concepts(text: str) -> list[dict[str, str]]:
     definition_re = re.compile(
         r"\b(?P<marker>defined\s+as|is|are)\b|"
@@ -38,7 +39,7 @@ def extract_definition_concepts(text: str) -> list[dict[str, str]]:
         re.IGNORECASE,
     )
     concepts: list[dict[str, str]] = []
-    seen_terms: set[str] = set()
+    seen_terms: set[str] = set() # Tập hợp các thuật ngữ đã thấy để tránh trùng lặp
 
     for sentence in split_sentences(text):
         match = definition_re.search(sentence)
@@ -67,7 +68,7 @@ def extract_definition_concepts(text: str) -> list[dict[str, str]]:
 
     return concepts
 
-
+# Đọc một file prompt từ đường dẫn và thay thế các placeholder bằng các giá trị tương ứng
 def render_prompt(
     prompt_path: Path,
     *,
@@ -90,7 +91,7 @@ def render_prompt(
         template,
     )
 
-
+# Gọi phương thức của ai_client dựa trên các phương thức được cung cấp trong transcript_methods
 def call_ai_client(
     ai_client: Any,
     *,
@@ -173,7 +174,7 @@ def validate_schema(data: Any, schema_path: Path) -> Any:
         raise ValueError(f"Output does not match {schema_path.name} at {location}: {error.message}")
     return data
 
-
+# Có thể cần xem xét đang không dùng
 def meaningful_words(text: str) -> set[str]:
     return {
         word.casefold()

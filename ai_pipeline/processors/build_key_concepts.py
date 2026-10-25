@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 def _validate_concepts(response: Any) -> list[dict[str, str]]:
     response = parse_json_response(response)
+    # Hàm parse_json_response đã xử lý các trường hợp response là dict, list hoặc str. Nếu response là dict, chúng ta lấy giá trị của key "key_concepts".
+    # Nếu response là list, chúng ta giữ nguyên. Nếu response không phải là dict hoặc list, chúng ta sẽ raise ValueError.
     if isinstance(response, dict):
         result = response.get("key_concepts")
     else:
@@ -59,7 +61,7 @@ def _validate_concepts(response: Any) -> list[dict[str, str]]:
     )
     return concepts
 
-
+# Có thể cần xem xét đang không dùng
 def _fallback_concepts(transcript_text: str) -> list[dict[str, str]]:
     concepts = extract_definition_concepts(transcript_text)
     if concepts:
