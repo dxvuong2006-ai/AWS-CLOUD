@@ -1,4 +1,6 @@
-export default function CourseOutline({ sections }) {
+import { Link } from "react-router-dom";
+
+export default function CourseOutline({ sections, courseId, currentLessonId }) {
   if (!sections || sections.length === 0) {
     return <p>Khóa học chưa có nội dung.</p>;
   }
@@ -11,11 +13,27 @@ export default function CourseOutline({ sections }) {
             Section {i + 1}: {s.title}
           </h3>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
-            {s.lessons.map((l) => (
-              <li key={l.id}>
-                {l.title} · {Math.round(l.duration / 60)} phút
-              </li>
-            ))}
+            {s.lessons.map((l) => {
+              const label = `${l.title} · ${Math.round(l.duration / 60)} phút`;
+              const isCurrent = l.id === currentLessonId;
+              return (
+                <li key={l.id}>
+                  {courseId ? (
+                    <Link
+                      to={`/courses/${courseId}/lessons/${l.id}`}
+                      style={{
+                        color: isCurrent ? "var(--accent)" : "inherit",
+                        fontWeight: isCurrent ? 600 : 400,
+                      }}
+                    >
+                      {label}
+                    </Link>
+                  ) : (
+                    label
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

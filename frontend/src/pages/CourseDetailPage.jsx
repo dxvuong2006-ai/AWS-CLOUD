@@ -21,7 +21,7 @@ export default function CourseDetailPage() {
       <Link to="/courses">← Về danh sách</Link>
       <h1 style={{ marginTop: 16 }}>{course.title}</h1>
       <p style={{ color: "var(--text-muted)" }}>{course.description}</p>
-      <CourseOutline sections={course.sections} />
+      <CourseOutline sections={course.sections} courseId={course.id} />
     </div>
   );
 }
