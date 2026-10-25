@@ -33,6 +33,21 @@ def get_quiz_by_id(db: Session, quiz_id: int) -> Quiz | None:
 
 
 def lock_quiz_for_submission(db: Session, *, quiz_id: int) -> Quiz | None:
+    """Lock quiz_id in db until the surrounding transaction completes.
+
+    PostgreSQL uses SELECT FOR UPDATE (pessimistic row locking). SQLite
+    performs an atomic no-op UPDATE to serialize writers because it does
+    not implement SELECT FOR UPDATE. Both run before counting attempts,
+    preventing concurrent submissions from choosing the same attempt_number
+    when callers share this locking protocol and a suitable isolation level.
+
+    Return the refreshed Quiz, or None if missing. The caller must keep
+    counting and saving attempts/answers in this same transaction. Locks
+    release at commit/rollback; this function does not commit. PostgreSQL
+    locks all submitters of this quiz; SQLite serializes database writers.
+    This is not idempotency: repeated requests may create separate attempts.
+    Unsupported dialects raise RuntimeError; database lock errors propagate.
+    """
     dialect = db.get_bind().dialect.name
     quiz_query = db.query(Quiz).filter(Quiz.id == quiz_id)
 
@@ -212,7 +227,7 @@ def list_section_quiz_progress(
     student_id: int,
     course_id: int,
 ) -> list[tuple[int, bool]]:
-    """Allow sections without quizzes; require a passing attempt for each quiz."""
+    """Allow quiz-free sections; otherwise require each quiz to be passed."""
     passed_attempt = (
         _passed_attempts_query(db, student_id=student_id)
         .filter(QuizAttempt.quiz_id == Quiz.id)

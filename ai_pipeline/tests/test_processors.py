@@ -232,17 +232,25 @@ def test_public_signatures_remain_backward_compatible():
     assert list(inspect.signature(build_summary).parameters) == [
         "transcript_text",
         "ai_client",
+        "allow_fallback",
     ]
     assert list(inspect.signature(build_key_concepts).parameters) == [
         "transcript_text",
         "ai_client",
+        "allow_fallback",
     ]
     assert list(inspect.signature(build_quiz).parameters) == [
         "transcript_text",
         "ai_client",
         "num_questions",
+        "allow_fallback",
     ]
     assert inspect.signature(build_quiz).parameters["num_questions"].default == 3
+
+    for builder in (build_summary, build_key_concepts, build_quiz):
+        fallback = inspect.signature(builder).parameters["allow_fallback"]
+        assert fallback.kind is inspect.Parameter.KEYWORD_ONLY
+        assert fallback.default is True
 
 
 def test_schema_helper_rejects_invalid_final_output():

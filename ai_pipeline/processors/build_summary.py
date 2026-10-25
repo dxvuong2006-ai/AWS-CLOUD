@@ -1,10 +1,10 @@
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
 if __package__:
     from ._common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         extract_definition_concepts,
@@ -16,6 +16,7 @@ if __package__:
     from .build_key_concepts import validate_key_concepts
 else:
     from _common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         extract_definition_concepts,
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sentence_score(sentence: str) -> int:
+    """Return a heuristic importance score for the supplied sentence."""
     lower_sentence = sentence.lower()
     score = min(len(sentence.split()), 30)
     score += sum(term in lower_sentence for term in _IMPORTANT_TERMS) * 4
@@ -60,39 +62,33 @@ def _sentence_score(sentence: str) -> int:
 
 
 def _fallback_summary(transcript_text: str) -> dict:
+    """Return a schema-valid extractive summary of transcript_text."""
     sentences = split_sentences(transcript_text)
 
     if not sentences:
-        title = "Tóm tắt bài giảng"
-        summary = "Không có nội dung transcript để tóm tắt."
+        raise ValueError("Cannot summarize empty text.")
+
+    ranked = sorted(
+        enumerate(sentences),
+        key=lambda item: (-_sentence_score(item[1]), item[0]),
+    )
+    selected = sorted(ranked[:3])
+    important_sentences = [sentence for _, sentence in selected]
+
+    title = sentences[0].rstrip(".!?。！？")
+    title_words = title.split()
+    if len(title_words) > 12:
+        title = " ".join(title_words[:12]).rstrip(" ,:;-") + "..."
+
+    summary = " ".join(important_sentences)
+    concepts = extract_definition_concepts(summary)
+    if not concepts:
         concepts = [
             {
-                "term": "Transcript",
-                "definition": "Không có nội dung transcript được cung cấp.",
+                "term": "Ý chính",
+                "definition": important_sentences[0],
             }
         ]
-    else:
-        ranked = sorted(
-            enumerate(sentences),
-            key=lambda item: (-_sentence_score(item[1]), item[0]),
-        )
-        selected = sorted(ranked[:3])
-        important_sentences = [sentence for _, sentence in selected]
-
-        title = sentences[0].rstrip(".!?。！？")
-        title_words = title.split()
-        if len(title_words) > 12:
-            title = " ".join(title_words[:12]).rstrip(" ,:;-") + "..."
-
-        summary = " ".join(important_sentences)
-        concepts = extract_definition_concepts(summary)
-        if not concepts:
-            concepts = [
-                {
-                    "term": "Ý chính",
-                    "definition": important_sentences[0],
-                }
-            ]
 
     return validate_schema(
         {
@@ -105,6 +101,7 @@ def _fallback_summary(transcript_text: str) -> dict:
 
 
 def _validate_summary(response: Any) -> dict:
+    """Parse response and return normalized summary fields or raise."""
     result = parse_json_response(response)
     if not isinstance(result, dict):
         raise ValueError("AI summary must be a JSON object.")
@@ -125,55 +122,55 @@ def _validate_summary(response: Any) -> dict:
     )
 
 
-def build_summary(transcript_text: str, ai_client=None) -> dict:
-    (
-        "Build a Draft-07-valid summary, using transcript extraction "
-        "as fallback."
-    )
-    if ai_client is not None:
+def build_summary(
+    transcript_text: str,
+    ai_client: Any = None,
+    *,
+    allow_fallback: bool = True,
+) -> dict:
+    """Return validated content, allowing legacy heuristic fallback by default.
+
+    transcript_text supplies the content; ai_client optionally generates it.
+    Missing clients/prompts, declared AI failures and invalid responses may
+    use heuristics with a warning. Set allow_fallback=False for strict mode.
+    Output fields stay unchanged. Empty transcripts and programming errors
+    propagate; adapters should wrap provider failures in AIClientError.
+    """
+    if not clean_text(transcript_text):
+        raise ValueError("transcript_text must be a non-empty string.")
+    if ai_client is None:
+        if not allow_fallback:
+            raise AIClientError("An AI client is required in strict mode.")
+        reason = "no AI client configured"
+    else:
         try:
             prompt = render_prompt(
                 _PROMPT_PATH,
                 transcript_text=transcript_text,
             )
-            response = call_ai_client(
-                ai_client,
-                prompt=prompt,
-                transcript_text=transcript_text,
-                transcript_methods=("generate_summary",),
-            )
-            return _validate_summary(response)
-        except Exception as exc:
-            logger.warning(
-                "AI summary generation failed; using fallback: %s", exc
-            )
+        except FileNotFoundError as exc:
+            if not allow_fallback:
+                raise
+            reason = f"prompt unavailable: {exc}"
+        else:
+            try:
+                response = call_ai_client(
+                    ai_client,
+                    prompt=prompt,
+                    transcript_text=transcript_text,
+                    transcript_methods=("generate_summary",),
+                )
+            except (AIClientError, TimeoutError, ConnectionError) as exc:
+                if not allow_fallback:
+                    raise AIClientError("AI request failed.") from exc
+                reason = f"AI client failure: {type(exc).__name__}"
+            else:
+                try:
+                    return _validate_summary(response)
+                except ValueError as exc:
+                    if not allow_fallback:
+                        raise
+                    reason = f"invalid AI response: {exc}"
 
+    logger.warning("build_summary source=heuristic; reason=%s", reason)
     return _fallback_summary(transcript_text)
-
-
-if __name__ == "__main__":
-    if __package__:
-        from ai_pipeline.processors.normalize_transcript import (
-            normalize_transcript,
-        )
-    else:
-        from normalize_transcript import normalize_transcript
-
-    transcript_path = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "transcript_sample.json"
-    )
-    if transcript_path.exists():
-        with transcript_path.open(encoding="utf-8") as transcript_file:
-            transcript_data = json.load(transcript_file)
-        normalized = normalize_transcript(transcript_data)
-        print(
-            json.dumps(
-                build_summary(normalized["full_text"]),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-    else:
-        print(f"Transcript fixture not found: {transcript_path}")

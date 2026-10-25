@@ -1,7 +1,6 @@
 import json
 import math
 import re
-from pathlib import Path
 from typing import Any
 
 if __package__:
@@ -45,6 +44,7 @@ _ENGLISH_WORDS = {
 
 
 def _to_timestamp(value: Any) -> float | None:
+    """Return a finite non-negative float for value, or None if invalid."""
     if isinstance(value, bool) or value is None:
         return None
     try:
@@ -55,6 +55,7 @@ def _to_timestamp(value: Any) -> float | None:
 
 
 def _collect_segments(data: Any) -> list[dict[str, Any]]:
+    """Extract cleaned text and valid timestamp pairs from nested data."""
     if isinstance(data, str):
         text = clean_text(data)
         return [{"text": text}] if text else []
@@ -99,6 +100,7 @@ def _collect_segments(data: Any) -> list[dict[str, Any]]:
 
 
 def _detect_language(text: str, declared_language: Any = None) -> str:
+    """Return vi or en using declared_language or text heuristics."""
     if isinstance(declared_language, str):
         language = declared_language.strip().lower()
         if language in {"vi", "en"}:
@@ -147,18 +149,3 @@ def normalize_transcript(raw_data: dict | list | str) -> dict:
         "word_count": len(full_text.split()),
         "language": _detect_language(full_text, declared_language),
     }
-
-
-if __name__ == "__main__":
-    fixture_path = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "transcript_sample.json"
-    )
-    if fixture_path.exists():
-        with fixture_path.open(encoding="utf-8") as fixture_file:
-            transcript_data = json.load(fixture_file)
-        normalized = normalize_transcript(transcript_data)
-        print(normalized["word_count"])
-    else:
-        print(f"Transcript fixture not found: {fixture_path}")

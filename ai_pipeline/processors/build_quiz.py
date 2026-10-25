@@ -5,6 +5,7 @@ from typing import Any
 
 if __package__:
     from ._common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         meaningful_words,
@@ -15,6 +16,7 @@ if __package__:
     from .normalize_transcript import normalize_transcript
 else:
     from _common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         meaningful_words,
@@ -28,14 +30,14 @@ else:
 _PROMPT_PATH = (
     Path(__file__).resolve().parents[1] / "prompts" / "quiz_generation.txt"
 )
+_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "quiz.schema.json"
+)
 _FIXTURE_PATH = (
     Path(__file__).resolve().parents[1] / "fixtures" / "quiz_sample.json"
 )
 _TRANSCRIPT_FIXTURE_PATH = (
     Path(__file__).resolve().parents[1] / "fixtures" / "transcript_sample.json"
-)
-_SCHEMA_PATH = (
-    Path(__file__).resolve().parents[1] / "schemas" / "quiz.schema.json"
 )
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,7 @@ logger = logging.getLogger(__name__)
 def _validate_quiz(
     response: Any, *, expected_count: int | None = None
 ) -> dict:
+    """Return normalized quiz data; reject invalid fields or expected_count."""
     result = parse_json_response(response)
     if not isinstance(result, dict) or set(result) != {"questions"}:
         raise ValueError("Quiz output must contain only a questions array.")
@@ -109,59 +112,73 @@ def _validate_quiz(
     return validate_schema({"questions": validated_questions}, _SCHEMA_PATH)
 
 
-def _fixture_matches_transcript(transcript_text: str) -> bool:
-    with _TRANSCRIPT_FIXTURE_PATH.open(encoding="utf-8") as fixture_file:
-        source_fixture = json.load(fixture_file)
-    source_text = normalize_transcript(source_fixture)["full_text"]
-    source_words = meaningful_words(source_text)
-    transcript_words = meaningful_words(transcript_text)
-    if not source_words:
-        return False
-    return len(source_words & transcript_words) / len(source_words) >= 0.5
-
-
 def _load_fallback(transcript_text: str, num_questions: int) -> dict:
-    if not _fixture_matches_transcript(transcript_text):
-        raise ValueError(
-            "No AI client is configured and the local quiz fixture does not "
-            "match this transcript. Configure an AI client to generate a "
-            "transcript-specific quiz."
-        )
+    """Return validated local samples when the legacy relevance check passes.
 
+    This development fallback uses lexical overlap, not semantic grounding.
+    Reject unrelated transcripts and requests exceeding the fixture size.
+    """
+    with _TRANSCRIPT_FIXTURE_PATH.open(encoding="utf-8") as source_file:
+        source = normalize_transcript(json.load(source_file))["full_text"]
+    source_words = meaningful_words(source)
+    transcript_words = meaningful_words(transcript_text)
+    if (
+        not source_words
+        or len(source_words & transcript_words) / len(source_words) < 0.5
+    ):
+        raise ValueError(
+            "The local quiz fixture does not match this transcript. "
+            "Configure an AI client for transcript-specific questions."
+        )
     with _FIXTURE_PATH.open(encoding="utf-8") as fixture_file:
-        fixture_data = json.load(fixture_file)
-    validated_fixture = _validate_quiz(fixture_data)
-    available = len(validated_fixture["questions"])
+        quiz = _validate_quiz(json.load(fixture_file))
+    available = len(quiz["questions"])
     if num_questions > available:
         raise ValueError(
-            f"Requested {num_questions} questions, but the local quiz fixture "
+            f"Requested {num_questions} questions, but the quiz fixture "
             f"contains only {available}."
         )
-    return {"questions": validated_fixture["questions"][:num_questions]}
+    logger.warning(
+        "build_quiz source=fixture; reason=no AI client configured; "
+        "development fallback, not AI-generated content"
+    )
+    return {"questions": quiz["questions"][:num_questions]}
 
 
 def build_quiz(
     transcript_text: str,
-    ai_client=None,
+    ai_client: Any = None,
     num_questions: int = 3,
+    *,
+    allow_fallback: bool = True,
 ) -> dict:
-    (
-        "Generate a Draft-07-valid quiz or use a matching local "
-        "development fixture."
-    )
+    """Return a validated quiz with optional legacy local fixture fallback.
+
+    transcript_text supplies content; num_questions is a positive count.
+    allow_fallback defaults to True for compatibility with local callers.
+    Set it to False in production to prohibit fixture access. A configured
+    client's errors always propagate instead of substituting sample content.
+    Declared provider failures raise AIClientError; invalid responses raise
+    ValueError. The development fixture is never loaded with a client set.
+    """
     if (
         isinstance(num_questions, bool)
         or not isinstance(num_questions, int)
         or num_questions < 1
     ):
         raise ValueError("num_questions must be a positive integer.")
-
-    if ai_client is not None:
-        prompt = render_prompt(
-            _PROMPT_PATH,
-            transcript_text=transcript_text,
-            replacements={"num_questions": str(num_questions)},
-        )
+    if ai_client is None:
+        if not allow_fallback:
+            raise AIClientError("An AI client is required in strict mode.")
+        return _load_fallback(transcript_text, num_questions)
+    if not clean_text(transcript_text):
+        raise ValueError("transcript_text must be a non-empty string.")
+    prompt = render_prompt(
+        _PROMPT_PATH,
+        transcript_text=transcript_text,
+        replacements={"num_questions": str(num_questions)},
+    )
+    try:
         response = call_ai_client(
             ai_client,
             prompt=prompt,
@@ -169,25 +186,6 @@ def build_quiz(
             transcript_methods=("generate_quiz",),
             transcript_method_kwargs={"num_questions": num_questions},
         )
-        return _validate_quiz(response, expected_count=num_questions)
-
-    logger.info(
-        "No AI client configured; using the local development quiz fixture."
-    )
-    return _load_fallback(transcript_text, num_questions)
-
-
-if __name__ == "__main__":
-    transcript_path = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "transcript_sample.json"
-    )
-    if transcript_path.exists():
-        with transcript_path.open(encoding="utf-8") as transcript_file:
-            transcript_data = json.load(transcript_file)
-        normalized = normalize_transcript(transcript_data)
-        quiz = build_quiz(normalized["full_text"])
-        print(len(quiz["questions"]))
-    else:
-        print(f"Transcript fixture not found: {transcript_path}")
+    except (AIClientError, TimeoutError, ConnectionError) as exc:
+        raise AIClientError("AI quiz generation failed.") from exc
+    return _validate_quiz(response, expected_count=num_questions)

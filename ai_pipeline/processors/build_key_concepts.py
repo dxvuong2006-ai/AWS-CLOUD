@@ -1,10 +1,10 @@
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
 if __package__:
     from ._common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         extract_definition_concepts,
@@ -14,6 +14,7 @@ if __package__:
     )
 else:
     from _common import (
+        AIClientError,
         call_ai_client,
         clean_text,
         extract_definition_concepts,
@@ -55,6 +56,7 @@ def validate_key_concepts(result: Any) -> list[dict[str, str]]:
 
 
 def _validate_concepts(response: Any) -> list[dict[str, str]]:
+    """Parse response and return schema-valid concept dictionaries."""
     response = parse_json_response(response)
     result = (
         response.get("key_concepts")
@@ -74,65 +76,68 @@ def _validate_concepts(response: Any) -> list[dict[str, str]]:
 
 
 def _fallback_concepts(transcript_text: str) -> list[dict[str, str]]:
+    """Return heuristic concepts grounded in non-empty transcript_text."""
     concepts = extract_definition_concepts(transcript_text)
     if concepts:
         return concepts
 
     definition = clean_text(transcript_text)
     if not definition:
-        definition = "Không có nội dung transcript để trích xuất khái niệm."
+        raise ValueError("Cannot extract concepts from empty text.")
     return [{"term": "Ý chính", "definition": definition}]
 
 
-def build_key_concepts(transcript_text: str, ai_client=None) -> list[dict]:
-    """Extract Draft-07-valid concepts, falling back to transcript text."""
-    if ai_client is not None:
+def build_key_concepts(
+    transcript_text: str,
+    ai_client: Any = None,
+    *,
+    allow_fallback: bool = True,
+) -> list[dict[str, str]]:
+    """Return validated content, allowing legacy heuristic fallback by default.
+
+    transcript_text supplies the content; ai_client optionally generates it.
+    Missing clients/prompts, declared AI failures and invalid responses may
+    use heuristics with a warning. Set allow_fallback=False for strict mode.
+    Output fields stay unchanged. Empty transcripts and programming errors
+    propagate; adapters should wrap provider failures in AIClientError.
+    """
+    if not clean_text(transcript_text):
+        raise ValueError("transcript_text must be a non-empty string.")
+    if ai_client is None:
+        if not allow_fallback:
+            raise AIClientError("An AI client is required in strict mode.")
+        reason = "no AI client configured"
+    else:
         try:
             prompt = render_prompt(
                 _PROMPT_PATH,
                 transcript_text=transcript_text,
             )
-            response = call_ai_client(
-                ai_client,
-                prompt=prompt,
-                transcript_text=transcript_text,
-                transcript_methods=(
-                    "extract_key_concepts",
-                    "generate_key_concepts",
-                ),
-            )
-            return _validate_concepts(response)
-        except Exception as exc:
-            logger.warning(
-                "AI key concept extraction failed; using fallback: %s", exc
-            )
+        except FileNotFoundError as exc:
+            if not allow_fallback:
+                raise
+            reason = f"prompt unavailable: {exc}"
+        else:
+            try:
+                response = call_ai_client(
+                    ai_client,
+                    prompt=prompt,
+                    transcript_text=transcript_text,
+                    transcript_methods=(
+                        "extract_key_concepts", "generate_key_concepts"
+                    ),
+                )
+            except (AIClientError, TimeoutError, ConnectionError) as exc:
+                if not allow_fallback:
+                    raise AIClientError("AI request failed.") from exc
+                reason = f"AI client failure: {type(exc).__name__}"
+            else:
+                try:
+                    return _validate_concepts(response)
+                except ValueError as exc:
+                    if not allow_fallback:
+                        raise
+                    reason = f"invalid AI response: {exc}"
 
+    logger.warning("build_key_concepts source=heuristic; reason=%s", reason)
     return _validate_concepts(_fallback_concepts(transcript_text))
-
-
-if __name__ == "__main__":
-    if __package__:
-        from ai_pipeline.processors.normalize_transcript import (
-            normalize_transcript,
-        )
-    else:
-        from normalize_transcript import normalize_transcript
-
-    transcript_path = (
-        Path(__file__).resolve().parents[1]
-        / "fixtures"
-        / "transcript_sample.json"
-    )
-    if transcript_path.exists():
-        with transcript_path.open(encoding="utf-8") as transcript_file:
-            transcript_data = json.load(transcript_file)
-        normalized = normalize_transcript(transcript_data)
-        print(
-            json.dumps(
-                build_key_concepts(normalized["full_text"]),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-    else:
-        print(f"Transcript fixture not found: {transcript_path}")
