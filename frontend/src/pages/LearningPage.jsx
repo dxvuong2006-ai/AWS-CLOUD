@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { useLesson } from "../hooks/useLesson";
+import { useLessonProgress } from "../hooks/useLessonProgress";
 import "../components/learning/learning.css";
 import VideoPlayer from "../components/learning/VideoPlayer";
 import TranscriptPanel from "../components/learning/TranscriptPanel";
@@ -29,10 +30,18 @@ export default function LearningPage() {
   const { courseId, lessonId } = useParams();
   const course = useCourse(courseId);
   const lesson = useLesson(lessonId);
+  const progress = useLessonProgress(courseId, lessonId);
   const videoRef = useRef(null);
+  const lastSavedAt = useRef(0);
   const [currentTime, setCurrentTime] = useState(0);
 
-  if (lesson.loading || course.loading) {
+  // Đổi sang bài khác thì đặt lại bộ đếm
+  useEffect(() => {
+    lastSavedAt.current = 0;
+    setCurrentTime(0);
+  }, [lessonId]);
+
+  if (lesson.loading || course.loading || progress.loading) {
     return <div className="page">Đang tải...</div>;
   }
   if (lesson.error || course.error) {
@@ -45,6 +54,22 @@ export default function LearningPage() {
   }
 
   const where = locateLesson(course.data.sections, lessonId);
+  const done = progress.courseProgress?.lessons.find(
+    (l) => l.lesson_id === lessonId
+  )?.completed;
+
+  const handleTimeUpdate = (t) => {
+    setCurrentTime(t);
+    if (Math.abs(t - lastSavedAt.current) >= 10) {
+      lastSavedAt.current = t;
+      progress.save(t, videoRef.current?.duration);
+    }
+  };
+
+  const saveNow = () => {
+    const v = videoRef.current;
+    if (v) progress.save(v.currentTime, v.duration);
+  };
 
   const handleSeek = (seconds) => {
     if (videoRef.current) {
@@ -61,10 +86,15 @@ export default function LearningPage() {
             <Link to={`/courses/${courseId}`}>{course.data.title}</Link>
             {where && ` / Section ${where.sectionNo} · ${where.section.title}`}
           </div>
-          <h1>
-            {where ? `Bài ${where.lessonNo} · ` : ""}
-            {lesson.data.title}
-          </h1>
+            <h1>
+              {where ? `Bài ${where.lessonNo} · ` : ""}
+              {lesson.data.title}
+              {done && (
+                <span style={{ marginLeft: 12, fontSize: 13, color: "var(--success)" }}>
+                  ✓ Đã hoàn thành
+                </span>
+              )}
+            </h1>
         </div>
         <div className="page-actions">
           <button className="btn-secondary" disabled title="Chưa có flashcard">
@@ -76,12 +106,21 @@ export default function LearningPage() {
         </div>
       </div>
 
+      {progress.saveError && (
+        <p style={{ color: "var(--error)" }}>
+          Không lưu được tiến độ học. Tiến độ gần nhất có thể chưa được ghi.
+        </p>
+      )}
+
       <div className="learning-layout">
         <div className="learning-main">
           <VideoPlayer
             src={lesson.data.videoUrl}
             videoRef={videoRef}
-            onTimeUpdate={setCurrentTime}
+            onTimeUpdate={handleTimeUpdate}
+            startAt={progress.lastPosition}
+            onPause={saveNow}
+            onEnded={saveNow}
           />
           <SummaryPanel summary={lesson.data.summary} />
         </div>
