@@ -52,7 +52,14 @@ logger = logging.getLogger(__name__)
 
 
 def _sentence_score(sentence: str) -> int:
-    """Return a heuristic importance score for the supplied sentence."""
+    """Tính điểm quan trọng của một câu theo quy tắc.
+
+    Args:
+        sentence: Câu văn cần tính điểm quan trọng.
+
+    Returns:
+        Điểm dựa trên độ dài, từ khóa và dấu phân cách.
+    """
     lower_sentence = sentence.lower()
     score = min(len(sentence.split()), 30)
     score += sum(term in lower_sentence for term in _IMPORTANT_TERMS) * 4
@@ -62,7 +69,17 @@ def _sentence_score(sentence: str) -> int:
 
 
 def _fallback_summary(transcript_text: str) -> dict:
-    """Return a schema-valid extractive summary of transcript_text."""
+    """Tạo bản tóm tắt dự phòng từ các câu trong transcript.
+
+    Args:
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+
+    Returns:
+        Đối tượng summary hợp schema, giữ nội dung trích từ transcript.
+
+    Raises:
+        ValueError: Văn bản rỗng hoặc kết quả không thỏa mãn schema.
+    """
     sentences = split_sentences(transcript_text)
 
     if not sentences:
@@ -101,7 +118,17 @@ def _fallback_summary(transcript_text: str) -> dict:
 
 
 def _validate_summary(response: Any) -> dict:
-    """Parse response and return normalized summary fields or raise."""
+    """Chuẩn hóa và kiểm tra phản hồi tóm tắt của AI.
+
+    Args:
+        response: Phản hồi AI cần phân tích và chuẩn hóa.
+
+    Returns:
+        Đối tượng gồm title, summary và key_concepts hợp lệ.
+
+    Raises:
+        ValueError: Phản hồi JSON hoặc các trường nội dung không hợp lệ.
+    """
     result = parse_json_response(response)
     if not isinstance(result, dict):
         raise ValueError("AI summary must be a JSON object.")
@@ -128,13 +155,25 @@ def build_summary(
     *,
     allow_fallback: bool = True,
 ) -> dict:
-    """Return validated content, allowing legacy heuristic fallback by default.
+    """Tạo tóm tắt bài giảng với chính sách dự phòng tương thích.
 
-    transcript_text supplies the content; ai_client optionally generates it.
-    Missing clients/prompts, declared AI failures and invalid responses may
-    use heuristics with a warning. Set allow_fallback=False for strict mode.
-    Output fields stay unchanged. Empty transcripts and programming errors
-    propagate; adapters should wrap provider failures in AIClientError.
+    Mặc định cho phép heuristic khi thiếu client, thiếu chỉ dẫn hoặc gặp
+    lỗi AI được hỗ trợ và ghi cảnh báo nguồn dữ liệu. allow_fallback=False
+    bật chế độ nghiêm ngặt. Lỗi lập trình được ném lại.
+
+    Args:
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+        ai_client: Đối tượng gọi AI; None để áp dụng chính sách dự phòng.
+        allow_fallback: Cho phép kết quả dự phòng; mặc định True để tương
+            thích.
+
+    Returns:
+        Đối tượng tóm tắt hợp schema, không thêm trường metadata.
+
+    Raises:
+        ValueError: Transcript rỗng hoặc phản hồi sai khi tắt dự phòng.
+        AIClientError: Thiếu client hoặc lỗi AI khi tắt dự phòng.
+        FileNotFoundError: Thiếu tệp chỉ dẫn khi tắt dự phòng.
     """
     if not clean_text(transcript_text):
         raise ValueError("transcript_text must be a non-empty string.")

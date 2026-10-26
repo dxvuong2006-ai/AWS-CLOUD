@@ -14,18 +14,35 @@ _WORD_RE = re.compile(r"[^\W_]+", re.UNICODE)
 
 
 class AIClientError(RuntimeError):
-    """Declare a provider failure that processors may safely recover from."""
+    """Báo lỗi nhà cung cấp AI có thể xử lý bằng cơ chế dự phòng.
+
+    Vai trò kiến trúc: Service của AI Pipeline.
+    """
 
 
 def clean_text(value: Any) -> str:
-    """Clean string whitespace; return empty text for non-string values."""
+    """Chuẩn hóa khoảng trắng của giá trị chuỗi.
+
+    Args:
+        value: Giá trị cần chuẩn hóa hoặc chuyển đổi.
+
+    Returns:
+        Chuỗi đã làm sạch; chuỗi rỗng nếu đầu vào không phải chuỗi.
+    """
     if not isinstance(value, str):
         return ""
     return _WHITESPACE_RE.sub(" ", value).strip()
 
 
 def split_sentences(text: str) -> list[str]:
-    """Return non-empty, cleaned sentences from the supplied text."""
+    """Tách văn bản thành các câu đã làm sạch.
+
+    Args:
+        text: Văn bản đầu vào cần phân tích.
+
+    Returns:
+        Danh sách câu không rỗng, giữ nguyên thứ tự.
+    """
     return [
         sentence
         for sentence in map(clean_text, _SENTENCE_SPLIT_RE.split(text))
@@ -34,7 +51,16 @@ def split_sentences(text: str) -> list[str]:
 
 
 def extract_definition_concepts(text: str) -> list[dict[str, str]]:
-    """Return unique term/definition pairs extracted from text by rules."""
+    """Trích xuất thuật ngữ và định nghĩa bằng quy tắc.
+
+    Đây là trích xuất theo mẫu câu, không phải suy luận ngữ nghĩa bằng AI.
+
+    Args:
+        text: Văn bản đầu vào cần phân tích.
+
+    Returns:
+        Danh sách cặp term/definition có thuật ngữ không trùng nhau.
+    """
     definition_re = re.compile(
         r"\b(?P<marker>defined\s+as|is|are)\b|"
         r"(?P<vi_marker>bao gồm|cung cấp|là|cho phép)",
@@ -83,7 +109,20 @@ def render_prompt(
     transcript_text: str,
     replacements: dict[str, str] | None = None,
 ) -> str:
-    """Render prompt_path with transcript_text and named replacements."""
+    """Chèn transcript và các giá trị thay thế vào chỉ dẫn AI.
+
+    Args:
+        prompt_path: Đường dẫn tệp chỉ dẫn gửi cho AI.
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+        replacements: Giá trị thay thế bổ sung cho các biến trong chỉ dẫn.
+
+    Returns:
+        Chuỗi chỉ dẫn đã thay thế các biến hợp lệ.
+
+    Raises:
+        ValueError: Thiếu, lặp hoặc xuất hiện biến thay thế không hỗ trợ.
+        OSError: Không đọc được tệp chỉ dẫn.
+    """
     template = prompt_path.read_text(encoding="utf-8")
     values = {"transcript": transcript_text, **(replacements or {})}
     placeholders = list(_PLACEHOLDER_RE.finditer(template))
@@ -111,11 +150,27 @@ def call_ai_client(
     transcript_methods: tuple[str, ...],
     transcript_method_kwargs: dict[str, Any] | None = None,
 ) -> Any:
-    """Call the first supported client method and return its raw response.
+    """Gọi phương thức phù hợp đầu tiên của đối tượng AI.
 
-    Named transcript methods precede generate/invoke/callable prompt methods.
-    Unsupported keyword arguments are omitted. Provider errors propagate;
-    adapters should translate recoverable failures into AIClientError."""
+    Ưu tiên phương thức nhận transcript trước generate, invoke và callable.
+    Chỉ truyền tham số từ khóa được hỗ trợ. Lỗi từ nhà cung cấp được ném
+    lại; adapter nên chuyển lỗi có thể phục hồi thành AIClientError.
+
+    Args:
+        ai_client: Đối tượng hỗ trợ một giao diện gọi AI phù hợp.
+        prompt: Chỉ dẫn đã chèn nội dung transcript.
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+        transcript_methods: Tên phương thức nhận transcript, theo thứ tự ưu
+            tiên.
+        transcript_method_kwargs: Tham số từ khóa cho phương thức nhận
+            transcript.
+
+    Returns:
+        Phản hồi gốc từ phương thức đã chọn.
+
+    Raises:
+        TypeError: Đối tượng không cung cấp giao diện gọi AI phù hợp.
+    """
     for method_name in transcript_methods:
         method = getattr(ai_client, method_name, None)
         if callable(method):
@@ -162,7 +217,17 @@ def call_ai_client(
 
 
 def parse_json_response(response: Any) -> Any:
-    """Decode plain or fenced JSON strings; pass structured values through."""
+    """Phân tích phản hồi JSON thuần hoặc bọc trong Markdown.
+
+    Args:
+        response: Phản hồi AI cần phân tích và chuẩn hóa.
+
+    Returns:
+        Dữ liệu JSON đã giải mã; giữ nguyên đầu vào không phải chuỗi.
+
+    Raises:
+        ValueError: Chuỗi phản hồi không phải JSON hợp lệ.
+    """
     if isinstance(response, (dict, list)):
         return response
     if not isinstance(response, str):
@@ -181,7 +246,20 @@ def parse_json_response(response: Any) -> Any:
 
 
 def validate_schema(data: Any, schema_path: Path) -> Any:
-    """Return data if it matches schema_path; raise ValueError otherwise."""
+    """Kiểm tra dữ liệu theo JSON Schema Draft-07.
+
+    Args:
+        data: Dữ liệu cần thu thập hoặc kiểm tra.
+        schema_path: Đường dẫn JSON Schema Draft-07 dùng kiểm tra dữ liệu.
+
+    Returns:
+        Chính dữ liệu đầu vào nếu thỏa mãn schema.
+
+    Raises:
+        ValueError: Dữ liệu không phù hợp schema hoặc tệp JSON bị lỗi.
+        OSError: Không đọc được tệp schema.
+        SchemaError: Định nghĩa JSON Schema không hợp lệ.
+    """
     with schema_path.open(encoding="utf-8") as schema_file:
         schema = json.load(schema_file)
     Draft7Validator.check_schema(schema)
@@ -201,7 +279,16 @@ def validate_schema(data: Any, schema_path: Path) -> Any:
 
 
 def meaningful_words(text: str) -> set[str]:
-    """Return case-folded tokens longer than three characters from text."""
+    """Lấy tập từ phục vụ so khớp transcript mẫu.
+
+    Bộ lọc dựa trên độ dài từ, không đo mức độ tương đồng ngữ nghĩa.
+
+    Args:
+        text: Văn bản đầu vào cần phân tích.
+
+    Returns:
+        Tập từ viết thường có độ dài lớn hơn ba ký tự.
+    """
     return {
         word.casefold()
         for word in _WORD_RE.findall(text)

@@ -45,7 +45,19 @@ logger = logging.getLogger(__name__)
 def _validate_quiz(
     response: Any, *, expected_count: int | None = None
 ) -> dict:
-    """Return normalized quiz data; reject invalid fields or expected_count."""
+    """Chuẩn hóa và kiểm tra cấu trúc đề trắc nghiệm.
+
+    Args:
+        response: Phản hồi AI cần phân tích và chuẩn hóa.
+        expected_count: Số câu bắt buộc; None để không kiểm tra số lượng cụ
+            thể.
+
+    Returns:
+        Đối tượng questions có bốn lựa chọn riêng biệt cho mỗi câu.
+
+    Raises:
+        ValueError: JSON, trường dữ liệu, số câu hoặc đáp án không hợp lệ.
+    """
     result = parse_json_response(response)
     if not isinstance(result, dict) or set(result) != {"questions"}:
         raise ValueError("Quiz output must contain only a questions array.")
@@ -113,10 +125,21 @@ def _validate_quiz(
 
 
 def _load_fallback(transcript_text: str, num_questions: int) -> dict:
-    """Return validated local samples when the legacy relevance check passes.
+    """Đọc đề mẫu phục vụ chế độ dự phòng tương thích cục bộ.
 
-    This development fallback uses lexical overlap, not semantic grounding.
-    Reject unrelated transcripts and requests exceeding the fixture size.
+    Độ trùng từ chỉ là phép kiểm tra từ vựng, không chứng minh đề mẫu phù
+    hợp về ngữ nghĩa. Kết quả mẫu luôn được ghi cảnh báo.
+
+    Args:
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+        num_questions: Số câu hỏi cần tạo hoặc lấy từ dữ liệu mẫu.
+
+    Returns:
+        Đối tượng questions chứa số câu được yêu cầu từ fixture hợp lệ.
+
+    Raises:
+        ValueError: Transcript không đủ tương đồng hoặc fixture thiếu câu.
+        OSError: Không đọc được tệp fixture.
     """
     with _TRANSCRIPT_FIXTURE_PATH.open(encoding="utf-8") as source_file:
         source = normalize_transcript(json.load(source_file))["full_text"]
@@ -152,14 +175,26 @@ def build_quiz(
     *,
     allow_fallback: bool = True,
 ) -> dict:
-    """Return a validated quiz with optional legacy local fixture fallback.
+    """Tạo đề trắc nghiệm hoặc dùng dữ liệu mẫu theo chính sách.
 
-    transcript_text supplies content; num_questions is a positive count.
-    allow_fallback defaults to True for compatibility with local callers.
-    Set it to False in production to prohibit fixture access. A configured
-    client's errors always propagate instead of substituting sample content.
-    Declared provider failures raise AIClientError; invalid responses raise
-    ValueError. The development fixture is never loaded with a client set.
+    allow_fallback mặc định True để tương thích cục bộ. Khi có client, lỗi
+    được ném lại thay vì thay bằng đề mẫu. Đặt allow_fallback=False trong
+    production để cấm đọc fixture khi thiếu client.
+
+    Args:
+        transcript_text: Nội dung transcript làm nguồn xử lý bài giảng.
+        ai_client: Đối tượng gọi AI; None để áp dụng chính sách dự phòng.
+        num_questions: Số câu hỏi cần tạo hoặc lấy từ dữ liệu mẫu.
+        allow_fallback: Cho phép kết quả dự phòng; mặc định True để tương
+            thích.
+
+    Returns:
+        Đối tượng questions hợp schema với số câu được yêu cầu.
+
+    Raises:
+        ValueError: Số câu, transcript, phản hồi hoặc fixture không hợp lệ.
+        AIClientError: Thiếu client ở chế độ nghiêm ngặt hoặc AI gặp lỗi.
+        OSError: Không đọc được chỉ dẫn, schema hoặc fixture cần thiết.
     """
     if (
         isinstance(num_questions, bool)

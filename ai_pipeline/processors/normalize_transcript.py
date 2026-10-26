@@ -44,7 +44,14 @@ _ENGLISH_WORDS = {
 
 
 def _to_timestamp(value: Any) -> float | None:
-    """Return a finite non-negative float for value, or None if invalid."""
+    """Chuyển giá trị thành mốc thời gian hợp lệ.
+
+    Args:
+        value: Giá trị cần chuẩn hóa hoặc chuyển đổi.
+
+    Returns:
+        Số thực hữu hạn không âm; None nếu không chuyển đổi được.
+    """
     if isinstance(value, bool) or value is None:
         return None
     try:
@@ -55,7 +62,14 @@ def _to_timestamp(value: Any) -> float | None:
 
 
 def _collect_segments(data: Any) -> list[dict[str, Any]]:
-    """Extract cleaned text and valid timestamp pairs from nested data."""
+    """Thu thập các đoạn transcript từ dữ liệu lồng nhau.
+
+    Args:
+        data: Dữ liệu cần thu thập hoặc kiểm tra.
+
+    Returns:
+        Danh sách đoạn có văn bản sạch và cặp thời gian hợp lệ nếu có.
+    """
     if isinstance(data, str):
         text = clean_text(data)
         return [{"text": text}] if text else []
@@ -100,7 +114,16 @@ def _collect_segments(data: Any) -> list[dict[str, Any]]:
 
 
 def _detect_language(text: str, declared_language: Any = None) -> str:
-    """Return vi or en using declared_language or text heuristics."""
+    """Xác định tiếng Việt hoặc tiếng Anh của transcript.
+
+    Args:
+        text: Văn bản đầu vào cần phân tích.
+        declared_language: Mã ngôn ngữ được khai báo; None để nhận diện từ
+            văn bản.
+
+    Returns:
+        Mã vi hoặc en theo khai báo hoặc quy tắc nhận diện.
+    """
     if isinstance(declared_language, str):
         language = declared_language.strip().lower()
         if language in {"vi", "en"}:
@@ -119,7 +142,18 @@ def _detect_language(text: str, declared_language: Any = None) -> str:
 
 
 def normalize_transcript(raw_data: dict | list | str) -> dict:
-    """Normalize transcript text and retain segments with valid timestamps."""
+    """Chuẩn hóa transcript và giữ các đoạn có thời gian hợp lệ.
+
+    Chuỗi không giải mã được JSON được xử lý như văn bản. Đoạn có thời gian
+    không hợp lệ vẫn đóng góp nội dung vào full_text.
+
+    Args:
+        raw_data: Transcript dạng đối tượng, danh sách hoặc chuỗi JSON/văn
+            bản.
+
+    Returns:
+        Đối tượng gồm full_text, segments, word_count và language.
+    """
     data = raw_data
     if isinstance(raw_data, str):
         try:

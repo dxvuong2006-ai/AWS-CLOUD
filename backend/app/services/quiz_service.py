@@ -8,18 +8,38 @@ from app.services.unlock_service import SectionLockedError
 
 
 class QuizNotFoundError(Exception):
+    """Báo không tìm thấy bài trắc nghiệm hoặc chương học.
+
+    Vai trò kiến trúc: Service.
+    """
+
     pass
 
 
 class QuizNotApprovedError(Exception):
+    """Báo bài trắc nghiệm chưa được phê duyệt.
+
+    Vai trò kiến trúc: Service.
+    """
+
     pass
 
 
 class QuizAccessDeniedError(Exception):
+    """Báo học viên chưa đủ điều kiện tiến độ để vào đề.
+
+    Vai trò kiến trúc: Service.
+    """
+
     pass
 
 
 class InvalidSubmissionError(Exception):
+    """Báo dữ liệu nộp bài không hợp lệ để chấm điểm.
+
+    Vai trò kiến trúc: Service.
+    """
+
     pass
 
 
@@ -29,6 +49,22 @@ def _assert_quiz_section_access(
     student_id: int,
     section_id: int,
 ) -> None:
+    """Kiểm tra điều kiện tiến độ trước khi truy cập bài thi.
+
+    Hàm kiểm tra tiến độ học; không thay thế phân quyền khóa học.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        student_id: Mã học viên có tiến độ hoặc lượt thi cần xử lý.
+        section_id: Mã chương học cần xử lý.
+
+    Returns:
+        None nếu chương tồn tại và đã được mở khóa.
+
+    Raises:
+        QuizNotFoundError: Không tìm thấy chương của bài trắc nghiệm.
+        QuizAccessDeniedError: Học viên chưa đạt điều kiện mở khóa.
+    """
     section = quizzes_repo.get_section_by_id(db, section_id)
     if section is None:
         raise QuizNotFoundError("Section not found.")
@@ -49,7 +85,21 @@ def get_unlocked_quiz_for_student(
     student_id: int,
     section_id: int,
 ) -> dict:
-    """Authorize section access before returning the student's quiz."""
+    """Lấy đề thi sau khi kiểm tra điều kiện mở khóa.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        student_id: Mã học viên có tiến độ hoặc lượt thi cần xử lý.
+        section_id: Mã chương học cần xử lý.
+
+    Returns:
+        Đối tượng đề thi cho học viên, không có đáp án hoặc lời giải.
+
+    Raises:
+        QuizNotFoundError: Không tìm thấy chương hoặc bài thi.
+        QuizAccessDeniedError: Chương học chưa được mở khóa.
+        QuizNotApprovedError: Bài trắc nghiệm chưa được duyệt.
+    """
     _assert_quiz_section_access(
         db,
         student_id=student_id,
@@ -59,6 +109,21 @@ def get_unlocked_quiz_for_student(
 
 
 def get_quiz_for_student(db: Session, *, section_id: int) -> dict:
+    """Đọc đề thi đã duyệt và chỉ chọn các trường công khai.
+
+    Bên gọi phải kiểm tra mở khóa trước khi phục vụ yêu cầu học viên.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        section_id: Mã chương học cần xử lý.
+
+    Returns:
+        Đối tượng đề thi dùng options, không có correct_answer/explanation.
+
+    Raises:
+        QuizNotFoundError: Chương học chưa có bài trắc nghiệm.
+        QuizNotApprovedError: Bài trắc nghiệm chưa được duyệt.
+    """
     quiz = quizzes_repo.get_quiz_by_section(db, section_id)
     if quiz is None:
         raise QuizNotFoundError("Quiz not found for this section.")
@@ -91,6 +156,26 @@ def submit_quiz(
     quiz_id: int,
     submission: QuizSubmitRequest,
 ) -> dict:
+    """Nộp bài và lưu lượt thi cùng câu trả lời theo cơ chế nguyên tử.
+
+    Repository commit một lần khi xử lý hoàn tất; rollback nếu có lỗi.
+    Ngưỡng đạt không thấp hơn 80 phần trăm và cấu hình của bài thi.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        student_id: Mã học viên có tiến độ hoặc lượt thi cần xử lý.
+        quiz_id: Mã bài trắc nghiệm cần xử lý.
+        submission: DTO chứa các câu trả lời do học viên gửi.
+
+    Returns:
+        Đối tượng kết quả có điểm, trạng thái đạt và chi tiết đáp án.
+
+    Raises:
+        QuizNotFoundError: Không tìm thấy bài thi hoặc chương học.
+        QuizNotApprovedError: Bài thi chưa được duyệt.
+        QuizAccessDeniedError: Chương học chưa được mở khóa.
+        InvalidSubmissionError: Nội dung nộp bài không hợp lệ.
+    """
     with quizzes_repo.submission_transaction(db):
         return _submit_quiz(
             db,
@@ -107,6 +192,26 @@ def _submit_quiz(
     quiz_id: int,
     submission: QuizSubmitRequest,
 ) -> dict:
+    """Kiểm tra và chấm bài trong giao dịch nộp bài đang mở.
+
+    Lấy khóa trước khi tính attempt_number. Attempt và answers dùng cùng
+    Session; transaction bên ngoài chịu trách nhiệm commit/rollback.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        student_id: Mã học viên có tiến độ hoặc lượt thi cần xử lý.
+        quiz_id: Mã bài trắc nghiệm cần xử lý.
+        submission: DTO chứa các câu trả lời do học viên gửi.
+
+    Returns:
+        Đối tượng kết quả gồm lượt thi và đáp án sau khi nộp bài.
+
+    Raises:
+        QuizNotFoundError: Không tìm thấy bài thi hoặc chương học.
+        QuizNotApprovedError: Bài trắc nghiệm chưa được duyệt.
+        QuizAccessDeniedError: Chương học chưa được mở khóa.
+        InvalidSubmissionError: Câu hỏi, lựa chọn hoặc đề thi không hợp lệ.
+    """
     quiz = quizzes_repo.lock_quiz_for_submission(db, quiz_id=quiz_id)
     if quiz is None:
         raise QuizNotFoundError("Quiz not found.")
@@ -199,7 +304,7 @@ def _submit_quiz(
         attempt_id=attempt.id,
         answers_data=answers_data,
     )
-    # Snapshot flushed values before the repository commits and expires them.
+    # Chụp giá trị đã flush trước khi commit làm hết hạn dữ liệu trong ORM.
     return {
         "id": attempt.id,
         "quiz_id": attempt.quiz_id,
@@ -219,6 +324,17 @@ def get_student_quiz_history(
     skip: int = 0,
     limit: int = 50,
 ) -> list[dict]:
+    """Tổng hợp lịch sử lượt thi của học viên.
+
+    Args:
+        db: Session SQLAlchemy được bên gọi cung cấp.
+        student_id: Mã học viên có tiến độ hoặc lượt thi cần xử lý.
+        skip: Số lượt thi bỏ qua khi phân trang.
+        limit: Số lượt thi tối đa cần lấy.
+
+    Returns:
+        Danh sách kết quả lịch sử có tiêu đề quiz và thông tin chấm điểm.
+    """
     attempts = quizzes_repo.list_attempts_by_student_with_quiz_title(
         db,
         student_id=student_id,

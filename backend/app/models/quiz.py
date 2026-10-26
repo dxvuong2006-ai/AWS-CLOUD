@@ -20,6 +20,11 @@ MIN_PASSING_SCORE = 80.0
 
 
 class Quiz(Base):
+    """Lưu cấu hình bài trắc nghiệm của một chương học.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quizzes"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -35,6 +40,11 @@ class Quiz(Base):
 
 
 class Question(Base):
+    """Lưu câu hỏi, lựa chọn và đáp án của bài trắc nghiệm.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "questions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -52,6 +62,11 @@ class Question(Base):
 
 
 class QuizAttempt(Base):
+    """Lưu điểm và trạng thái đạt của mỗi lượt nộp bài.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quiz_attempts"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -74,6 +89,11 @@ class QuizAttempt(Base):
 
 
 class QuizAnswer(Base):
+    """Lưu lựa chọn và kết quả chấm từng câu trong một lượt thi.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quiz_answers"
 
     id = Column(Integer, primary_key=True, index=True)
