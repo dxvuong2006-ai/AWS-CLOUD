@@ -8,7 +8,10 @@ export default function AppRoutes() {
       <Route path="/" element={<Navigate to="/courses" replace />} />
       <Route path="/courses" element={<CourseListPage />} />
       <Route path="/courses/:courseId" element={<CourseDetailPage />} />
-      <Route path="*" element={<div className="page">Không tìm thấy trang.</div>} />
+      <Route
+        path="*"
+        element={<div className="page">Không tìm thấy trang.</div>}
+      />
     </Routes>
   );
 }
