@@ -1,1 +1,25 @@
-
+{
+  "l1": {
+    "id": "l1",
+    "title": "Cloud là gì?",
+    "videoUrl": "/sample.mp4",
+    "transcript": [
+      { "start": 0, "text": "Chào mừng các bạn đến với bài học đầu tiên." },
+      { "start": 12, "text": "Điện toán đám mây là việc thuê tài nguyên tính toán qua Internet." },
+      { "start": 30, "text": "Bạn trả tiền theo mức dùng thay vì mua máy chủ." }
+    ],
+    "summary": "Bài học giới thiệu khái niệm điện toán đám mây và mô hình trả tiền theo mức dùng.",
+    "keyConcepts": ["Điện toán đám mây", "Pay-as-you-go", "Tài nguyên theo yêu cầu"]
+  },
+  "l2": {
+    "id": "l2",
+    "title": "IaaS, PaaS, SaaS",
+    "videoUrl": "/knowmyname.mp4",
+    "transcript": [
+      { "start": 0, "text": "Có ba mô hình dịch vụ chính." },
+      { "start": 15, "text": "IaaS cho thuê hạ tầng, PaaS cho thuê nền tảng, SaaS là phần mềm hoàn chỉnh." }
+    ],
+    "summary": "So sánh ba mô hình dịch vụ đám mây.",
+    "keyConcepts": ["IaaS", "PaaS", "SaaS"]
+  }
+}

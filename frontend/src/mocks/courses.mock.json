@@ -34,8 +34,8 @@
         "id": "s1",
         "title": "Container cơ bản",
         "lessons": [
-          { "id": "l1", "title": "Image và container", "duration": 480 },
-          { "id": "l2", "title": "Dockerfile đầu tiên", "duration": 660 }
+          { "id": "l4", "title": "Image và container", "duration": 480 },
+          { "id": "l5", "title": "Dockerfile đầu tiên", "duration": 660 }
         ]
       }
     ]

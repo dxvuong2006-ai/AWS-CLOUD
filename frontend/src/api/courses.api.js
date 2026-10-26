@@ -1,4 +1,4 @@
-import { request } from "./client";
+import { request, ApiError } from "./client";
 import courses from "../mocks/courses.mock.json";
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -16,7 +16,7 @@ export async function fetchCourseById(id) {
   if (USE_MOCK) {
     await delay(300);
     const course = courses.find((c) => c.id === id);
-    if (!course) throw new Error("HTTP 404");
+    if (!course) throw new ApiError(404);;
     return course;
   }
   return request(`/courses/${id}`);
