@@ -11,11 +11,20 @@ export default function CourseOutline({ sections }) {
             Section {i + 1}: {s.title}
           </h3>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
-            {s.lessons.map((l) => (
-              <li key={l.id}>
-                {l.title} · {Math.round(l.duration / 60)} phút
-              </li>
-            ))}
+            {(s.lessons ?? []).map((l) => {
+              const durationSeconds = l.duration_seconds ?? l.duration;
+              const duration =
+                Number.isFinite(durationSeconds) && durationSeconds > 0
+                  ? ` · ${Math.round(durationSeconds / 60)} phút`
+                  : "";
+
+              return (
+                <li key={l.id}>
+                  {l.title}
+                  {duration}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}

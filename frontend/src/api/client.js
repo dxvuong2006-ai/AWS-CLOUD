@@ -1,7 +1,10 @@
-const BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const BASE_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 
 export async function request(path, { method = "GET", body, demoUser } = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const res = await fetch(`${BASE_URL}${normalizedPath}`, {
     method,
     headers: {
       "Content-Type": "application/json",
