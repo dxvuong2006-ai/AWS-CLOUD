@@ -16,9 +16,10 @@ function errorMessage(err) {
 
 // Tìm lesson nằm ở section nào, là bài thứ mấy trong section đó
 function locateLesson(sections, lessonId) {
-  const list = sections ?? [];
+  const list = Array.isArray(sections) ? sections : [];
   for (let s = 0; s < list.length; s++) {
-    const i = list[s].lessons.findIndex((l) => l.id === lessonId);
+    const lessons = Array.isArray(list[s]?.lessons) ? list[s].lessons : [];
+    const i = lessons.findIndex((l) => String(l?.id) === String(lessonId));
     if (i !== -1) {
       return { section: list[s], sectionNo: s + 1, lessonNo: i + 1 };
     }
@@ -30,7 +31,8 @@ export default function LearningPage() {
   const { courseId, lessonId } = useParams();
   const course = useCourse(courseId);
   const lesson = useLesson(lessonId);
-  const progress = useLessonProgress(courseId, lessonId);
+  // Backend chưa triển khai Progress; tạm ngừng đọc/ghi tại trang học.
+  const progress = useLessonProgress(courseId, lessonId, { enabled: false });
   const videoRef = useRef(null);
   const lastSavedAt = useRef(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -44,7 +46,7 @@ export default function LearningPage() {
   if (lesson.loading || course.loading || progress.loading) {
     return <div className="page">Đang tải...</div>;
   }
-  if (lesson.error || course.error) {
+  if (lesson.error || course.error || !lesson.data || !course.data) {
     return (
       <div className="page">
         <p>{errorMessage(lesson.error ?? course.error)}</p>
@@ -54,7 +56,7 @@ export default function LearningPage() {
   }
 
   const where = locateLesson(course.data.sections, lessonId);
-  const done = progress.courseProgress?.lessons.find(
+  const done = progress.courseProgress?.lessons?.find(
     (l) => l.lesson_id === lessonId
   )?.completed;
 

@@ -1,27 +1,36 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchCourseProgress, saveLessonProgress } from "../api/progress.api";
 
-export function useLessonProgress(courseId, lessonId) {
+export function useLessonProgress(courseId, lessonId, { enabled = true } = {}) {
   const [courseProgress, setCourseProgress] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const bestPercent = useRef(0);
 
   const reload = useCallback(
-    () => fetchCourseProgress(courseId).then(setCourseProgress),
-    [courseId]
+    () => enabled
+      ? fetchCourseProgress(courseId).then(setCourseProgress)
+      : Promise.resolve(null),
+    [courseId, enabled]
   );
 
   useEffect(() => {
+    if (!enabled) {
+      setCourseProgress(null);
+      setLoading(false);
+      setError(null);
+      setSaveError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     reload()
       .catch(setError)
       .finally(() => setLoading(false));
-  }, [reload]);
+  }, [reload, enabled]);
 
-  const current = courseProgress?.lessons.find((l) => l.lesson_id === lessonId);
+  const current = courseProgress?.lessons?.find((l) => l.lesson_id === lessonId);
 
   // Nhớ phần trăm cao nhất đã xem để không bị giảm khi tua lùi
   useEffect(() => {
@@ -30,7 +39,7 @@ export function useLessonProgress(courseId, lessonId) {
 
   const save = useCallback(
     async (positionSeconds, durationSeconds) => {
-      if (!durationSeconds) return;
+      if (!enabled || !durationSeconds) return;
       const percent = Math.min(100, Math.round((positionSeconds / durationSeconds) * 100));
       bestPercent.current = Math.max(bestPercent.current, percent);
       try {
@@ -44,7 +53,7 @@ export function useLessonProgress(courseId, lessonId) {
         setSaveError(err);
       }
     },
-    [lessonId, reload]
+    [lessonId, reload, enabled]
   );
 
   return {
