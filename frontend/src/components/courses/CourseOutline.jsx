@@ -6,7 +6,8 @@ export default function CourseOutline({
   currentLessonId,
   completedIds = new Set(),
 }) {
-  if (!sections || sections.length === 0) {
+  if (!sections) return null;
+  if (sections.length === 0) {
     return <p>Khóa học chưa có nội dung.</p>;
   }
 
@@ -17,9 +18,12 @@ export default function CourseOutline({
           <h3 style={{ fontSize: 15, margin: "0 0 12px" }}>
             Section {i + 1}: {s.title}
           </h3>
+          {s.lessons.length === 0 && <p>Section này chưa có bài học.</p>}
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {s.lessons.map((l) => {
-              const label = `${l.title} · ${Math.round(l.duration / 60)} phút`;
+              const label = Number.isFinite(l.duration) && l.duration >= 0
+                ? `${l.title} · ${Math.round(l.duration / 60)} phút`
+                : l.title;
               const isCurrent = l.id === currentLessonId;
               const done = completedIds.has(l.id);
               return (

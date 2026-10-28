@@ -7,12 +7,25 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = "GET", body, demoUser } = {}) {
+function getAccessToken() {
+  for (const storageName of ["sessionStorage", "localStorage"]) {
+    try {
+      const token = globalThis[storageName]?.getItem("access_token")?.trim();
+      if (token) return token;
+    } catch {
+      // Trình duyệt có thể chặn storage; vẫn cho phép gọi API công khai.
+    }
+  }
+  return null;
+}
+
+export async function request(path, { method = "GET", body } = {}) {
+  const token = getAccessToken();
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(demoUser && { "X-Demo-User": demoUser }),
+      ...(token && { Authorization: `Bearer ${token}` }),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
