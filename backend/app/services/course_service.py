@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.repositories import courses_repo
+from app.repositories import courses_repo, lessons_repo, sections_repo
 from app.schemas.course import CourseCreateRequest, CourseUpdateRequest
 
 # Tạo khóa học mới
@@ -23,7 +23,26 @@ def get_courses(db: Session):
 
 # lấy chi tiết của 1 khóa học (course)
 def get_course_detail(db: Session, course_id: int):
-    return courses_repo.get_published_course_by_id(db, course_id)
+    course = courses_repo.get_published_course_by_id(db, course_id)
+    if course is None:
+        return None
+
+    sections = sections_repo.list_by_course(db, course_id)
+    course_data = {
+        column.name: getattr(course, column.name)
+        for column in course.__table__.columns
+    }
+    course_data["sections"] = [
+        {
+            "id": section.id,
+            "course_id": section.course_id,
+            "title": section.title,
+            "position": section.position,
+            "lessons": lessons_repo.get_by_section(db, section.id),
+        }
+        for section in sections
+    ]
+    return course_data
 
 # Cập nhật khóa học
 def update_course(
