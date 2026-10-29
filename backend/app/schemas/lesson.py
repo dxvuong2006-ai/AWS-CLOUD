@@ -17,3 +17,10 @@ class LessonResponse(BaseModel):
     title: str
     position: int
     model_config = ConfigDict(from_attributes=True)
+
+
+class LessonVideoUrlResponse(BaseModel):
+    lesson_id: int
+    video_url: str
+    expires_in: int
+    content_type: str

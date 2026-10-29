@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { useLesson } from "../hooks/useLesson";
+import { useLessonVideo } from "../hooks/useLessonVideo";
+import { USE_MOCK } from "../api/lessons.api";
 import { useLessonProgress } from "../hooks/useLessonProgress";
 import "../components/learning/learning.css";
 import VideoPlayer from "../components/learning/VideoPlayer";
@@ -31,6 +33,7 @@ export default function LearningPage() {
   const { courseId, lessonId } = useParams();
   const course = useCourse(courseId);
   const lesson = useLesson(lessonId);
+  const video = useLessonVideo(lessonId, { enabled: !!lesson.data && !lesson.error });
   // Backend chưa triển khai Progress; tạm ngừng đọc/ghi tại trang học.
   const progress = useLessonProgress(courseId, lessonId, { enabled: false });
   const videoRef = useRef(null);
@@ -43,7 +46,7 @@ export default function LearningPage() {
     setCurrentTime(0);
   }, [lessonId]);
 
-  if (lesson.loading || course.loading || progress.loading) {
+  if (lesson.loading || course.loading) {
     return <div className="page">Đang tải...</div>;
   }
   if (lesson.error || course.error || !lesson.data || !course.data) {
@@ -76,7 +79,7 @@ export default function LearningPage() {
   const handleSeek = (seconds) => {
     if (videoRef.current) {
       videoRef.current.currentTime = seconds;
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {});
     }
   };
 
@@ -117,7 +120,11 @@ export default function LearningPage() {
       <div className="learning-layout">
         <div className="learning-main">
           <VideoPlayer
-            src={lesson.data.videoUrl}
+            key={lessonId}
+            src={USE_MOCK ? lesson.data.videoUrl : video.data?.video_url}
+            loading={video.loading}
+            error={video.error}
+            onRefresh={USE_MOCK ? undefined : video.refresh}
             videoRef={videoRef}
             onTimeUpdate={handleTimeUpdate}
             startAt={progress.lastPosition}

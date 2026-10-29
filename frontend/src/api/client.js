@@ -3,9 +3,10 @@ const BASE_URL = (
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, code) {
     super(detail || `HTTP ${status}`);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -21,11 +22,12 @@ function getAccessToken() {
   return null;
 }
 
-export async function request(path, { method = "GET", body } = {}) {
+export async function request(path, { method = "GET", body, cache } = {}) {
   const token = getAccessToken();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(`${BASE_URL}${normalizedPath}`, {
     method,
+    cache,
     headers: {
       "Content-Type": "application/json",
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -35,13 +37,15 @@ export async function request(path, { method = "GET", body } = {}) {
 
   if (!res.ok) {
     let detail = "";
+    let code;
     try {
       const data = await res.json();
       detail = typeof data.detail === "string" ? data.detail : "";
+      code = data.code;
     } catch {
       // response không phải JSON, bỏ qua
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, code);
   }
   return res.status === 204 ? null : res.json();
 }
