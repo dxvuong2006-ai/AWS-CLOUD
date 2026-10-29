@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 import boto3
 import httpx
 from botocore.config import Config
-from botocore.exceptions import EndpointConnectionError, NoCredentialsError
+from botocore.exceptions import EndpointConnectionError, NoCredentialsError, ProfileNotFound, SSLError
 from botocore.stub import Stubber
 
 from app.config import Settings, settings
@@ -73,7 +73,16 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_raw_database_key_generates_sigv4_get_and_ignores_client_key(self):
         self.head_ok()
-        response = await self.get("/lessons/8/video-url?object_key=attacker.mp4")
+        with patch.object(self.s3, "generate_presigned_url", wraps=self.s3.generate_presigned_url) as sign:
+            response = await self.get("/lessons/8/video-url?object_key=attacker.mp4")
+        sign.assert_called_once_with(
+            ClientMethod="get_object",
+            Params={
+                "Bucket": settings.S3_BUCKET, "Key": self.lesson.raw_video_key,
+                "ResponseContentType": "video/mp4", "ResponseContentDisposition": "inline",
+            },
+            ExpiresIn=900, HttpMethod="GET",
+        )
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()
         self.assertEqual(set(data), {"lesson_id", "video_url", "expires_in", "content_type"})
@@ -186,23 +195,107 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["code"], "VIDEO_STORAGE_UNAVAILABLE")
 
-    async def test_missing_credentials(self):
-        self.factory.side_effect = NoCredentialsError()
-        response = await self.get()
+    async def test_missing_bucket_is_an_upstream_error_not_a_missing_video(self):
+        self.stub.add_client_error("head_object", service_error_code="NoSuchBucket", http_status_code=404)
+        with self.assertLogs("app.services.lesson_service", level="ERROR") as captured:
+            response = await self.get()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.json()["code"], "VIDEO_STORAGE_UNAVAILABLE")
+        self.assertIn("aws_code=NoSuchBucket", captured.output[0])
+        self.assertIn("operation=HeadObject", captured.output[0])
+        self.assertNotIn("NoSuchBucket", response.text)
+
+    async def test_missing_credentials(self):
+        self.factory.side_effect = NoCredentialsError()
+        with self.assertLogs("app.services.lesson_service", level="ERROR") as captured:
+            response = await self.get()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["code"], "VIDEO_STORAGE_UNAVAILABLE")
+        self.assertIn("exception_type=NoCredentialsError", captured.output[0])
+        self.assertIn("operation=CreateS3Client", captured.output[0])
+        self.assertNotIn("NoCredentialsError", response.text)
 
     async def test_network_error(self):
         self.factory.side_effect = EndpointConnectionError(endpoint_url="https://s3.invalid")
         self.assertEqual((await self.get()).status_code, 502)
+
+    async def test_head_error_logs_context_without_aws_messages_or_credentials(self):
+        secret = "DO_NOT_LOG_ACCESS_KEY_SECRET_OR_SIGNED_URL"
+        self.stub.add_client_error(
+            "head_object", service_error_code="ExpiredToken", service_message=secret,
+            http_status_code=400, response_meta={"HTTPHeaders": {"Authorization": secret}},
+        )
+        with self.assertLogs("app", level="ERROR") as captured:
+            response = await self.get()
+        logs = "\n".join(captured.output)
+        for expected in (
+            "exception_type=ClientError", "aws_code=ExpiredToken", "aws_status=400",
+            "operation=HeadObject", f"bucket={settings.S3_BUCKET}", "region=ap-southeast-1", "pid=",
+        ):
+            self.assertIn(expected, logs)
+        self.assertNotIn(secret, logs)
+        self.assertNotIn(secret, response.text)
+        self.assertNotIn("ExpiredToken", response.text)
+        self.assertEqual(response.status_code, 502)
+        diagnostic = next(r for r in captured.records if r.name == "app.services.lesson_service")
+        self.assertFalse(diagnostic.exc_info)
+        self.assertIsNone(diagnostic.stack_info)
+
+    async def test_presign_failure_is_distinguished_from_head_failure(self):
+        self.head_ok()
+        secret_url = "https://s3.invalid/video?X-Amz-Credential=SECRET&X-Amz-Signature=SECRET"
+        with patch.object(self.s3, "generate_presigned_url", side_effect=EndpointConnectionError(endpoint_url=secret_url)):
+            with self.assertLogs("app", level="ERROR") as captured:
+                response = await self.get()
+        logs = "\n".join(captured.output)
+        self.assertIn("operation=GeneratePresignedGetUrl", logs)
+        self.assertIn("exception_type=EndpointConnectionError", logs)
+        self.assertNotIn("SECRET", logs)
+        self.assertNotIn(secret_url, response.text)
+        self.assertEqual(response.status_code, 502)
+
+    async def test_profile_not_found_is_logged_without_changing_public_error(self):
+        self.factory.side_effect = ProfileNotFound(profile="missing-profile")
+        with self.assertLogs("app.services.lesson_service", level="ERROR") as captured:
+            response = await self.get()
+        self.assertIn("exception_type=ProfileNotFound", captured.output[0])
+        self.assertEqual(response.json()["code"], "VIDEO_STORAGE_UNAVAILABLE")
+
+    async def test_logs_session_profile_separately_from_process_environment(self):
+        self.stub.add_client_error("head_object", service_error_code="ExpiredToken", http_status_code=400)
+        with patch("app.adapters.storage.s3_storage.boto3.DEFAULT_SESSION", SimpleNamespace(profile_name="learncloud")):
+            with patch.dict("os.environ", {"AWS_PROFILE": "different-process-profile"}):
+                with self.assertLogs("app.services.lesson_service", level="ERROR") as captured:
+                    response = await self.get()
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("session_profile=learncloud", captured.output[0])
+        self.assertIn("process_profile=different-process-profile", captured.output[0])
+
+    async def test_ssl_error_does_not_log_exception_message_or_endpoint(self):
+        secret_url = "https://s3.invalid/?X-Amz-Signature=DO_NOT_LOG"
+        with patch.object(self.s3, "head_object", side_effect=SSLError(endpoint_url=secret_url, error="DO_NOT_LOG")):
+            with self.assertLogs("app", level="ERROR") as captured:
+                response = await self.get()
+        logs = "\n".join(captured.output)
+        self.assertIn("exception_type=SSLError", logs)
+        self.assertIn("operation=HeadObject", logs)
+        self.assertNotIn("DO_NOT_LOG", logs)
+        self.assertNotIn("DO_NOT_LOG", response.text)
+        self.assertEqual(response.status_code, 502)
 
     def test_presigned_put_still_signs_upload_without_head(self):
         from app.adapters.storage.s3_storage import S3StorageAdapter
 
         adapter = S3StorageAdapter()
         # No stubbed HEAD response: a new read/HEAD call would fail this test.
-        url = adapter.generate_upload_url(
-            object_key="lessons/8/raw/upload-test.mp4", content_type="video/mp4"
+        with patch.object(self.s3, "generate_presigned_url", wraps=self.s3.generate_presigned_url) as sign:
+            url = adapter.generate_upload_url(
+                object_key="lessons/8/raw/upload-test.mp4", content_type="video/mp4"
+            )
+        sign.assert_called_once_with(
+            ClientMethod="put_object",
+            Params={"Bucket": settings.S3_BUCKET, "Key": "lessons/8/raw/upload-test.mp4", "ContentType": "video/mp4"},
+            ExpiresIn=900, HttpMethod="PUT",
         )
         query = parse_qs(urlsplit(url).query)
         self.assertEqual(query["X-Amz-Algorithm"], ["AWS4-HMAC-SHA256"])

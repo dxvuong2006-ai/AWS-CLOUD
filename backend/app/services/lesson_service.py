@@ -1,3 +1,6 @@
+import os
+import re
+
 from sqlalchemy.orm import Session
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -6,6 +9,36 @@ from app.config import settings
 from app.models.lesson import Lesson
 from app.repositories import lessons_repo
 from app.utils.errors import ConflictError, ExternalServiceError, NotFoundError
+from app.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _log_video_storage_error(exc, *, lesson_id: int, storage) -> None:
+    """Log diagnostic fields only: AWS messages/tracebacks can contain signed URLs."""
+    def label(value):
+        value = str(value) if value is not None else "unknown"
+        return value if re.fullmatch(r"[A-Za-z0-9._:/-]{1,128}", value) else "redacted"
+
+    metadata = exc.response.get("ResponseMetadata", {}) if isinstance(exc, ClientError) else {}
+    aws_code = exc.response.get("Error", {}).get("Code") if isinstance(exc, ClientError) else None
+    client = storage.client if storage is not None else None
+    logger.error(
+        "S3 video playback failed lesson_id=%s pid=%s operation=%s "
+        "exception_type=%s aws_code=%s aws_status=%s bucket=%s region=%s "
+        "session_profile=%s process_profile=%s",
+        lesson_id,
+        os.getpid(),
+        label(storage.playback_operation if storage is not None else "CreateS3Client"),
+        type(exc).__name__,
+        label(aws_code),
+        label(metadata.get("HTTPStatusCode")),
+        label(storage.bucket if storage is not None else settings.S3_BUCKET),
+        label(client.meta.region_name if client is not None else settings.AWS_REGION),
+        label(storage.profile_name if storage is not None else None),
+        label(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE") or "default"),
+        exc_info=False,
+    )
 
 
 class LessonNotFoundError(Exception):
@@ -75,21 +108,28 @@ def get_video_url_for_user(
         raise VideoFormatError()
 
     content_type = "video/mp4"
+    storage = None
     try:
-        video_url = S3StorageAdapter().generate_download_url(
+        storage = S3StorageAdapter()
+        video_url = storage.generate_download_url(
             object_key=key,
             content_type=content_type,
             expires_in=settings.VIDEO_URL_EXPIRES_IN,
         )
     except ClientError as exc:
+        _log_video_storage_error(exc, lesson_id=lesson.id, storage=storage)
         code = str(exc.response.get("Error", {}).get("Code", ""))
         status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        # A missing bucket is a storage/configuration failure, not a missing video.
+        if code == "NoSuchBucket":
+            raise VideoStorageError() from None
         if code in {"404", "NoSuchKey", "NotFound"} or status == 404:
             raise VideoObjectNotFoundError() from None
         if code in {"403", "AccessDenied", "Forbidden"} or status == 403:
             raise VideoStorageAccessError() from None
         raise VideoStorageError() from None
-    except BotoCoreError:
+    except BotoCoreError as exc:
+        _log_video_storage_error(exc, lesson_id=lesson.id, storage=storage)
         raise VideoStorageError() from None
 
     return {

@@ -20,12 +20,18 @@ class S3StorageAdapter(StorageAdapter):
             ),
         )
         self.bucket = settings.S3_BUCKET
+        # Snapshot the session used by boto3.client; never inspect/log key material.
+        session = boto3.DEFAULT_SESSION
+        self.profile_name = session.profile_name if session is not None else None
+        self.playback_operation = "CreateS3Client"
 
     def generate_download_url(
         self, object_key: str, content_type: str, expires_in: int = 900
     ) -> str:
         # Signing alone does not verify that an object exists or is readable.
+        self.playback_operation = "HeadObject"
         self.client.head_object(Bucket=self.bucket, Key=object_key)
+        self.playback_operation = "GeneratePresignedGetUrl"
         return self.client.generate_presigned_url(
             ClientMethod="get_object",
             Params={
