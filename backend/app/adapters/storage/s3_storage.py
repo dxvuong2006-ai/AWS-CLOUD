@@ -30,7 +30,7 @@ class S3StorageAdapter(StorageAdapter):
     ) -> str:
         # Signing alone does not verify that an object exists or is readable.
         self.playback_operation = "HeadObject"
-        self.client.head_object(Bucket=self.bucket, Key=object_key)
+        self.head_video(object_key)
         self.playback_operation = "GeneratePresignedGetUrl"
         return self.client.generate_presigned_url(
             ClientMethod="get_object",
@@ -43,6 +43,9 @@ class S3StorageAdapter(StorageAdapter):
             ExpiresIn=expires_in,
             HttpMethod="GET",
         )
+
+    def head_video(self, object_key: str) -> dict:
+        return self.client.head_object(Bucket=self.bucket, Key=object_key)
 
     def generate_upload_url(
         self,

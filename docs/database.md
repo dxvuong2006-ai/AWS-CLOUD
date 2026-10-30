@@ -71,8 +71,21 @@ DRAFT → UPLOADED → PROCESSING → TRANSCRIBING → AI_PROCESSING
 ```
 
 `FAILED` có thể phát sinh tại các bước xử lý; `error_message` và `retry_count`
-giúp theo dõi lỗi/retry. Database chấp nhận các trạng thái trên, nhưng việc ép
-đúng chuyển trạng thái và quyền retry vẫn phải do service/API thực hiện.
+giúp theo dõi lỗi/retry. Bootstrap và SQLAlchemy model hiện hỗ trợ chín trạng
+thái trên. **Database hiện hữu cần migration `0004_add_lesson_approved_status.sql`
+được operator review và chạy thủ công để nhận APPROVED**; việc sửa file schema
+không tự thay đổi DB đang chạy. Migration chưa được áp dụng tự động.
+Việc ép đúng chuyển trạng thái và quyền retry vẫn do service/API thực hiện.
+
+Approve tách khỏi publish: Instructor sở hữu course DRAFT thực hiện
+`REVIEW_REQUIRED → APPROVED`; Course publish chỉ nhận các Lesson đã APPROVED
+và chuyển chúng sang PUBLISHED cùng transaction. Không tự approve dữ liệu
+legacy/seed, không tự đổi trạng thái sau upload. Xem
+[hướng dẫn migration và kiểm thử](lesson-approval-migration.md).
+
+`approved_by`/`approved_at` là đề xuất audit hữu ích, không phải trường bắt buộc
+trong API Contract Draft hiện tại; migration 0004 không thêm hai cột này và
+không suy diễn người/thời gian approve cho dữ liệu cũ.
 
 `transcript_json`, `key_concepts_json`, `learning_objectives` và
 `options_json` dùng JSONB để lưu cấu trúc linh hoạt. Code gọi API cần validate

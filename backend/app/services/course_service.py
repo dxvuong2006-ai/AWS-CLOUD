@@ -1,7 +1,11 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
 
 from app.repositories import courses_repo, lessons_repo, sections_repo
 from app.schemas.course import CourseCreateRequest, CourseUpdateRequest
+from app.utils.errors import ConflictError, ForbiddenError, NotFoundError
+from app.lesson_states import LessonStatus
+from app.services.review_service import validate_review_content
 
 # Tạo khóa học mới
 def create_course(
@@ -77,3 +81,38 @@ def update_course(
         instructor_id=instructor_id,
         update_data=update_data,
     )
+
+
+def publish_course(db: Session, course_id: int, *, instructor_id: int):
+    try:
+        course = courses_repo.lock_by_id(db, course_id)
+        if course is None:
+            raise NotFoundError("Course not found.")
+        if course.instructor_id != instructor_id:
+            raise ForbiddenError("You do not own this course.")
+        if course.status == "PUBLISHED":
+            db.commit()
+            return course
+        if course.status != "DRAFT":
+            raise ConflictError("Course is not in a publishable state.", code="INVALID_COURSE_STATUS")
+        sections = courses_repo.lock_sections(db, course.id)
+        lessons = lessons_repo.lock_by_course(db, course.id)
+        if not sections or not lessons or any(not any(l.section_id == s.id for l in lessons) for s in sections):
+            raise ConflictError("Every course section must contain a lesson.", code="COURSE_CONTENT_REQUIRED")
+        # Approval is explicit; uploading/processing/legacy PUBLISHED seed data
+        # cannot substitute for the instructor's REVIEW_REQUIRED -> APPROVED action.
+        if any(lesson.status != LessonStatus.APPROVED.value for lesson in lessons):
+            raise ConflictError("Every lesson must be explicitly approved before publishing.", code="LESSON_APPROVAL_REQUIRED")
+        for lesson in lessons:
+            validate_review_content(lesson)
+        courses_repo.mark_published(db, course, lessons)
+        db.commit()
+        return course
+    except OperationalError as exc:
+        db.rollback()
+        if getattr(exc.orig, "pgcode", None) == "55P03":
+            raise ConflictError("Another operation is updating this course.", code="COURSE_BUSY") from None
+        raise
+    except Exception:
+        db.rollback()
+        raise

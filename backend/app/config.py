@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     APP_ENV: str = "production"
     ALLOW_RAW_VIDEO_PLAYBACK: bool = False
     VIDEO_URL_EXPIRES_IN: int = Field(default=900, ge=60, le=3600)
+    VIDEO_PROCESSOR_BACKEND: str = "disabled"
+    LOCAL_VIDEO_JOB_DIR: Path = PROJECT_ROOT / ".local-video-jobs"
 
     JWT_SECRET_KEY: SecretStr = Field(min_length=32)
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, ge=1, le=1440)

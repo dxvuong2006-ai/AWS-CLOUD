@@ -13,6 +13,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
+from app.lesson_states import LESSON_STATUS_CHECK
 
 
 class Lesson(Base):
@@ -20,8 +21,7 @@ class Lesson(Base):
     __table_args__ = (
         CheckConstraint("position > 0", name="ck_lessons_position"),
         CheckConstraint(
-            "status IN ('DRAFT', 'UPLOADED', 'PROCESSING', 'TRANSCRIBING', "
-            "'REVIEW_REQUIRED', 'PUBLISHED', 'FAILED')",
+            LESSON_STATUS_CHECK,
             name="ck_lessons_status",
         ),
         CheckConstraint(
