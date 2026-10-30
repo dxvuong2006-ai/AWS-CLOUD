@@ -1,3 +1,4 @@
+#Bộ trích xuất thuật ngữ cốt lõi
 import logging
 from pathlib import Path
 from typing import Any

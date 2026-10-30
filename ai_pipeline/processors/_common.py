@@ -1,3 +1,4 @@
+#module tiện ích dùng chung
 import inspect
 import json
 import re

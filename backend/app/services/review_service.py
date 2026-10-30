@@ -1,3 +1,4 @@
+#Quản lý luồng kiểm duyệt học liệu của giảng viên (Human-in-the-loop)
 """Điều phối sinh bản nháp và phê duyệt bởi giảng viên sở hữu khóa học."""
 
 import hashlib

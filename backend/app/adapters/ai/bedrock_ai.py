@@ -1,3 +1,4 @@
+#Adapter AI thật trên đám mây AWS
 """Kết nối Claude 3 Haiku với pipeline kiểm tra dữ liệu hiện có."""
 
 import json

@@ -1,3 +1,4 @@
+#Nghiệp vụ chấm điểm bài thi trắc nghiệm
 from sqlalchemy.orm import Session
 
 from app.models.quiz import MIN_PASSING_SCORE

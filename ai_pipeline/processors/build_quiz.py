@@ -1,3 +1,4 @@
+#Tự động sinh cau hỏi trắc nghiệm từ transcript
 import json
 import logging
 from pathlib import Path

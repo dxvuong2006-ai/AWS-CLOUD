@@ -1,3 +1,4 @@
+#kiểm tra nhanh độ ổn định độc lập khi chạy không cần mạng/cloud (Smoke Test)
 """Run fixture-backed smoke checks with explicit fake AI clients.
 
 Run with python -m ai_pipeline.tests.test_processors_smoke.

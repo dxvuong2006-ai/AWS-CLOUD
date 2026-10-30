@@ -1,3 +1,4 @@
+#Định nghĩa schema cho quy trình giảng viên kiểm duyệt và biên tập học liệu do AI sinh ra (Human-in-the-loop).
 """Hợp đồng dữ liệu dành riêng cho giảng viên duyệt bản nháp."""
 
 from typing import Annotated, Literal

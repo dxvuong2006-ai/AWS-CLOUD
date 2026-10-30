@@ -1,3 +1,4 @@
+#Là tầng truy vấn dữ liệu phục vụ quy trình kiểm duyệt học liệu do AI sinh ra.
 """Đọc và ghi bản nháp bằng giao dịch dùng chung cho bài học và quiz."""
 
 from contextlib import contextmanager

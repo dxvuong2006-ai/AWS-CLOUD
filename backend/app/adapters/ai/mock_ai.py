@@ -1,3 +1,4 @@
+#Adapter giả lập chạy Local / Offline
 """Cung cấp adapter AI mô phỏng từ dữ liệu mẫu cục bộ."""
 
 from app.adapters._fixtures import load_json_fixture

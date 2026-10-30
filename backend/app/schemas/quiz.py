@@ -1,3 +1,4 @@
+#Định nghĩa hợp đồng dữ liệu (Data Transfer Objects - DTO) cho luồng làm bài thi và kiểm tra mở khóa bài học.
 from datetime import datetime
 from decimal import Decimal
 

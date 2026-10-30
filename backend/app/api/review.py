@@ -1,3 +1,4 @@
+#Router kiểm duyệt học liệu AI
 """Cung cấp API bản nháp và phê duyệt dành cho giảng viên."""
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -132,6 +133,92 @@ def approve_draft(
 
     Returns:
         Bản nháp đã chuyển APPROVED.
+    """
+    return _call(
+        review_service.approve_draft, db=db, lesson_id=lesson_id,
+        instructor_id=instructor.id, payload=payload,
+    )
+
+
+@router.get("/lessons/{lesson_id}/ai-content")
+def get_ai_content(
+    lesson_id: int, db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+) -> dict:
+    """Lấy nội dung AI và transcript của bài học thuộc giảng viên.
+
+    Args:
+        lesson_id: Mã bài học.
+        db: Session hiện tại.
+        instructor: Giảng viên đã xác thực.
+
+    Returns:
+        Bản nháp cùng transcript đã lưu.
+    """
+    draft = _call(
+        review_service.get_draft, db=db, lesson_id=lesson_id,
+        instructor_id=instructor.id,
+    )
+    from app.repositories import review_repo
+
+    lesson, _ = review_repo.get_context(db, lesson_id)
+    return {**draft.model_dump(), "transcript": lesson.transcript_json}
+
+
+@router.patch("/lessons/{lesson_id}/ai-content", response_model=ReviewResponse)
+def patch_ai_content(
+    lesson_id: int, payload: dict,
+    db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+) -> ReviewResponse:
+    """Cập nhật một phần bản nháp có kiểm tra phiên bản.
+
+    Args:
+        lesson_id: Mã bài học.
+        payload: Trường cần sửa và expected_revision đã xem.
+        db: Session hiện tại.
+        instructor: Giảng viên đã xác thực.
+
+    Returns:
+        Nội dung nháp sau khi cập nhật.
+    """
+    from pydantic import ValidationError
+
+    current = _call(
+        review_service.get_draft, db=db, lesson_id=lesson_id,
+        instructor_id=instructor.id,
+    )
+    allowed = {"title", "summary", "key_concepts", "quiz_title", "questions"}
+    if set(payload) - (allowed | {"expected_revision"}):
+        raise HTTPException(422, "Unsupported draft field.")
+    values = current.model_dump(include=allowed)
+    values.update(payload)
+    try:
+        update = DraftUpdate.model_validate(values)
+    except ValidationError as exc:
+        raise HTTPException(422, "Invalid draft update.") from exc
+    return _call(
+        review_service.update_draft, db=db, lesson_id=lesson_id,
+        instructor_id=instructor.id, payload=update,
+    )
+
+
+@router.post("/lessons/{lesson_id}/approve", response_model=ReviewResponse)
+def approve_ai_content(
+    lesson_id: int, payload: DraftApproval,
+    db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+) -> ReviewResponse:
+    """Phê duyệt phiên bản nháp được xác nhận bởi giảng viên.
+
+    Args:
+        lesson_id: Mã bài học.
+        payload: Phiên bản cần duyệt.
+        db: Session hiện tại.
+        instructor: Giảng viên đã xác thực.
+
+    Returns:
+        Nội dung sau khi phê duyệt.
     """
     return _call(
         review_service.approve_draft, db=db, lesson_id=lesson_id,

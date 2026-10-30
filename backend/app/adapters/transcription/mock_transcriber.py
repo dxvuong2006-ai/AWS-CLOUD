@@ -1,3 +1,4 @@
+#Adapter giả lập bóc băng âm thanh
 from app.adapters._fixtures import load_json_fixture
 
 

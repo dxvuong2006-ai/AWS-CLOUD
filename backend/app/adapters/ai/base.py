@@ -1,3 +1,4 @@
+#Giao diện trừu tượng
 """Khai báo giao diện adapter xử lý bài giảng bằng AI."""
 
 from abc import ABCMeta, abstractmethod

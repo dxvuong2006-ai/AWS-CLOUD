@@ -1,3 +1,4 @@
+#Nghiệp vụ kiểm soát mở khóa Section (điểm >= 80%)
 from sqlalchemy.orm import Session
 
 from app.repositories import quizzes_repo

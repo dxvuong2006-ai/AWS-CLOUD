@@ -1,3 +1,4 @@
+#Là tầng thao tác trực tiếp với cơ sở dữ liệu (Database Access Layer) cho toàn bộ phân hệ trắc nghiệm và đánh giá năng lực.
 from collections.abc import Iterator
 from contextlib import contextmanager
 
