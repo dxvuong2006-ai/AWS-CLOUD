@@ -1,638 +1,481 @@
-# LearnCloud — API Contract (Bản dự thảo v4)
+# LearnCloud — API Contract Draft v5
 
-> **Mục đích:** Thỏa thuận giao tiếp giữa Frontend (React), Backend (FastAPI) và các module nghiệp vụ LearnCloud.
->
-> **Trạng thái tài liệu:** `DRAFT — CHƯA CHỐT`. Có thể bổ sung, sửa hoặc loại bỏ API sau khi nhóm đối chiếu UI, code, database và nhu cầu tích hợp AWS.
->
-> **Căn cứ:** (1) 24 endpoint MVP gốc và API Contract Draft v3 (22/10/2026); (2) UI Design Specification v2; (3) sơ đồ database LearnCloud mới do nhóm trưởng cung cấp ngày 28/10/2026; (4) báo cáo Codex đọc source frontend/backend ngày 28/10/2026; (5) các thử nghiệm S3/Swagger được người dùng ghi nhận. **Chưa đối chiếu trực tiếp PostgreSQL/schema.sql và OpenAPI đang chạy ở thời điểm soạn v4.**
->
-> **Quan trọng:** Có tên API trong tài liệu **không đồng nghĩa đã triển khai**. Không gắn nhãn *Implemented* cho endpoint chưa đối chiếu Swagger và test.
+**Phiên bản:** Draft v5 — 30/10/2026  
+**Trọng tâm:** Video Upload → S3 → Processing → Review → Approve → Publish → Playback  
+**Trạng thái:** DỰ THẢO; cần A (kiến trúc), B (frontend), C (AI/review) và D (backend/cloud) thống nhất trước khi khóa.  
+**Đối tượng:** React/Vite, FastAPI, PostgreSQL, Amazon S3, EventBridge, Step Functions, MediaConvert, Transcribe và AI adapter.
 
-| Thuộc tính | Giá trị |
-|---|---|
-| Phiên bản | **Draft v4 — 28/10/2026** |
-| Local Backend | `http://127.0.0.1:8000` |
-| Swagger / OpenAPI | `http://127.0.0.1:8000/docs` và `/openapi.json` |
-| Định dạng dữ liệu | REST/JSON; upload file trực tiếp S3 bằng Presigned URL |
-| Auth qua dependency theo báo cáo source 28/10 | `X-Demo-User` (chỉ dùng local; **không an toàn để public**) |
-| Auth hiện có theo báo cáo source | Có route `POST /auth/register`, `/auth/login`, `GET /auth/me`; **dependency hiện dùng demo, FE chưa có LoginPage hoạt động**. Chưa xác nhận luồng JWT end-to-end |
-| Auth endpoints được bổ sung | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
-| Hướng AWS lâu dài | Cognito còn là phương án kiến trúc khác, **chưa tích hợp** |
 
----
+## 1. Phạm vi và nguyên tắc
 
-## 1. Quy ước chung
+LearnCloud cho phép Instructor tạo Course/Section/Lesson, tải video từ trình duyệt **trực tiếp** lên S3 bằng Presigned PUT URL; hệ thống xác nhận object hợp lệ, xử lý video và tạo học liệu nháp, cho Instructor review/approve, sau đó publish Course cho Student. Backend chỉ cấp URL tạm thời, kiểm tra quyền và quản lý trạng thái; **không nhận byte MP4 qua FastAPI**.
 
-### 1.1. Phân loại, mức độ ưu tiên và trạng thái
+- **Frontend route** `/courses/:courseId/lessons/:lessonId` là route React, không phải endpoint backend.
+- **Lesson object key** (`raw_video_key`, `processed_video_key`) nằm trong PostgreSQL; byte video nằm trên S3. Không lưu Presigned URL có hạn trong DB.
+- **Local authentication:** `X-Demo-User` đang dùng để thử nghiệm, chỉ cho local. **Mục tiêu triển khai:** Cognito/OIDC/JWT hoặc lựa chọn auth đã được nhóm chốt; không dùng header demo để public.
+- **Tên trường JSON:** `snake_case`; ID của Course/Section/Lesson dùng số nguyên theo DB hiện có.
+- **Lỗi:** JSON thống nhất khuyến nghị `{ "detail": "...", "code": "MACHINE_READABLE_CODE", "request_id": "..." }`; không trả AWS exception, credentials, query string Presigned URL hoặc stacktrace cho frontend.
+- **Mốc trạng thái:** `DRAFT`, `UPLOADED`, `PROCESSING`, `TRANSCRIBING`, `AI_PROCESSING`, `REVIEW_REQUIRED`, `APPROVED`, `PUBLISHED`, `FAILED`. Cần migration `0004` được áp dụng trên DB thực tế trước khi dùng `APPROVED`.
+- **Giới hạn upload hiện tại:** tối đa **500 MiB** khi xin URL (dựa trên client `file_size`). Chỉ `HeadObject.ContentLength` trong xác nhận mới kiểm tra kích thước object **thực tế**; `Content-Type` không chứng minh nội dung MP4 hợp lệ.
+- **Bảo mật:** S3 private, Block Public Access; ký SigV4, thời hạn tham khảo 900 giây; không log hoặc chia sẻ Presigned URL.
 
-- **GỐC:** Endpoint thuộc danh sách 24 endpoint API MVP ban đầu; giữ nguyên method, path, chức năng, vai trò, file và phân công theo kế hoạch v3.
-- **ĐỀ XUẤT:** Endpoint được suy ra từ thiết kế UI, luồng upload/cloud hoặc nhu cầu backend; **phải được A/B/C/D thông qua** trước khi coi là contract chính thức.
-- **CÓ ĐIỀU KIỆN:** Chỉ triển khai nếu chọn phương án nghiệp vụ/kiến trúc tương ứng. Ví dụ: `POST /auth/login` không bắt buộc nếu Cognito quản lý đăng nhập và FE gọi Cognito trực tiếp.
-- **P0:** Cần để luồng MVP hoạt động đầy đủ; **P1:** cải thiện trải nghiệm và nghiệp vụ; **P2:** bổ sung khi còn thời gian.
-- **Trạng thái triển khai:** `TBD` (chưa đối chiếu code), `Prepared` (đã có code bàn giao nhưng chưa nhập repo), `Implemented` (đã chạy và test trên repo đang dùng), `Partial`, `Planned`, `Deferred`. Các API trong bảng dưới đây **không mặc định là Implemented**.
-- **Chủ sở hữu API bổ sung:** `Đề xuất` trong các bảng là phân công gợi ý, **chưa được coi là quyết định nhân sự/tuần**.
+## 2. Danh mục API tổng quan
 
-### 1.2. REST, định danh và phân trang
+### 2.1. Nhóm 24 API MVP gốc
 
-- Method, path công khai phải thống nhất. Trong tài liệu, `{id}` là ID của tài nguyên đang nói đến; code có thể dùng `{course_id}`, `{section_id}`, `{lesson_id}`.
-- ID hiện tại trong dự án có thể là số nguyên. **Không tự đổi sang UUID** chỉ vì tài liệu kiến trúc v3 từng đề xuất UUID; thay đổi này cần migration và cập nhật contract.
-- Dùng ISO 8601 UTC cho trường thời gian nếu endpoint trả timestamp.
-- Không tự bổ sung wrapper `data`, `items` hoặc pagination vào API đang dùng nếu chưa thống nhất với FE.
-- `GET` không có request body; `POST/PATCH/PUT` nhận JSON (trừ PUT trực tiếp lên S3).
-- Query params `search`, `status`, `page`, `limit` trong ví dụ là **đề xuất**, chưa phải tính năng có sẵn. Riêng `GET /sections/{id}/lessons` theo báo cáo code có `skip`, `limit`; phải giữ tương thích trước khi thay sang `page`.
-- **Frontend route khác Backend API:** URL trang học `/courses/:courseId/lessons/:lessonId` là route React; nó có thể gọi `GET /courses/{courseId}` và `GET /lessons/{lessonId}` riêng. Không thêm `courseId` vào API Lesson chỉ để giống URL giao diện.
-- **Quy ước tên trường đề xuất:** API JSON ưu tiên `snake_case` tương ứng schema; nếu FE hiện dùng `videoUrl`, `keyConcepts`, `progressPercent`, cần chuyển đổi ở `api/`/adapter FE hoặc chốt cách đặt tên thống nhất, không ngầm thay field ở production.
+| # | Method + path | Vai trò | Tình trạng theo thông tin triển khai đã cung cấp |
+|---:|---|---|---|
+| 1 | `GET /health` | All | Có |
+| 2 | `GET /courses` | Student/catalog | Có |
+| 3 | `POST /courses` | Instructor | Có |
+| 4 | `GET /courses/{id}` | Student/Instructor | Có |
+| 5 | `PATCH /courses/{id}` | Instructor | Có |
+| 6 | `POST /courses/{id}/publish` | Instructor | Đã có code và test; chờ xác minh migration APPROVED trên DB |
+| 7 | `POST /courses/{id}/sections` | Instructor | Có |
+| 8 | `POST /sections/{id}/lessons` | Instructor | Có |
+| 9 | `GET /lessons/{id}` | Student/Instructor | Có; response phải đối chiếu Swagger để khóa schema |
+| 10 | `POST /lessons/{id}/upload-url` | Instructor | **Đã thử HTTP + PUT S3 thật thành công** |
+| 11 | `GET /lessons/{id}/processing-status` | Instructor | **Đã có code, test và HTTP 200 local** |
+| 12 | `POST /lessons/{id}/retry` | Instructor/Admin theo policy | Đã có code/test; AWS dispatcher chưa triển khai |
+| 13 | `GET /lessons/{id}/ai-content` | Instructor | Thuộc C; cần rà soát integration |
+| 14 | `PATCH /lessons/{id}/ai-content` | Instructor | Thuộc C; cần rà soát integration |
+| 15 | `POST /lessons/{id}/approve` | Instructor | Đã có code tối thiểu; chờ migration + E2E |
+| 16 | `POST /courses/{id}/enroll` | Student | Có theo tiến độ; cần đối chiếu |
+| 17 | `PUT /lessons/{id}/progress` | Student | Codex báo đã triển khai backend; FE cần đối chiếu |
+| 18 | `GET /courses/{id}/progress` | Student | Codex báo đã triển khai backend; FE cần đối chiếu |
+| 19 | `GET /sections/{id}/quiz` | Student | Thuộc C; cần đối chiếu |
+| 20 | `POST /quizzes/{id}/attempts` | Student | Thuộc C; cần đối chiếu |
+| 21 | `GET /students/me/quiz-history` | Student | Thuộc C; cần đối chiếu |
+| 22 | `POST /tutor/sessions` | Student | Thuộc C; dự kiến |
+| 23 | `POST /tutor/sessions/{id}/messages` | Student | Thuộc C; dự kiến |
+| 24 | `GET /instructor/courses/{id}/analytics` | Instructor | Thuộc C; dự kiến |
 
-### 1.3. Authentication và authorization
+### 2.2. API bổ sung cần lưu trong Contract
 
-- **Trước khi ghép bản auth mới:** Backend đang được mô tả dùng `X-Demo-User: <user_id>` với user seed. Đây là cơ chế giả lập **không an toàn để triển khai public**.
-- **Tình hình 28/10 theo báo cáo đọc source:** Các route `POST /auth/register`, `POST /auth/login`, `GET /auth/me` đã có trong source backend; tuy nhiên dependency dùng ở API nghiệp vụ vẫn nhận `X-Demo-User`; frontend chưa có luồng LoginPage/AuthContext sử dụng được. **Không coi auth end-to-end là hoàn tất.**
-- **Sau khi tích hợp JWT:** Các endpoint bảo vệ dùng `Authorization: Bearer <access_token>`; `X-Demo-User` **phải bị loại bỏ hoàn toàn khỏi đường xác thực**, không cho phép fallback/giả mạo ID.
-- **Đăng ký tài khoản khác với enroll khóa học:** `/auth/register` tạo tài khoản **STUDENT**, trong khi `/courses/{id}/enroll` đưa Student vào một course cụ thể.
-- Backend tự kiểm tra `role`, ownership của instructor, trạng thái course/lesson, enrollment và unlock. Frontend ẩn nút **không thay thế** authorization.
-- Student chỉ truy cập nội dung đã publish và section/lesson được phép. Instructor chỉ sửa course/lesson mình sở hữu. Admin chỉ được dùng API quản trị theo policy đã thống nhất.
-- **Cognito chưa được sử dụng** trong patch JWT tự quản; nếu chuyển sang Cognito cần thiết kế lại luồng auth, mapping danh tính và cân nhắc bỏ endpoint login/register nội bộ. Không coi hai hệ thống này là đồng thời đang chạy.
+| Mã | Method + path | Mục đích | Trạng thái / mức ưu tiên |
+|---|---|---|---|
+| N01 | `GET /courses/{id}/sections` | Danh sách Section | Có theo source, giữ tương thích frontend |
+| N02 | `GET /sections/{id}/lessons` | Danh sách Lesson | Có theo source, giữ `skip/limit` nếu đã dùng |
+| N03 | `GET /instructor/courses` | Course của Instructor | Cần đối chiếu / P0 cho UI giảng viên |
+| N04 | `GET /students/me/courses` | Course Student đã đăng ký | Cần đối chiếu / P0 |
+| N05 | `GET /lessons/{id}/flashcards` | Flashcards đã duyệt | Đề xuất / P1, cần B/C chốt |
+| **N06** | **`POST /lessons/{id}/confirm-upload`** | **Xác nhận S3 object và cập nhật DB** | **Đề xuất / P0 / chưa xác nhận có code** |
+| N07/N08/N12 | `/auth/login`, `/auth/me`, `/auth/register` | Auth | Có route theo source nhưng luồng auth cần thống nhất Cognito/JWT |
+| N09–N11 | Admin APIs | Quản trị/monitoring | P2 |
+| **X01** | **`GET /lessons/{id}/video-url`** | **Presigned GET để phát MP4 private** | **Đã chạy và phát video S3 thật; đề nghị nhóm duyệt chính thức** |
 
-### 1.4. HTTP status và lỗi
+**Không cần thêm** `POST /lessons/{id}/upload-video` để nhận file MP4 qua FastAPI. HTTP PUT lên Presigned S3 URL **không** phải API FastAPI.
 
-| Mã | Ý nghĩa / khi sử dụng |
-|---|---|
-| `200 OK` | Thành công, trả dữ liệu |
-| `201 Created` | Tạo tài nguyên thành công |
-| `204 No Content` | Thành công, không trả body |
-| `400 Bad Request` | Input không hợp lệ theo quy tắc nghiệp vụ |
-| `401 Unauthorized` | Chưa xác thực / token sai |
-| `403 Forbidden` | Không đủ quyền, chưa enroll, chưa unlock |
-| `404 Not Found` | Không có tài nguyên hoặc cố tình không tiết lộ tài nguyên không sở hữu |
-| `409 Conflict` | Trùng dữ liệu, sai trạng thái publish/upload/processing |
-| `413 Content Too Large` | File vượt giới hạn (nếu áp dụng server-side) |
-| `422 Unprocessable Entity` | Validation theo mặc định của FastAPI/Pydantic |
-| `429 Too Many Requests` | Rate limit (nếu cấu hình) |
-| `500 Internal Server Error` | Lỗi backend chưa xử lý |
-| `502/503` | Lỗi phụ thuộc AWS/DB bên ngoài (tùy endpoint) |
+## 3. Luồng upload video chi tiết (trọng tâm v5)
 
-Ví dụ lỗi đơn giản (`detail` có thể là chuỗi hoặc danh sách lỗi validation theo FastAPI):
+### 3.1. Quy trình nghiệp vụ mục tiêu
 
-```json
-{"detail": "Lesson not found or not owned by instructor"}
+```mermaid
+
+flowchart TD
+    A["Instructor chọn video MP4"]
+    
+    B["1. POST /lessons/{id}/upload-url"]
+    C["FastAPI<br/>Xác thực Instructor<br/>Kiểm tra ownership và trạng thái<br/>Tạo upload session + object key"]
+    D["Trả upload_id, object_key,<br/>upload_url và headers"]
+    
+    E["2. Browser PUT video trực tiếp lên S3<br/> (PUT {upload_url})"]
+    F[("☁️ Amazon S3<br/>Lưu MP4 - HTTP 200")]
+
+    G["3a. S3 Object Created"]
+    H["Amazon EventBridge"]
+    I["AWS Step Functions"]
+
+    J["3b. POST /lessons/{id}/confirm-upload"]
+    K["FastAPI xác minh upload<br/>Kiểm tra session + HeadObject<br/>Size, Content-Type, ownership"]
+    L[("PostgreSQL<br/>Lưu raw_video_key")]
+    M["4. GET /lessons/{id}/processing-status"]
+
+    N["UPLOADED"]
+    O["PROCESSING<br/>AWS MediaConvert"]
+    P["TRANSCRIBING<br/>AWS Transcribe"]
+    Q["AI_PROCESSING<br/>Amazon Bedrock"]
+    R{"Pipeline thành công?"}
+
+    S["FAILED"]
+    T["POST /lessons/{id}/retry"]
+    U["REVIEW_REQUIRED"]
+
+    V["Instructor xem và sửa học liệu AI<br/>GET /lessons/{id}/ai-content<br/>PATCH /lessons/{id}/ai-content"]
+    W["POST /lessons/{id}/approve"]
+    X["APPROVED"]
+
+    Y["POST /courses/{id}/publish"]
+    Z["PUBLISHED"]
+
+    AA["🎓 Student đủ quyền truy cập"]
+    AB["GET /lessons/{id}"]
+    AC["GET /lessons/{id}/video-url"]
+    AD["FastAPI tạo Presigned GET URL"]
+    AE["Browser GET / Range MP4 từ S3"]
+    AF["▶️ VideoPlayer phát video"]
+
+    A --> B --> C --> D --> E --> F
+
+    F --> G --> H --> I
+    F --> J --> K --> L --> M
+
+    I --> N
+    M -. "Theo dõi trạng thái" .-> N
+    N --> O --> P --> Q --> R
+
+    R -->|Thất bại| S
+    S --> T
+    T -. "Khởi chạy lại workflow" .-> I
+
+    R -->|Thành công| U
+    U --> V --> W --> X --> Y --> Z
+
+    Z --> AA --> AB --> AC --> AD --> AE --> AF
+    AD -. "URL truy cập tạm thời" .-> AE
+    F -. "Video lưu trên S3" .-> AE
+
+    classDef frontend fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A
+    classDef backend fill:#DCFCE7,stroke:#16A34A,color:#166534
+    classDef storage fill:#FFEDD5,stroke:#EA580C,color:#9A3412
+    classDef pipeline fill:#F3E8FF,stroke:#9333EA,color:#6B21A8
+    classDef success fill:#D1FAE5,stroke:#059669,color:#065F46
+    classDef failure fill:#FEE2E2,stroke:#DC2626,color:#991B1B
+
+    class A,D,E,AA,AB,AE,AF frontend
+    class B,C,J,K,M,T,V,W,Y,AC,AD backend
+    class F,L storage
+    class G,H,I,N,O,P,Q,R pipeline
+    class U,X,Z success
+    class S failure
+
 ```
 
-### 1.5. Quy ước AWS/S3
+**Phân biệt hai thời điểm:**
+1. S3 trả `200` cho PUT nghĩa là byte video **đã được lưu trên S3** (không phải chờ approve mới upload).
+2. `confirm-upload` xác nhận và ghi nhận object vào **LearnCloud/PostgreSQL**, **không** truyền video lần nữa.
+3. `approve` là Instructor duyệt **học liệu AI**, hoàn toàn khác `confirm-upload`.
+4. `publish` mở quyền xem cho Student theo nghiệp vụ đã chốt.
 
-- Backend cấp URL tạm thời; trình duyệt gửi video bằng `PUT` trực tiếp lên Amazon S3. **Không gửi nguyên video qua Lambda/FastAPI**.
-- `upload_url` là thông tin nhạy cảm tạm thời: **không commit, không công khai, không đưa nguyên URL vào log**.
-- S3 bucket private, Block Public Access; backend cấp quyền xem video dựa trên enrollment/unlock.
-- Ưu tiên AWS Signature Version 4. `file_size` do client khai báo ở bước xin URL **chưa đảm bảo giới hạn dữ liệu upload thực tế**.
-- Bước xác nhận upload phải kiểm tra object bằng S3 `HeadObject`, quyền sở hữu và object key đã được cấp; tránh xác nhận object tùy ý.
+### 3.2. Bảng API theo từng thời điểm
 
-### 1.6. Tình trạng đối chiếu code — cập nhật theo báo cáo ngày 28/10/2026
+| # | Bên gọi → Bên nhận | Phương thức | Kết quả quan trọng |
+|---:|---|---|---|
+| 0 | Instructor → FastAPI | `POST /sections/{section_id}/lessons` | Có `lesson_id` mới |
+| 1 | Frontend → FastAPI | `POST /lessons/{lesson_id}/upload-url` | URL PUT và object key phiên upload |
+| 2 | Frontend → Amazon S3 | `PUT {upload_url}` | `200 OK`, object đã được lưu |
+| 3 | Frontend → FastAPI | `POST /lessons/{lesson_id}/confirm-upload` | DB liên kết key, trạng thái UPLOADED |
+| 4 | Frontend → FastAPI | `GET /lessons/{lesson_id}/processing-status` | Theo dõi pipeline/status/error/retry |
+| 5 | Frontend → FastAPI | `POST /lessons/{lesson_id}/retry` nếu FAILED | Tiếp nhận xử lý lại, không upload lại |
+| 6 | Instructor → FastAPI | `GET/PATCH /lessons/{lesson_id}/ai-content` | Xem, sửa bản nháp |
+| 7 | Instructor → FastAPI | `POST /lessons/{lesson_id}/approve` | APPROVED |
+| 8 | Instructor → FastAPI | `POST /courses/{course_id}/publish` | PUBLISHED nếu đủ điều kiện |
+| 9 | Student/Instructor → FastAPI | `GET /lessons/{lesson_id}/video-url` | Presigned GET phát video private |
 
-| API/nhóm | Bằng chứng hiện có | Nhận định v4 |
-|---|---|---|
-| `GET /health`, `GET /courses`, `GET /courses/{id}` | `GET /courses` trả HTTP 200 trong log 28/10; Codex xác nhận các route course trong source | `GET /courses`: **Observed 200**; API còn lại: **route trong source**, cần test trực tiếp |
-| N01 `GET /courses/{id}/sections`, N02 `GET /sections/{id}/lessons` | Codex xác nhận có route và frontend đang gọi; `GET /sections/{id}/lessons` hỗ trợ `skip`, `limit` | **Source-confirmed**, chưa test browser với backend thật sau merge |
-| `GET /lessons/{id}` | Codex đọc `LessonResponse` hiện gồm `id`, `section_id`, `title`, `position` | **Partial cho trang học video**: chưa có transcript/summary/playback |
-| `GET /courses/{id}/progress`, `PUT /lessons/{id}/progress` | Codex thấy `api/progress.py` trống/chưa đăng ký; log thực tế trả 404 cho GET | **Missing route** theo source; không phải lỗi reset DB |
-| `POST /lessons/{id}/upload-url` | Đã thử thành công bước lấy Presigned URL và PUT S3 trong trao đổi trước | **Observed previously**; xác nhận upload, video GET và pipeline chưa hoàn chỉnh |
-| N07/N08/N12 (`/auth/login`, `/auth/me`, `/auth/register`) | Codex thấy các route tồn tại trong source; `get_current_user` nghiệp vụ vẫn dùng demo, FE LoginPage trống | **Source-confirmed routes, integration incomplete**, ưu tiên sau theo kế hoạch nhóm |
-| Các endpoint khác | Chưa kiểm thử/đối chiếu Swagger đầy đủ trên bản merge hiện tại | `TBD / Planned` tùy endpoint; không tự gắn `Implemented` |
+### 3.3. C01 — `POST /lessons/{lesson_id}/upload-url` (đã có)
 
-**Giới hạn bằng chứng:** Báo cáo Codex đã đọc source nhưng HTTP đến `localhost:8000` và `localhost:5173` timeout trong lượt đó. Không biến `source-confirmed` thành `runtime-tested`. Các bảng ở sơ đồ mới là **thiết kế**, phải so khớp với `database/schema.sql` được pull về trước khi khẳng định DB thật đã có cột.
+**Vai trò:** Instructor sở hữu Course chứa Lesson. **Mục tiêu:** tạo URL tạm cho **một** lần PUT tới **một** object key, không upload video tại bước này.
 
-### 1.7. Thay đổi cấu trúc dữ liệu theo sơ đồ mới (cần đối chiếu `schema.sql`)
+Request hiện có:
 
-| Bảng | Khác biệt chính so với SQL cũ | Tác động API |
-|---|---|---|
-| `users` | `name` tới 255, `email` tới 320; sơ đồ không thể hiện `password_hash` | Cần quyết định giữ local JWT hay Cognito; **không xóa field phục vụ auth khi chưa thống nhất** |
-| `courses` | `learning_objectives JSONB NOT NULL` dạng array, thêm `created_at`, `updated_at` | Schema Create/Patch/Response phải xử lý mảng rỗng `[]`, timestamps |
-| `sections` | Thêm `created_at`; hình không ghi UNIQUE `(course_id,position)` | Giữ ràng buộc cũ nếu không có quyết định thay đổi |
-| `lessons` | `raw_video_key`, `processed_video_key` kiểu `TEXT`; thêm `duration_seconds`, `error_message`, `retry_count`, `created_at`, `updated_at`; `key_concepts_json` là array bắt buộc | Response Lesson, processing-status và pipeline cần đồng bộ; không lộ object key nội bộ cho student |
-| `enrollments` | Cấu trúc gần như giữ nguyên | Không đổi endpoint enroll do thay schema |
-| `lesson_progress` | Bảng mới: `student_id`, `lesson_id`, `watched_seconds`, `completed`, `updated_at`; unique student–lesson | Chốt body PUT và response GET Progress |
-| `quizzes`, `questions`, `quiz_attempts` | Bảng mới; quiz thuộc section; câu hỏi thuộc quiz; attempt thuộc student/quiz | Chốt quiz payload, scoring, unlock; không đưa `correct_answer` cho student trước khi submit |
-| `flashcards` | Bảng mới dùng **`lesson_id`**, `front`, `back`, `position`, `is_approved` | Đề xuất sửa N05 sang `/lessons/{id}/flashcards` |
-
-`lessons.status` theo sơ đồ mới: `DRAFT`, `UPLOADED`, `PROCESSING`, `TRANSCRIBING`, `AI_PROCESSING`, `REVIEW_REQUIRED`, `APPROVED`, `PUBLISHED`, `FAILED`. `duration_seconds >= 0`, `retry_count >= 0`. Một số `NOT NULL` và `DEFAULT` chưa thể khẳng định từ sơ đồ rằng file migration/schema đã cập nhật đủ.
-
----
-
-## 2. Danh sách 24 endpoint MVP gốc (GIỮ NGUYÊN)
-
-> Bảng này **giữ nguyên nội dung, method, path, role, file và người/tuần của kế hoạch v3**. `Trạng thái code` của từng endpoint chưa được rà soát trong đợt cập nhật này.
-
-| # | Method + path | Chức năng | Vai trò | File | Người · Tuần |
-|---:|---|---|---|---|---|
-| 1 | `GET /health` | Kiểm tra backend | All | `api/health.py` | A · T1 |
-| 2 | `GET /courses` | Danh sách course đã publish | Student | `api/courses.py` | D · T1 |
-| 3 | `POST /courses` | Tạo course | Instructor | `api/courses.py` | D · T2 |
-| 4 | `GET /courses/{id}` | Chi tiết/outline course | Student/Instructor | `api/courses.py` | D · T1 |
-| 5 | `PATCH /courses/{id}` | Sửa metadata | Instructor | `api/courses.py` | D · T2 |
-| 6 | `POST /courses/{id}/publish` | Publish course | Instructor | `api/courses.py` | D · T3 |
-| 7 | `POST /courses/{id}/sections` | Tạo section | Instructor | `api/sections.py` | D · T2 |
-| 8 | `POST /sections/{id}/lessons` | Tạo lesson | Instructor | `api/lessons.py` | D · T2 |
-| 9 | `GET /lessons/{id}` | Lấy lesson có kiểm tra quyền/unlock | Student/Instructor | `api/lessons.py` | D · T2 |
-| 10 | `POST /lessons/{id}/upload-url` | Cấp Presigned URL | Instructor | `api/uploads.py` | D · T2 |
-| 11 | `GET /lessons/{id}/processing-status` | Xem pipeline status | Instructor | `api/lessons.py` | D · T3 |
-| 12 | `POST /lessons/{id}/retry` | Retry job lỗi | Instructor/Admin | `api/lessons.py` | D · T3 |
-| 13 | `GET /lessons/{id}/ai-content` | Lấy transcript/summary/concepts/quiz nháp | Instructor | `api/review.py` | C · T3 |
-| 14 | `PATCH /lessons/{id}/ai-content` | Sửa nội dung AI | Instructor | `api/review.py` | C · T3 |
-| 15 | `POST /lessons/{id}/approve` | Approve trước publish | Instructor | `api/review.py` | C · T3 |
-| 16 | `POST /courses/{id}/enroll` | Đăng ký course | Student | `api/enrollments.py` | D · T2 |
-| 17 | `PUT /lessons/{id}/progress` | Lưu tiến độ học | Student | `api/progress.py` | B · T2 |
-| 18 | `GET /courses/{id}/progress` | Xem tiến độ | Student | `api/progress.py` | B · T2 |
-| 19 | `GET /sections/{id}/quiz` | Lấy checkpoint đã duyệt và được mở | Student | `api/quizzes.py` | C · T2 |
-| 20 | `POST /quizzes/{id}/attempts` | Nộp bài, backend chấm và lưu | Student | `api/quizzes.py` | C · T2 |
-| 21 | `GET /students/me/quiz-history` | Lịch sử điểm | Student | `api/quizzes.py` | C · T2 |
-| 22 | `POST /tutor/sessions` | Tạo remediation từ attempt chưa đạt | Student | `api/tutor.py` | C · T4 |
-| 23 | `POST /tutor/sessions/{id}/messages` | Gửi câu hỏi tiếp theo | Student | `api/tutor.py` | C · T4 |
-| 24 | `GET /instructor/courses/{id}/analytics` | Progress/pass-fail cơ bản | Instructor | `api/analytics.py` | C · T4 |
-
----
-
-## 3. API bổ sung và backlog (DRAFT — CHƯA KHÓA)
-
-> Giữ nguyên mã N01–N12 để đối chiếu lịch sử. **Riêng N05 được đề xuất đổi path** từ `GET /sections/{id}/flashcards` sang `GET /lessons/{id}/flashcards` vì schema mới có `flashcards.lesson_id`. Đây là đề xuất **breaking change trong bản DRAFT**, cần B/C/A duyệt. Auth có route trong source nhưng chưa đồng bộ dependency/frontend.
-
-### 3.1. Nhóm N01–N12 (11 API cũ + đăng ký tài khoản)
-
-| # | Method + path (đề xuất) | Chức năng | Vai trò | File gợi ý | Ưu tiên | Quyết định cần chốt |
-|---:|---|---|---|---|---|---|
-| N01 | `GET /courses/{id}/sections` | Liệt kê section theo `position` | Student/Instructor | `api/sections.py` | P0 | **Giữ tương thích FE hiện tại**; course detail cũng có nested outline, tránh gọi trùng không cần thiết |
-| N02 | `GET /sections/{id}/lessons` | Liệt kê lesson theo `position` | Student/Instructor | `api/lessons.py` | P0 | **Giữ tương thích FE hiện tại**, hỗ trợ `skip`, `limit` theo source |
-| N03 | `GET /instructor/courses` | Khóa học của instructor, gồm DRAFT/PUBLISHED | Instructor | `api/courses.py` | P0 | Phân trang / filter `status` |
-| N04 | `GET /students/me/courses` | Khóa học student đã enroll | Student | `api/enrollments.py` | P0 | Có trả tiến độ tóm tắt hay không |
-| N05 | **`GET /lessons/{id}/flashcards`** | Lấy flashcards đã duyệt của một lesson | Student | `api/flashcards.py` (mới) | P1 | **ĐỀ XUẤT ĐỔI PATH** theo `flashcards.lesson_id`; nếu cần theo Section tạo API tổng hợp riêng |
-| N06 | `POST /lessons/{id}/confirm-upload` | Xác nhận object tồn tại, gắn video với lesson | Instructor | `api/uploads.py` | P0 | Chốt upload session/key và cách kích hoạt pipeline |
-| N07 | `POST /auth/login` | Đăng nhập email/password, cấp JWT | Guest | `api/auth.py` | Sau luồng học core | Route có theo source, cần test JWT end-to-end; không cần nếu dùng Cognito |
-| N08 | `GET /auth/me` | Lấy user hiện tại và role từ JWT | Authenticated | `api/auth.py` | Sau luồng học core | Route có theo source, kiểm tra Bearer và mapping DB |
-| N09 | `GET /admin/users` | Danh sách/tìm kiếm/lọc user | Admin | `api/admin.py` (mới) | P2 | UI Admin có nằm trong MVP 4 tuần không |
-| N10 | `PATCH /admin/users/{id}` | Sửa profile, role/trạng thái user | Admin | `api/admin.py` (mới) | P2 | Policy đổi role, audit và đồng bộ Cognito |
-| N11 | `GET /admin/monitoring` | Tổng hợp trạng thái job/lỗi/chi phí | Admin | `api/admin.py` (mới) | P2 | Backend đọc được nguồn metrics/billing nào |
-| N12 | `POST /auth/register` | Tự đăng ký Student bằng email/password | Guest | `api/auth.py` | Sau luồng học core | Route có theo source; không cho tự đăng ký Instructor/Admin |
-
-**Quy tắc riêng:** Nhóm đã có code route auth theo báo cáo source nhưng chưa kết nối `get_current_user` nghiệp vụ và LoginPage; vì vậy **tạm hoãn tích hợp frontend auth**, không xem đây là cơ chế xác thực production. Chỉ đánh dấu `Implemented` khi kiểm thử JWT với PostgreSQL, protected route, role và frontend; nếu chuyển Cognito thì N07/N12 có thể thay thế.
-
-### 3.2. Các API ứng viên khác (cân nhắc sau khi đối chiếu UI/Swagger)
-
-| Mã | Method + path (đề xuất) | Mục đích | Vai trò | Ưu tiên | Điều kiện / khả năng gộp |
-|---|---|---|---|---|---|
-| X01 | `GET /lessons/{id}/video-url` | Presigned GET URL phát video S3 private | Student/Instructor | **P0 — đề xuất ưu tiên** | **Nên tách** khỏi lesson metadata; cần nhóm duyệt, kiểm tra entitlement/unlock |
-| X02 | `GET /instructor/dashboard` | KPI và việc cần xử lý của instructor | Instructor | P1 | Có thể gộp từ analytics và course list |
-| X03 | `GET /instructor/courses/{id}/students` | Danh sách học viên và tiến độ | Instructor | P1 | Có thể trả trong analytics nếu dữ liệu nhỏ |
-| X04 | `GET /quizzes/attempts/{id}` | Chi tiết một lần làm, câu sai/điểm | Student | P1 | Chỉ cho chủ attempt xem |
-| X05 | `PATCH /sections/{id}` | Sửa title/position section | Instructor | P1 | Quy tắc đảo thứ tự UNIQUE position |
-| X06 | `DELETE /sections/{id}` | Xóa section | Instructor | P1 | Xác nhận cascading và bài đã có học viên |
-| X07 | `PATCH /lessons/{id}` | Sửa title/position lesson | Instructor | P1 | Không phá trạng thái đã publish |
-| X08 | `DELETE /lessons/{id}` | Xóa lesson | Instructor | P1 | Quy tắc xóa S3 object/job đang xử lý |
-| X09 | `GET /admin/jobs` | Liệt kê execution/job | Admin | P2 | Có thể gộp vào `/admin/monitoring` |
-| X10 | `POST /admin/jobs/{id}/retry` | Retry execution lỗi | Admin | P2 | Có thể tái sử dụng `POST /lessons/{id}/retry` |
-| X11 | `POST /auth/forgot-password` | Quên mật khẩu | All | Có điều kiện | Chỉ nếu auth tự triển khai hoặc proxy auth provider |
-| X12 | `POST /auth/logout` | Đăng xuất / revoke | Authenticated | Có điều kiện | Phụ thuộc session/JWT/Cognito |
-
-**Chưa đưa các ứng viên X01–X12 vào MVP chính thức.** Riêng **X01 là ứng viên P0 ưu tiên để sửa trang học video**, chưa có bằng chứng endpoint đã triển khai. Khi nhóm chốt thì chuyển sang danh sách đã duyệt và cập nhật OpenAPI.
-
----
-
-## 4. Hợp đồng request/response theo nhóm chức năng
-
-**Quy tắc đọc:** Những ví dụ không có ghi chú “đã quan sát thực tế” là **đề xuất** để FE/BE thảo luận, không phải lời xác nhận rằng backend đang hỗ trợ.
-
-### 4.1. Health
-
-**`GET /health`** (GỐC)
-
-Ví dụ **đã quan sát ở FastAPI local**:
-
-```json
-{"status": "ok"}
+```http
+POST /lessons/6/upload-url
+Content-Type: application/json
+X-Demo-User: <instructor_id>   # chỉ local
 ```
-
-### 4.2. Course — danh mục, quản lý, publish
-
-**`GET /courses`** (GỐC): Trả course PUBLISHED cho Student; nếu cho guest xem catalog thì nhóm cần sửa vai trò trong bảng gốc sau khi thống nhất. Cần chốt filter/search/pagination. Không trả DRAFT cho user không có quyền.
-
-**`POST /courses`** (GỐC): Instructor tạo bản nháp (`DRAFT`) mặc định. Trường `status` do client truyền **không mặc nhiên cho phép tạo PUBLISHED**. Theo schema mới `learning_objectives` phải là một JSON array (cho phép `[]` nếu nghiệp vụ đồng ý). Ví dụ request đề xuất:
 
 ```json
 {
-  "title": "Lập trình Python",
-  "description": "Lập trình Python cơ bản",
-  "learning_objectives": ["Biết cú pháp Python", "Viết được chương trình nhỏ"]
-}
-```
-
-Response thành công thường `201 Created`, chứa `id`, `instructor_id`, `status: "DRAFT"` và các metadata có trong schema.
-
-**`GET /courses/{id}`** (GỐC): Course detail/outline. **Báo cáo Codex 28/10 xác nhận response schema trong source có `sections[].lessons[]`**; đồng thời N01/N02 đang hoạt động theo route và được frontend gọi. V4 **giữ cả hai lựa chọn để không phá tương thích**, nhưng FE nên chọn một nguồn outline cho từng màn hình và tránh request dư. Chỉ lộ thông tin theo quyền/publish; cần đối chiếu response runtime trước khi khóa cấu trúc.
-
-**`PATCH /courses/{id}`** (GỐC): Sửa metadata; chỉ chủ course được sửa; chưa mặc định cho sửa `status` bằng endpoint này.
-
-**`POST /courses/{id}/publish`** (GỐC): Lệnh publish. Backend xác minh course thuộc instructor và thỏa tiêu chí xuất bản (ví dụ nội dung được duyệt, không có lesson bắt buộc đang lỗi); thiếu điều kiện trả `409`. Chưa quyết định body trả về là course mới hay trạng thái tối giản.
-
-**`GET /instructor/courses`** (N03): Filter theo chính instructor đã xác thực; không lấy user ID của instructor từ frontend.
-
-**`GET /students/me/courses`** (N04): Danh sách enrollment của student hiện tại, chỉ trả dữ liệu của chính user.
-
-### 4.3. Section / Lesson / Outline
-
-**`POST /courses/{id}/sections`** (GỐC) — Body đề xuất:
-
-```json
-{"title": "Giới thiệu", "position": 1}
-```
-
-**`POST /sections/{id}/lessons`** (GỐC) — Body đề xuất:
-
-```json
-{"title": "Tổng quan Cloud", "position": 1}
-```
-
-**`GET /courses/{id}/sections`** (N01): Theo đề xuất trả mảng trực tiếp (không tự bọc `data`):
-
-```json
-[{"id":1,"course_id":1,"title":"Giới thiệu","position":1}]
-```
-
-**`GET /sections/{id}/lessons`** (N02): Trả danh sách bài học theo `position`; theo báo cáo source hỗ trợ query `skip`, `limit`. Ví dụ **đề xuất (phải kiểm tra schema response thật)**:
-
-```json
-[{"id":3,"section_id":1,"title":"Tổng quan Cloud","position":1,"status":"PUBLISHED","duration_seconds":600}]
-```
-
-**`GET /lessons/{id}`** (GỐC): **Giữ method/path**, nhưng cần mở rộng `LessonResponse` để trang học dùng được. Theo báo cáo source 28/10, endpoint hiện chỉ có `id`, `section_id`, `title`, `position`. **V4 đề xuất P0 bổ sung response dưới đây; không coi là đã implement:**
-
-```json
-{
-  "id": 3,
-  "section_id": 1,
-  "title": "Tổng quan Cloud",
-  "position": 1,
-  "status": "PUBLISHED",
-  "duration_seconds": 600,
-  "summary": "Giới thiệu mô hình điện toán đám mây.",
-  "transcript": {
-    "segments": [
-      {"start": 0.0, "end": 12.5, "text": "Chào mừng đến với khóa học."}
-    ]
-  },
-  "key_concepts": ["Cloud Computing", "IaaS"]
-}
-```
-
-**Quy tắc schema/authorization đề xuất:**
-
-- `transcript` có thể là `null` khi nội dung chưa được duyệt/chưa được tạo; FE phải xử lý `transcript?.segments ?? []`, không gọi `.reduce()` trên `undefined`. `summary` có thể `null`; `key_concepts` trả mảng, mặc định `[]` nếu đã đủ quyền nhưng chưa có dữ liệu AI. **Cấu trúc `segments` phải đối chiếu định dạng thực tế từ Transcribe/AI trước khi chốt.**
-- Trường trong DB là `transcript_json` và `key_concepts_json`; mapping sang tên API `transcript` và `key_concepts` là **đề xuất**, không mặc định ORM/Pydantic đã map.
-- Student chỉ nhận transcript/summary/concepts **đã approve/publish và được unlock**; Instructor sở hữu Lesson có thể xem bản nháp qua API AI Review. Không trả nội dung nháp cho student.
-- Không trả `raw_video_key`, `processed_video_key` hay S3 credentials vào response dành cho student. Playback tách sang X01. Nếu không có video hợp lệ, FE hiển thị trạng thái “Chưa có video”, không coi response là URL có thể phát.
-- URL frontend `/courses/:courseId/lessons/:lessonId` **không** buộc phải có API `GET /courses/{courseId}/lessons/{lessonId}`. FE dùng `courseId` lấy outline/breadcrumb, `lessonId` lấy nội dung; có thể kiểm tra `lesson.section_id` thuộc course trong dữ liệu outline để tránh hiển thị sai ngữ cảnh (phân quyền vẫn ở backend).
-
-**`PATCH /sections/{id}`, `PATCH /lessons/{id}`** (X05/X07): Nếu triển khai phải xử lý xung đột vị trí và ownership. Với schema mới, Lesson update cần tránh cho client sửa trực tiếp các trường trạng thái pipeline/khóa S3 không được phép.
-
-### 4.4. S3 Upload và xử lý video
-
-**`POST /lessons/{id}/upload-url`** (GỐC) — Ví dụ **khớp với code đã chạy và kiểm thử trong LearnCloud**:
-
-Request:
-
-```json
-{
-  "filename": "demo.mp4",
+  "filename": "sample.mp4",
   "content_type": "video/mp4",
-  "file_size": 1048576
+  "file_size": 1895438
 }
 ```
 
-Response minh họa **chỉ biểu diễn cấu trúc, không phải URL có thật**:
+**Response tương thích hiện tại** (các giá trị là minh họa, URL không có chữ ký thật):
 
 ```json
 {
   "upload_url": "<presigned-put-url>",
-  "object_key": "lessons/1/raw/<random-id>.mp4",
+  "object_key": "lessons/6/raw/<random-id>.mp4",
   "expires_in": 900,
   "method": "PUT",
   "content_type": "video/mp4"
 }
 ```
 
-Sau đó client gửi `PUT <upload_url>` tới S3 với `Content-Type` khớp chữ ký. CORS bucket cần cho phép origin frontend. **Không upload video bằng POST tới FastAPI**.
-
-**`POST /lessons/{id}/confirm-upload`** (N06) — ĐỀ XUẤT:
-
-```json
-{"object_key": "lessons/1/raw/<random-id>.mp4"}
-```
-
-Response đề xuất:
+**Đề xuất mở rộng trước khi triển khai confirm-upload:** thêm `upload_id` (UUID) và `required_headers` (ví dụ `Content-Type`) vào response, **không bỏ các field hiện có**, đảm bảo FE tương thích. Ví dụ:
 
 ```json
 {
-  "lesson_id": 1,
-  "object_key": "lessons/1/raw/<random-id>.mp4",
-  "status": "UPLOADED",
-  "size_bytes": 1048576
-}
-```
-
-Quy tắc bắt buộc nếu xây API này:
-
-1. Instructor đã được xác thực và sở hữu lesson.
-2. `object_key` thuộc lesson **và** thuộc phiên upload đã được cấp hợp lệ (không chỉ kiểm tra prefix).
-3. S3 `HeadObject` xác minh tồn tại/size/content-type metadata; metadata **không chứng minh** file MP4 có nội dung hợp lệ.
-4. Cập nhật `lessons.raw_video_key`, trạng thái và thông tin job trong transaction phù hợp.
-5. Phải thống nhất nguồn kích hoạt workflow: **S3 event** hoặc **confirm-upload**, và tránh trigger trùng khi cả hai tồn tại; thiết kế idempotency cho sự kiện giao hàng lặp.
-6. Lỗi khi object chưa tồn tại/trạng thái sai/không thuộc lesson trả `404/409/403` theo chính sách đã chốt.
-
-**`GET /lessons/{id}/processing-status`** (GỐC): Đề xuất đồng bộ đúng enum trong sơ đồ mới: `DRAFT`, `UPLOADED`, `PROCESSING`, `TRANSCRIBING`, `AI_PROCESSING`, `REVIEW_REQUIRED`, `APPROVED`, `PUBLISHED`, `FAILED`. Ví dụ **chưa triển khai**:
-
-```json
-{
-  "lesson_id": 3,
-  "status": "FAILED",
-  "retry_count": 1,
-  "error_message": "Transcription failed",
-  "updated_at": "2026-10-28T07:00:00Z"
-}
-```
-
-Backend xác minh instructor ownership trước khi trả thông tin lỗi pipeline; không lộ internal exception hoặc AWS credentials.
-
-**`POST /lessons/{id}/retry`** (GỐC): Chỉ cho retry trạng thái `FAILED` và khi user đủ quyền. Không tạo nhiều job đồng thời; log số lần thử và nguyên nhân.
-
-**`GET /lessons/{id}/video-url`** (X01) — **ĐỀ XUẤT P0**, chọn phương án tách playback khỏi lesson detail để dễ refresh URL hết hạn.
-
-Response `200 OK` tham khảo (URL giả minh họa):
-
-```json
-{
-  "lesson_id": 3,
-  "video_url": "https://example.com/short-lived-presigned-get-url",
+  "upload_id": "<uuid-v4>",
+  "upload_url": "<presigned-put-url>",
+  "object_key": "lessons/6/raw/<random-id>.mp4",
   "expires_in": 900,
-  "content_type": "video/mp4"
+  "method": "PUT",
+  "content_type": "video/mp4",
+  "required_headers": { "Content-Type": "video/mp4" }
 }
 ```
 
-- Backend cấp Presigned **GET** của object đã xử lý/cho phép phát (`processed_video_key` nếu có); nếu cho phép dùng raw video để test local, phải kiểm tra ownership/entitlement và quy định rõ đây là ngoại lệ phát triển.
-- Student phải enroll, lesson đã publish/unlock; Instructor chỉ xem lesson mình sở hữu. Không tạo S3 public URL. `404` nếu không có playable object, `403` nếu thiếu quyền (hoặc `404` để không tiết lộ tài nguyên theo policy), `409` nếu chưa sẵn sàng tùy contract nhóm chốt.
-- URL có hạn; frontend làm mới bằng endpoint này khi cần, không lưu dài hạn/persist hoặc ghi log URL. Nếu chuyển sang CloudFront/HLS, phải cập nhật `video_url`/`content_type` hoặc một playback schema khác theo phiên bản contract.
+**Xử lý:**
+- Xác minh Instructor/ownership và trạng thái Lesson cho phép nộp/đổi video (không ghi đè lesson đã PUBLISHED một cách âm thầm).
+- Chỉ nhận MP4, kiểm tra extension/MIME và `0 < file_size <= 500 MiB` ở lớp request. Đây là giới hạn **khai báo**, không phải khóa kỹ thuật mức byte trên S3.
+- Tạo `object_key = lessons/{lesson_id}/raw/{random_id}.mp4` để tránh tên trùng/lộ tên file.
+- Lưu metadata của **upload session** trước khi cấp URL nếu chọn thiết kế N06 an toàn (xem mục 4).
+- Phát URL SigV4, thời hạn ngắn; không lưu/ghi log Presigned URL.
 
-**Kiểm tra upload:** Giới hạn đề xuất hiện dùng là **500 MiB** khi xin URL dựa trên `file_size` client gửi; kiểm tra thực tế phải dùng `HeadObject.ContentLength` tại `confirm-upload`, kết hợp phiên upload/key hợp lệ. Việc upload object qua CLI không tự tạo bản ghi Lesson hay cập nhật `status`.
+**HTTP:** `200` cấp URL; `401` chưa xác thực; `403` không sở hữu; `404` Lesson không tồn tại; `409` trạng thái không cho thay video; `413/422` size hoặc request không hợp lệ; `502/503` lỗi tạo URL/cấu hình storage.
 
-### 4.5. AI Content Review
+### 3.4. C02 — `PUT {upload_url}` tới S3 (không phải FastAPI)
 
-- `GET /lessons/{id}/ai-content` (GỐC): Instructor lấy bản nháp transcript có timestamp, summary, concepts, quiz; không trả dữ liệu nháp cho student.
-- `PATCH /lessons/{id}/ai-content` (GỐC): Sửa các trường review được cho phép; mọi field phải theo schema do C chốt.
-- `POST /lessons/{id}/approve` (GỐC): Chỉ approve khi nội dung đạt kiểm tra. **Chưa thống nhất** approve có tự publish lesson hay không; cần quyết định trước khi FE tích hợp.
+```http
+PUT https://<bucket>.s3.<region>.amazonaws.com/<object-key>?<signature>
+Content-Type: video/mp4
 
-### 4.6. Enrollment và progress
-
-- `POST /courses/{id}/enroll` (GỐC): Student enroll course đã PUBLISHED. Backend lấy student ID từ auth, không nhận `student_id` tự chọn. Đăng ký trùng: thống nhất `409` hoặc idempotent `200`.
-- `GET /students/me/courses` (N04): Chỉ enrollment của student hiện tại, có thể kèm `progress_percent` nếu BE/B đồng ý.
-**`PUT /lessons/{id}/progress`** (GỐC): Theo schema mới `lesson_progress(student_id, lesson_id, watched_seconds, completed, updated_at)`, đề xuất body (**cần B và backend owner chốt**):
-
-```json
-{"watched_seconds": 120, "completed": false}
+<raw MP4 bytes>
 ```
 
-Response `200 OK` ví dụ đề xuất:
+**Header phải đúng với header được ký.** Response S3 thông thường `200 OK`, khi đó object đã tồn tại. Nếu không thành công: `403 SignatureDoesNotMatch/AccessDenied`, hết hạn, sai header/region hoặc lỗi mạng. URL ký là bearer capability tạm thời; không đưa vào báo cáo hoặc log.
 
-```json
-{"lesson_id": 3, "watched_seconds": 120, "completed": false, "updated_at": "2026-10-28T07:00:00Z"}
+**Browser:** dùng `fetch(upload_url, { method:'PUT', headers:required_headers, body:file })`; S3 bucket cần CORS cho frontend origin và method/header thực tế. Với multipart và file rất lớn, cần thiết kế riêng; hiện MVP dùng Presigned PUT cho file giới hạn 500 MiB.
+
+### 3.5. C03 — `POST /lessons/{lesson_id}/confirm-upload` (đề xuất P0, CHƯA có code được xác nhận)
+
+**Kích hoạt:** frontend gọi **ngay khi PUT trả 200**. Đây không phải nút **Approve**; không cần Instructor phải xem AI để xác nhận upload.
+
+**Khuyến nghị request v5 mới:**
+
+```http
+POST /lessons/6/confirm-upload
+Content-Type: application/json
 ```
 
-- Lấy `student_id` từ auth (không nhận từ body); chỉ ghi tiến độ cho lesson đã được phép học; unique `(student_id, lesson_id)` → upsert.
-- **Phải chốt ý nghĩa** `watched_seconds` là số giây đã xem tích lũy (không nhất thiết liền mạch) hay vị trí phát cuối cùng. Frontend hiện gửi `progress_percent` và `last_position_seconds`, **không tương thích** với 2 trường DB trên. Nếu muốn resume chính xác cần thêm `last_position_seconds` vào schema, không giả vờ coi nó bằng `watched_seconds`.
-- Cần chốt việc client được tự đặt `completed`, có kiểm tra duration/ngưỡng hoàn thành hay không; không tin hoàn toàn dữ liệu tự khai của client để mở khóa bài thi.
+```json
+{ "upload_id": "<uuid-v4-do-upload-url-tra-ve>" }
+```
 
-**`GET /courses/{id}/progress`** (GỐC): Backend tính tiến độ của student hiện tại dựa trên lessons thuộc course và bảng `lesson_progress`; kiểm tra enrollment. Ví dụ **đề xuất**:
+Backend **tra object key từ upload session do server lưu**, không tin key bất kỳ do client gửi. Nếu muốn giữ tương thích với request N06 v4 `{ "object_key": "..." }`, phải chốt cách ánh xạ tới phiên cấp URL; **chỉ kiểm tra tiền tố `lessons/6/` là không đủ**.
+
+**Xử lý bắt buộc theo thứ tự:**
+1. Xác thực Instructor, quyền sở hữu Lesson, trạng thái cho phép upload.
+2. Lấy upload session (`upload_id`, `lesson_id`, `object_key`, người tạo, status, expiry) đã được tạo ở C01. Từ chối session thuộc Lesson khác, đã hủy hoặc không hợp lệ.
+3. `HeadObject` S3 tới đúng key, xác nhận object tồn tại, kích thước thực tế >0 và ≤500 MiB; MIME metadata được kiểm tra nhưng không thay thế kiểm tra nội dung/codec ở processing.
+4. Transaction DB: gắn `lessons.raw_video_key`, cập nhật session `CONFIRMED`, `lessons.status=UPLOADED` theo state machine; bảo vệ concurrent confirmations.
+5. Retry confirm cùng `upload_id` là **idempotent**, không tạo hai processing job; một upload session mới cho cùng lesson cần chính sách thay thế rõ ràng.
+6. Không upload/copy byte MP4; không tự tạo pipeline thứ hai nếu EventBridge là nguồn kích hoạt đã chọn.
+
+**Response đề xuất:**
 
 ```json
 {
-  "course_id": 1,
-  "completed_lessons": 2,
-  "total_lessons": 5,
-  "progress_percent": 40.0,
-  "lessons": [
-    {"lesson_id": 1, "watched_seconds": 560, "completed": true},
-    {"lesson_id": 2, "watched_seconds": 320, "completed": true}
-  ]
+  "lesson_id": 6,
+  "object_key": "lessons/6/raw/<random-id>.mp4",
+  "status": "UPLOADED",
+  "size_bytes": 1895438,
+  "content_type": "video/mp4",
+  "confirmed_at": "2026-10-30T08:00:00Z"
 }
 ```
 
-Phải chốt cách đếm Lesson chưa publish, cách xử lý course chưa có Lesson (`total_lessons=0`) và quyền Instructor xem tiến độ nào. Theo báo cáo 28/10, frontend **đã gọi GET** nhưng backend chưa đăng ký route và log nhận `404`; **không gắn nhãn Implemented**.
+**HTTP:** `200` xác nhận/đã xác nhận; `401/403` sai quyền; `404` lesson/session/object không tồn tại theo policy; `409` key/phiên/trạng thái xung đột, upload khác đang được xử lý; `413` actual size vượt giới hạn; `422` body; `502/503` S3 hay DB dependency lỗi.
 
-### 4.7. Flashcard, Quiz, Unlock
+### 3.6. C04 — `GET /lessons/{lesson_id}/processing-status` (đã có code)
 
-**`GET /lessons/{id}/flashcards`** (N05) — **ĐỀ XUẤT ĐỔI PATH TRONG DRAFT V4** vì sơ đồ DB mới gắn `flashcards.lesson_id`, không phải `section_id`. Trả flashcards **đã duyệt** và thuộc lesson được quyền xem. Ví dụ đề xuất:
+```http
+GET /lessons/6/processing-status
+```
+
+**Response đã có ví dụ thực tế từ Lesson 8:**
 
 ```json
 {
-  "lesson_id": 3,
-  "flashcards": [
-    {"id": 11, "front": "IaaS là gì?", "back": "Hạ tầng dưới dạng dịch vụ", "position": 1}
-  ]
+  "lesson_id": 8,
+  "status": "PUBLISHED",
+  "retry_count": 0,
+  "error_message": null,
+  "updated_at": "2026-10-28T07:48:12.355749Z"
 }
 ```
 
-**Tương thích với Contract v3:** Endpoint `/sections/{id}/flashcards` trước đây mới là **đề xuất, chưa có bằng chứng implement**. Không âm thầm đổi route nếu FE/C đã dùng; nếu UI cần xem flashcards theo Section, tạo endpoint tổng hợp hoặc giữ alias có chủ đích sau khi nhóm duyệt. `is_approved=false` không trả cho Student.
+**Quyền:** Instructor sở hữu Lesson; Admin theo policy nếu mở rộng. **Nguồn sự thật:** `lessons.status` trong PostgreSQL. API đọc DB; không tự động khởi chạy MediaConvert. Có thể frontend polling 3–5 giây khi đang xử lý và dừng ở `FAILED`, `REVIEW_REQUIRED`, `APPROVED`, `PUBLISHED`. `error_message` nên là thông báo đã làm sạch, không phải exception AWS nguyên gốc.
 
-**`GET /sections/{id}/quiz`** (GỐC): Schema mới `quizzes.section_id UNIQUE` (tối đa 1 quiz/section), `passing_score` mặc định 80 theo sơ đồ; chỉ checkpoint được approve/được mở; **không trả `correct_answer`** trước khi submit.
+**HTTP:** `200`, `401/403/404`, `503` nếu DB/service không khả dụng.
 
-**`POST /quizzes/{id}/attempts`** (GỐC): Student gửi lựa chọn, backend tự chấm và lưu attempt. Ví dụ request **đề xuất**:
+### 3.7. C05 — `POST /lessons/{lesson_id}/retry` (đã có code, AWS dispatch chưa có)
 
-```json
-{"answers": [{"question_id": 1, "selected_option_id": 2}]}
+```http
+POST /lessons/6/retry
 ```
 
-Response cần chốt `score`, `passed`, `attempt_number`, unlock section tiếp theo. **`passing_score` trong DB mặc định 80 nhưng có thể thay đổi theo quiz** (CHECK 0–100); backend lấy ngưỡng từ quiz thay vì hardcode `80` trong toàn bộ logic.
+- Chỉ cho phép Instructor owner/Admin theo policy khi `status=FAILED`.
+- Kiểm tra video nguồn trên S3 còn tồn tại, ngăn retry đồng thời bằng khóa DB/unique job attempt.
+- Chỉ khi dispatcher **tiếp nhận thật**: chuyển `PROCESSING`, tăng `retry_count`, làm sạch lỗi cũ.
+- Nếu dispatcher hoặc workflow chưa bật: `503`, **giữ** trạng thái `FAILED` và dữ liệu cũ.
+- Không upload lại video; retry lần xử lý mới từ key đã xác nhận. Chiến lược xử lý lại từ đầu hay từ bước thất bại phải được nhóm thống nhất; MVP khuyến nghị từ đầu cho đơn giản.
 
-**`GET /students/me/quiz-history`** (GỐC): Lấy các attempt của student hiện tại.
-
-**`GET /quizzes/attempts/{id}`** (X04): ĐỀ XUẤT nếu trang kết quả cần chi tiết khái niệm/câu sai; cần quyết định thời điểm được thấy đáp án đúng theo nghiệp vụ.
-
-### 4.8. Tutor, Instructor Analytics
-
-- `POST /tutor/sessions` (GỐC): Tạo phiên ôn tập từ attempt chưa đạt của chính student.
-- `POST /tutor/sessions/{id}/messages` (GỐC): Student gửi câu hỏi cho Tutor trong session mình sở hữu. Ví dụ request đề xuất: `{"message":"Giải thích lại IaaS"}`.
-- `GET /instructor/courses/{id}/analytics` (GỐC): Instructor sở hữu course xem enrollment/progress/pass-fail; định nghĩa chỉ số thực với C.
-- `GET /instructor/dashboard` (X02), `GET /instructor/courses/{id}/students` (X03): Chỉ tạo nếu API analytics/course có sẵn không đủ dữ liệu UI.
-
-### 4.9. Authentication — N07, N08, N12 (HOÃN TÍCH HỢP FRONTEND, SOURCE CÓ ROUTE)
-
-**Phạm vi bản thử nghiệm:** JWT HS256 + PostgreSQL + Argon2id được mô tả theo patch auth. Báo cáo source 28/10 cho biết `api/auth.py` có route, nhưng dependency của API nghiệp vụ vẫn dùng demo, LoginPage/AuthContext chưa triển khai. **Status: `Source-confirmed routes / Integration incomplete`**, không khẳng định auth đã được tích hợp và test end-to-end. Nhóm thống nhất **để auth frontend làm sau**, không đưa vào điều kiện hoàn thành trang Course/Video hiện tại.
-
-#### N12 — `POST /auth/register`
-
-- **Role gọi:** Guest/All; không cần access token.
-- **Ý nghĩa:** Tạo tài khoản học viên mới, không phải đăng ký vào khóa học.
-- **Content-Type:** `application/json`.
-- **Request (schema patch):** `name` từ 1–100 ký tự sau khi trim; `email` đúng định dạng; `password` 8–128 ký tự. Payload không chấp nhận trường lạ (`extra="forbid"`).
+**Response minh họa:**
 
 ```json
-{
-  "name": "Nguyen Van A",
-  "email": "student@example.com",
-  "password": "StrongPassword123"
-}
+{ "lesson_id": 6, "status": "PROCESSING", "retry_count": 1, "error_message": null }
 ```
 
-- **Response `201 Created`** (minh họa cấu trúc, không phải dữ liệu DB thực):
+**HTTP:** `200/202` (chốt một chuẩn; `202` phù hợp job bất đồng bộ), `401/403/404`, `409` không FAILED / duplicate, `502/503` dispatcher lỗi.
+
+### 3.8. C06 — `GET /lessons/{lesson_id}/video-url` (đã chạy S3 thật)
+
+```http
+GET /lessons/6/video-url
+```
+
+**Response:**
 
 ```json
-{
-  "id": 4,
-  "name": "Nguyen Van A",
-  "email": "student@example.com",
-  "role": "STUDENT",
-  "created_at": "2026-10-22T04:00:00Z"
-}
+{ "lesson_id": 6, "video_url": "<presigned-get-url>", "expires_in": 900, "content_type": "video/mp4" }
 ```
 
-- **Lỗi chính:** `409` email đã tồn tại; `422` body không hợp lệ.
-- **Quy tắc:** `role` luôn là `STUDENT` do server gán. Không nhận role từ client; email được chuẩn hóa về chữ thường. Instructor/Admin phải do thao tác tin cậy của người quản trị cấp quyền. **Không trả password/hash** trong JSON.
+- Backend kiểm tra Instructor ownership hoặc Student enrollment + lesson/course PUBLISHED + unlock.
+- **Production:** dùng `processed_video_key` sau khi nội dung được công bố; **development:** có thể cho phép `raw_video_key` bằng `APP_ENV=development` và `ALLOW_RAW_VIDEO_PLAYBACK=true` khi user đủ quyền.
+- Kiểm tra S3 `HeadObject`, cấp Presigned GET; frontend `<video>` phát trực tiếp từ S3, có thể nhận HTTP `206 Partial Content` khi tua.
+- Presigned URL hết hạn thì frontend xin URL mới; không lưu URL vào DB/log.
 
-#### N07 — `POST /auth/login`
+**HTTP:** `200`, `401/403/404`, `502/503` nếu S3/storage lỗi.
 
-- **Role gọi:** Guest/All; không cần access token.
-- **Request (schema patch):**
+### 3.9. C07 — AI Review, Approve, Publish (khác confirm-upload)
 
-```json
-{
-  "email": "student@example.com",
-  "password": "StrongPassword123"
-}
-```
-
-- **Response `200 OK`** (ví dụ minh họa):
-
-```json
-{
-  "access_token": "<jwt-access-token>",
-  "token_type": "bearer",
-  "expires_in": 3600,
-  "user": {
-    "id": 4,
-    "name": "Nguyen Van A",
-    "email": "student@example.com",
-    "role": "STUDENT",
-    "created_at": "2026-10-22T04:00:00Z"
-  }
-}
-```
-
-- **Lỗi chính:** `401` email/mật khẩu sai (thông báo chung, không tiết lộ email tồn tại), `422` body sai định dạng.
-- **JWT dự kiến theo patch:** HS256; claims `sub` (user ID), `iss=learncloud`, `aud=learncloud-api`, `iat`, `exp`; thời hạn mặc định **60 phút** qua cấu hình. Không đưa password/hash/role do client tự khai báo vào token.
-
-#### N08 — `GET /auth/me`
-
-- **Role gọi:** User đã đăng nhập.
-- **Header bắt buộc:** `Authorization: Bearer <access_token>`.
-- **Response `200 OK`:** Cùng cấu trúc `UserResponse` như trường `user` của login (không chứa password, password_hash hoặc token).
-- **Lỗi chính:** `401` thiếu, sai hoặc hết hạn token.
-- **Quy tắc:** Backend kiểm tra chữ ký, issuer, audience, các claims bắt buộc; lấy user từ PostgreSQL theo `sub` và kiểm tra role thực tế từ DB.
-
-#### Tương thích dự án và bảo mật
-
-- **Chuyển đổi có ảnh hưởng toàn hệ thống:** Sau khi thay `dependencies.get_current_user`, các API bảo vệ cũ cũng phải nhận Bearer JWT; không tiếp tục chấp nhận `X-Demo-User` làm fallback. Thành viên B phải chỉnh `frontend/src/api/client.js` / `AuthContext`.
-- **Migration/Auth:** Nếu chọn JWT nội bộ, `users.password_hash VARCHAR(255) NULL` là cần thiết (schema cũ có; sơ đồ mới không thể hiện); xác minh có cột trước khi chạy migration. User seed có `password_hash=NULL` không thể login cho tới khi đặt mật khẩu bằng công cụ tin cậy.
-- **Tương thích `cognito_sub`:** Patch auth cũ từng tạo `cognito_sub="local:<uuid>"` vì giả định `NOT NULL`; **sơ đồ mới chỉ thể hiện `UNIQUE`, không ghi `NOT NULL`**. Phải đối chiếu `schema.sql` thực tế; không thêm định danh giả hoặc thay ràng buộc chỉ dựa trên bản contract cũ.
-- **Cấu hình:** `.env` cần `JWT_SECRET_KEY` đủ mạnh và `JWT_ACCESS_TOKEN_EXPIRE_MINUTES`; không commit secret. Chỉ chạy qua HTTPS khi đưa lên môi trường công khai.
-- **Chưa triển khai trong patch:** refresh token, endpoint revoke/logout server-side, reset password, email verification, MFA, Cognito. Nếu logout ở frontend bằng cách xóa token, token đã phát hành vẫn còn hiệu lực đến khi hết hạn.
-- **Tăng cường trước khi public:** rate limiting cho login/register, chính sách mật khẩu, bảo vệ chống brute force, quản lý secret/rotation và audit. Tùy ngân sách, có thể chọn Cognito thay cho auth tự quản lý.
-
-#### Điều kiện để đổi trạng thái từ `Source-confirmed routes / Integration incomplete` sang `Implemented`
-
-1. Rà soát code auth đang tồn tại trong repo, không ghi đè `main.py`, router và cấu hình hiện tại.
-2. Chạy migration `password_hash` trên PostgreSQL Docker và cài thư viện JWT/Argon2/email-validator.
-3. Test Swagger: register `201`, trùng email `409`, login `200`, sai password `401`, `/me` `200`/`401`.
-4. Test phân quyền Student không thể `POST /courses` (`403`), Instructor seed đăng nhập hợp lệ; kiểm tra `X-Demo-User` không bypass JWT.
-5. FE/B xác nhận header Bearer sau khi backend thay auth; cập nhật tài liệu và PR.
-
-### 4.10. Admin và Monitoring (ĐỀ XUẤT, phạm vi UI mở rộng)
-
-- `GET /admin/users` (N09): Admin liệt kê, tìm kiếm, lọc role/status; dữ liệu phải được giới hạn và phân trang.
-- `PATCH /admin/users/{id}` (N10): Quyền sửa role/status phải tách khỏi profile thông thường; cân nhắc audit log và đồng bộ identity provider.
-- `GET /admin/monitoring` (N11): Tổng hợp job trạng thái/lỗi và cảnh báo. AWS Billing/CloudWatch có quyền truy cập riêng; không mặc định backend hiện tại đọc được số liệu chi phí.
-- `GET /admin/jobs` (X09) và `POST /admin/jobs/{id}/retry` (X10): Chỉ bổ sung nếu monitoring tổng hợp/lesson retry không đủ.
-
----
-
-## 5. Các quyết định cần nhóm chốt trước khi code thêm
-
-| Mã | Câu hỏi / quyết định | Ảnh hưởng |
+| API | Khi nào gọi | Điều kiện/hiệu ứng mong muốn |
 |---|---|---|
-| D01 | Theo source, Course Detail đã nested `sections[].lessons[]`; FE vẫn dùng N01/N02. Chọn nguồn outline mặc định nào? | Tránh request dư, giữ tương thích N01/N02 |
-| D02 | Student xem course chưa enroll tới mức nào? | Quy tắc 401/403 và course detail |
-| D03 | **Đề xuất X01** tách `GET /lessons/{id}/video-url` để cấp Presigned GET; nhóm duyệt? | S3 private, VideoPlayer, refresh URL |
-| D04 | `confirm-upload` lưu phiên upload bằng bảng mới hay trạng thái khác? | N06, migration DB, trigger pipeline |
-| D05 | Pipeline kích hoạt từ S3 EventBridge hay xác nhận upload? | Tránh xử lý trùng/job orphan |
-| D06 | Sơ đồ mới gắn flashcard với `lesson_id`; chấp nhận đổi N05 sang `/lessons/{id}/flashcards`? | Breaking change của đề xuất cũ, frontend/C |
-| D07 | Chốt áp dụng patch JWT local hay chuyển Cognito; thời điểm bỏ `X-Demo-User`? | N07/N08/N12, migration, FE token, tất cả API có bảo vệ |
-| D08 | Admin UI 2 màn hình có nằm trong MVP 4 tuần không? | N09–N11 / phân công |
-| D09 | Đồng bộ 9 giá trị `lessons.status` theo sơ đồ mới; `APPROVED` có tự `PUBLISHED` không? | Workflow, LessonResponse, review |
-| D10 | Ai chịu trách nhiệm các endpoint **mới**, triển khai tuần nào? | Lộ trình A/B/C/D |
-| D11 | Progress `watched_seconds` ≠ `last_position_seconds`; quiz `correct_answer` dạng text, options_json array. Chốt payload nào? | Tránh FE/BE lỗi 422 và lỗi resume/unlock |
-| D12 | N02 đang có `skip`,`limit`; có đổi phân trang hay không? Course/Admin có cần filter/search? | Query params và kết quả trả về |
-| D13 | `GET /lessons/{id}` dùng `transcript` segments chuẩn hóa hay dữ liệu AWS Transcribe gốc? Null được phép ở trạng thái nào? | LessonResponse, TranscriptPanel, AI adapter |
-| D14 | `progress_percent` được tính từ số Lesson hoàn thành hay thời lượng video; `completed` do ai xác nhận? | Progress, unlock, CourseCard |
-| D15 | `users.password_hash` có trong schema.sql mới không; khi nào thay demo bằng JWT? | Migration, frontend auth (làm sau) |
+| `GET /lessons/{id}/ai-content` | Lesson `REVIEW_REQUIRED` | Instructor xem bản nháp AI |
+| `PATCH /lessons/{id}/ai-content` | Instructor chỉnh sửa | Validate schema, lưu bản nháp, không tự publish |
+| `POST /lessons/{id}/approve` | Instructor bấm **Approve** | Kiểm tra nội dung/processed video; `REVIEW_REQUIRED → APPROVED` |
+| `POST /courses/{id}/publish` | Instructor bấm **Publish** | Chỉ khi toàn bộ lesson cần thiết `APPROVED` và nội dung đủ; chuyển course + lesson sang `PUBLISHED` |
 
----
+**Quan trọng:** PDF tham khảo có phương án **Approve lesson → PUBLISHED ngay**, trong khi code/migration đang theo **Approve → APPROVED, sau đó Publish Course**. v5 **đề xuất** phương án hai bước để phù hợp code mới; đây là **quyết định cần A/C/D xác nhận**, sau đó chỉnh nhất quán báo cáo/ERD/contract.
 
-## 6. Đối chiếu với UI và lộ trình
+## 4. Thiết kế upload session và EventBridge
 
-| Nhu cầu UI / Cloud | Endpoint | Căn cứ | Ghi chú |
+### 4.1. Upload session — không thể chỉ kiểm tra prefix
+
+Hiện bảng `lessons` chỉ lưu key đã liên kết. Muốn `confirm-upload` an toàn, hệ thống phải nhớ key nào thực sự được cấp, ai xin, hết hạn lúc nào và đã confirm chưa.
+
+**Đề xuất bảng `lesson_upload_sessions`** (chưa tồn tại, cần migration được nhóm duyệt):
+
+| Trường | Ý nghĩa |
+|---|---|
+| `id UUID PRIMARY KEY` | `upload_id` |
+| `lesson_id` FK | Lesson đích |
+| `instructor_id` FK | Người được cấp URL |
+| `object_key TEXT UNIQUE` | Key server sinh ra |
+| `declared_size_bytes`, `content_type` | Metadata ở upload-url |
+| `status` (`ISSUED`, `CONFIRMED`, `CANCELLED`, `EXPIRED`) | Trạng thái phiên upload; không dùng thay `lessons.status` |
+| `expires_at`, `confirmed_at`, `created_at` | Mốc thời gian |
+
+**Nếu chưa muốn migration mới:** có thể dùng cơ chế tin cậy khác (signed upload token do backend tạo, ràng buộc lesson/key/instructor/expiry và kiểm tra replay), nhưng cần thiết kế kỹ idempotency và quyền; không nên xác nhận chỉ bằng `object_key` do client gửi.
+
+### 4.2. Quyết định trigger: Một nguồn duy nhất
+
+**Hướng kiến trúc tham khảo theo báo cáo:** S3 `Object Created` → EventBridge → Step Functions. `confirm-upload` **không** trực tiếp khởi chạy một workflow thứ hai.
+
+Có **race condition**: S3 phát sự kiện ngay sau PUT, trong khi frontend có thể chưa gọi `confirm-upload`. Do đó workflow phải có bước **kiểm tra cổng xác nhận**: tương quan event với upload session, chờ/nghe đến khi session `CONFIRMED` trong khoảng thời gian hữu hạn; nếu không xác nhận, đánh dấu job bị bỏ qua/timeout phù hợp, không xử lý file tùy ý. Cần cơ chế lưu trạng thái event/job hoặc retry có giới hạn để không mất sự kiện.
+
+**Chống trùng:** S3/EventBridge có thể giao lại cùng một sự kiện; phải idempotent theo object/lesson/attempt (ví dụ unique `(lesson_id, object_key, version_id/etag, attempt)` tùy bật versioning). Job retry thủ công sinh attempt mới có kiểm soát, không bị gộp nhầm với event ban đầu.
+
+**Phương án thay thế (phải quyết định lại nếu chọn):** bỏ S3 trigger và chỉ dispatch sau `confirm-upload` bằng outbox. Dễ tránh race hơn, nhưng **khác** sơ đồ yêu cầu EventBridge từ S3 của báo cáo. Không vận hành cả hai đồng thời nếu không có cơ chế chung chống dispatch trùng.
+
+### 4.3. Trạng thái Lesson / lỗi
+
+| Từ trạng thái | Tác nhân/sự kiện | Sang trạng thái | Ghi chú |
 |---|---|---|---|
-| Instructor xem course DRAFT/PUBLISHED | N03 | UI v2 trang 6 | Không thể dùng catalog chỉ PUBLISHED |
-| Form course + outline | API course gốc + N01/N02 | UI v2 trang 7 | Course Detail nested outline theo source; giữ N01/N02 để không phá FE |
-| Upload video và trạng thái | API upload gốc + N06 + status gốc | UI v2 trang 8; AWS tuần 2–3 | Workflow chạy không đồng bộ |
-| Student xem video, transcript | Lesson gốc + **X01 đề xuất P0** | UI v2 trang 12 | Cần mở rộng LessonResponse, normalise transcript, video-url private |
-| Student flashcard | N05 đề xuất đổi `/lessons/{id}/flashcards` | UI v2 trang 13 | Sơ đồ mới có `flashcards.lesson_id` |
-| Student các course đã enroll | N04 | UI v2 trang 11–15 | Theo danh tính hiện tại |
-| Login, đăng ký, role redirect | N12 + N07 + N08 (route theo source, **chưa tích hợp**) | UI v2 trang 4 có Login; Register là mở rộng | **Để sau theo kế hoạch nhóm**, không dùng demo auth khi public |
-| Admin users/monitoring | N09–N11 | UI v2 trang 16–17 | Phạm vi vượt contract MVP 4 tuần hiện tại |
-| AWS workflow monitoring/retry | Status/retry gốc; X09/X10 tùy chọn | Kiến trúc v3 tuần 3–4 | CloudWatch/Step Functions |
+| `DRAFT` | Confirm object hợp lệ | `UPLOADED` | Backend lưu `raw_video_key` |
+| `UPLOADED` | Workflow nhận job hợp lệ | `PROCESSING` | MediaConvert |
+| `PROCESSING` | Chuyển mã video thành công | `TRANSCRIBING` | Ghi `processed_video_key` |
+| `TRANSCRIBING` | Transcribe thành công | `AI_PROCESSING` | Transcript có timestamp |
+| `AI_PROCESSING` | AI output hợp lệ, lưu nháp | `REVIEW_REQUIRED` | C tạo summary/concepts/quiz/flashcard |
+| `REVIEW_REQUIRED` | Instructor approve | `APPROVED` | Không mở cho Student ngay |
+| `APPROVED` | Course publish đủ điều kiện | `PUBLISHED` | Course cũng `PUBLISHED` |
+| Các bước processing | Lỗi sau retry/catch | `FAILED` | Lưu lỗi an toàn, tham chiếu execution/job |
+| `FAILED` | Retry được dispatcher nhận | `PROCESSING` | `retry_count + 1` |
 
----
+**Chính sách thay thế video cho Lesson đã `PUBLISHED` cần thiết kế riêng.** Không cho thao tác PUT/confirm ghi đè nội dung đang phục vụ học viên mà không có phiên bản và re-review.
 
-## 7. Quy trình thay đổi contract
+### 4.4. Dọn object không được xác nhận
 
-1. FE/BE nêu nhu cầu bổ sung endpoint hoặc field qua issue/PR.
-2. Đối chiếu **UI v2**, **kiến trúc v3**, **Swagger `/openapi.json`**, database schema và API hiện có để tránh trùng.
-3. Tạo proposal nêu method/path, người dùng, request/response, quyền, lỗi, thay đổi schema, tác động FE/Cloud và ưu tiên.
-4. A + module owner (B/C/D) duyệt, phân công và cập nhật phần contract **đã chốt**; proposal chưa duyệt vẫn ở phần 3.
-5. Người phụ trách code, viết test và đối chiếu response thực với contract.
-6. Chỉ ghi `Implemented` sau khi có bằng chứng chạy/test. Nếu đổi endpoint/response FE đang dùng, cập nhật contract **trước** khi merge và thông báo nhóm.
-7. Nếu API không còn cần, ghi `Deferred/Rejected` cùng lý do thay vì âm thầm xóa lịch sử.
+S3 có thể chứa file đã PUT thành công nhưng frontend đóng tab trước `confirm-upload`. Đó là orphan object. Đề xuất job cleanup định kỳ tra upload sessions chưa confirm và kiểm tra key không có Lesson/job nào tham chiếu; chỉ xóa sau thời gian chờ hợp lý. **Không** bật S3 Lifecycle xóa toàn bộ `lessons/*/raw/*` vì sẽ xóa nhầm video hợp lệ.
 
-**Mẫu ghi nhận thay đổi:**
+## 5. Contract dữ liệu, tương thích và phân quyền
 
-| Ngày | API / field | Thay đổi | Người đề xuất | Trạng thái | PR/Issue |
-|---|---|---|---|---|---|
-| 2026-10-22 | Contract Draft v2 | Giữ 24 API gốc, đề xuất thêm 11 API và danh sách tùy chọn | Dự thảo để nhóm xem xét | Draft | Chưa có |
-| 2026-10-22 | Contract Draft v3 | Bổ sung N12 register; cập nhật N07/N08 theo patch JWT; giữ 24 API gốc, 12 API N và 12 API X; thêm checklist migration/test | Bản chỉnh sửa để nhóm review | Draft | Patch auth đã bàn giao, chưa xác nhận merge |
-| **2026-10-28** | **Contract Draft v4** | Giữ 24 API gốc; **đề xuất** LessonResponse + X01; sửa N05 theo lesson_id; bổ sung Progress schema/response, video statuses, bảng schema mới; cập nhật audit trạng thái theo Codex | Dự thảo để nhóm A/B/C/D review | **Draft — chưa chốt** | Chưa có PR |
+### 5.1. Tương thích frontend/backend
 
----
+- Không đổi method/path của 24 API gốc.
+- Giữ `GET /courses/{id}/sections`, `GET /sections/{id}/lessons` đang được frontend sử dụng; không phá schema trả mảng.
+- Với Lesson page: `GET /lessons/{id}` trả metadata/nội dung đủ quyền; `GET /lessons/{id}/video-url` riêng cho Presigned GET. Transcript không có thì FE coi `segments=[]`, summary `null` và không crash.
+- Với `processing-status`: **dùng `error_message` và `retry_count` như code báo đang trả**, không tự đổi thành `last_error` trong contract.
+- Progress: cần B chốt `watched_seconds` là thời lượng đã xem hay vị trí resume, không coi hai khái niệm là một.
+- Quiz/flashcard: cần C chốt `selected_option_id` tương thích định dạng `options_json`/`correct_answer` trong DB; không lộ đáp án đúng trước khi nộp.
+- Auth: chưa đồng thời khẳng định Cognito production và Local JWT đều hoàn chỉnh; ghi hai mốc riêng và kế hoạch loại bỏ `X-Demo-User` khi public.
 
-## 8. Checklist rà soát và chốt API cho giai đoạn tiếp theo
+### 5.2. Phân quyền upload
 
-- [ ] Đối chiếu **24 API gốc** với Swagger; đánh dấu từng endpoint: Implemented / Partial / Planned.
-- [ ] Giữ N01/N02 hoạt động; chọn nguồn outline mặc định ở FE sau khi kiểm tra `GET /courses/{id}` và tránh gọi trùng.
-- [ ] Chốt N03/N04 và dữ liệu phục vụ màn hình course của Instructor/Student.
-- [ ] Chốt N06 (`confirm-upload`) và chiến lược chống event trùng.
-- [ ] Chốt X01 `GET /lessons/{id}/video-url` (đề xuất P0) và cách làm mới Presigned GET URL.
-- [ ] Chốt mở rộng `GET /lessons/{id}`: `status`, `duration_seconds`, `summary`, `transcript`, `key_concepts`, nullability và quyền xem.
-- [ ] Duyệt thay đổi N05 từ Section Flashcards sang Lesson Flashcards (`flashcards.lesson_id`); tránh breaking change không thông báo.
-- [ ] **Để sau theo tiến độ frontend:** chốt JWT local hay Cognito; rà N07/N08/N12 và chọn thời điểm thay `X-Demo-User`.
-- [ ] Nếu chọn JWT: ghép patch an toàn, chạy migration `password_hash`, đặt `JWT_SECRET_KEY`, test Swagger/register/login/me trên PostgreSQL.
-- [ ] Kiểm thử vai trò STUDENT/INSTRUCTOR và loại bỏ khả năng bypass bằng `X-Demo-User`; phối hợp B gửi Bearer token.
-- [ ] Xác nhận các API Admin là phạm vi MVP hay backlog.
-- [ ] Chốt Progress theo `lesson_progress`: `watched_seconds` và `completed`, cách tính `progress_percent`, có cần `last_position_seconds` để resume; B phối hợp BE implement 2 route còn thiếu.
-- [ ] Chốt request/response của Quiz, AI Review, Tutor và trạng thái workflow theo schema mới.
-- [ ] Đối chiếu schema.sql mới với sơ đồ: `users.password_hash`, unique section position, flashcard lesson_id, defaults timestamps, JSONB NOT NULL.
-- [ ] Xác nhận mã lỗi, chính sách quyền, không để bypass bằng gọi API trực tiếp.
-- [ ] Gán người/tuần cho API mới sau khi nhóm duyệt.
-- [ ] Tạo/cập nhật OpenAPI và test theo contract trước khi FE tích hợp.
+| Thao tác | Guest | Student | Instructor không sở hữu | Instructor sở hữu |
+|---|---|---|---|---|
+| Xin Presigned PUT URL | Không | Không | Không | Có, khi Lesson cho phép upload |
+| Confirm upload | Không | Không | Không | Có, phiên hợp lệ |
+| Xem processing-status | Không | Không mặc định | Không | Có |
+| Retry FAILED | Không | Không | Không | Có; Admin tùy policy |
+| Xem raw qua video-url ở development | Không | Theo policy, không bypass publish | Không | Có, nếu bật flag |
+| Approve/Publish | Không | Không | Không | Có, đủ điều kiện |
 
-**Ghi chú cuối:** Đây là **bản dự thảo có thể tiếp tục bổ sung**. Tên đường dẫn, vai trò và schemas của các API *đề xuất* không trở thành yêu cầu chính thức trước khi cả nhóm thống nhất. Các ví dụ JSON v4 chỉ là hợp đồng **đề xuất**, không xác nhận API đang trả như vậy. Sau khi nhóm duyệt, đồng bộ `database/schema.sql` → Pydantic/OpenAPI → frontend API client → test tích hợp rồi mới ghi `Implemented`.
+## 6. Test cases và tiêu chí nghiệm thu
+
+| ID | Kiểm thử | Kết quả mong muốn |
+|---|---|---|
+| U01 | Instructor owner xin upload-url MP4 nhỏ | `200`, Object Key riêng, URL có hạn |
+| U02 | Student hoặc Instructor khác xin URL | `403` / che tài nguyên theo policy |
+| U03 | Kích thước khai báo >500 MiB | Từ chối trước khi ký URL |
+| U04 | PUT đúng URL + signed Content-Type | S3 `200` và object có thật |
+| U05 | PUT sai Content-Type đã ký | S3 từ chối chữ ký |
+| U06 | PUT quá thời hạn | S3 từ chối |
+| U07 | Confirm trước khi object tồn tại | `404/409` theo policy, DB chưa gắn key |
+| U08 | Confirm đúng upload session + HeadObject | `200`, `raw_video_key` lưu, status `UPLOADED` |
+| U09 | Client cố confirm key/lesson của người khác | Từ chối, không sửa DB |
+| U10 | PUT thực tế >500 MiB dù khai báo nhỏ | Confirm từ chối bằng ContentLength thực |
+| U11 | Confirm lặp cùng session | Idempotent, không tạo hai job |
+| U12 | S3 event được giao hai lần | Chỉ một execution tương ứng attempt |
+| U13 | Event đến trước confirm | Workflow chờ/đồng bộ; không xử lý object chưa xác nhận |
+| U14 | Processing-status đang chạy | `200`, status đúng dữ liệu DB |
+| U15 | FAILED → retry với dispatcher sẵn sàng | Một attempt mới, counter +1 |
+| U16 | Retry khi không FAILED hoặc dispatcher tắt | `409` hoặc `503`, không sửa sai DB |
+| U17 | Approve khi chưa REVIEW_REQUIRED/thiếu AI/processed | `409`, không tự publish |
+| U18 | Course publish khi có Lesson chưa APPROVED | `409` |
+| U19 | Course publish đủ điều kiện | Course/Lesson `PUBLISHED`, idempotency hợp lệ |
+| U20 | GET video-url bằng Student chưa enroll/unlock | `403/404` |
+| U21 | GET video-url bằng user hợp lệ | `200`, Presigned GET, phát/tua S3 thật |
+| U22 | CORS frontend + Range playback | Không CORS error; GET/206 hợp lệ |
+| U23 | PostgreSQL migration APPROVED chưa chạy | API báo cấu hình/schema chưa sẵn sàng, không ghi sai dữ liệu |
+| U24 | API/log không lộ Presigned URL và credentials | Không có secret/query chữ ký trong log/response lỗi |
+
+**Bằng chứng hiện có:** PUT MP4 lên S3 thật và xem video Lesson qua Presigned GET đã thành công; status/retry/publish đã có unit/integration tests theo báo cáo Codex; chưa có bằng chứng E2E của `confirm-upload` và AWS MediaConvert/Step Functions.
+
+## 7. Các quyết định phải chốt trước khi khóa v5
+
+| Mã | Quyết định | Đề xuất |
+|---|---|---|
+| D01 | Có bổ sung `upload_id` và bảng upload sessions? | Có, trước khi hoàn thiện N06 |
+| D02 | N06 dùng `{upload_id}` hay `{object_key}`? | Ưu tiên `{upload_id}`, giữ tương thích nếu cần |
+| D03 | Nguồn trigger pipeline? | S3 EventBridge theo báo cáo; có gate xác nhận và chống race |
+| D04 | Approve chuyển tới đâu? | `APPROVED`, Publish Course mới `PUBLISHED` |
+| D05 | Migration 0004 đã áp dụng DB thực tế? | Chưa theo báo cáo gần nhất; thực thi/kiểm chứng riêng |
+| D06 | Job tracking/outbox/dedup ở đâu? | Thiết kế bảng/job store trước AWS E2E |
+| D07 | Thay video đã PUBLISHED? | Hoãn hoặc xây revision workflow riêng, không ghi đè âm thầm |
+| D08 | Auth sản phẩm dùng Cognito hay local JWT? | A/B/D thống nhất; bỏ X-Demo-User khi public |
+| D09 | Video production trả S3 Presigned GET hay CloudFront Signed URL? | MVP S3 GET; có thể chuyển CDN khi triển khai thật, version contract nếu đổi schema |
+| D10 | Ai ownership của approve AI và workflow dispatch? | C: AI/Review; D: trạng thái/course/cloud; thống nhất giao diện |
+
+## 8. Lộ trình triển khai khuyến nghị
+
+1. **Nền tảng đã kiểm thử:** S3 Presigned PUT/GET, Lesson API, các endpoint status/retry/publish đã có code.
+2. **Ưu tiên kế tiếp:** chốt `upload_id`/session, bổ sung `confirm-upload` và FE upload form; test idempotency/ownership/HEAD thật. Nếu cần migration mới phải review/backup trước.
+3. **Chuẩn bị AWS:** MediaConvert adapter, thử job MP4 thật và kiểm tra output.
+4. **Luồng EventBridge–Step Functions:** lọc event, xử lý race confirm, idempotency, retry/catch/log CloudWatch.
+5. **Kết hợp C/B:** transcript, AI content, review/approve, flashcard/quiz, upload UI, status UI.
+6. **Nghiệm thu:** upload → review → publish → Student học → test AWS failure/retry và theo dõi metrics. Không đánh dấu hoàn tất trước khi có bằng chứng thật.
