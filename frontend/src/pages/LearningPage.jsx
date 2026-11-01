@@ -33,14 +33,13 @@ export default function LearningPage() {
   const lesson = useLesson(lessonId);
   const progress = useLessonProgress(courseId, lessonId);
   const videoRef = useRef(null);
-  const lastSavedAt = useRef(0);
+ 
   const [currentTime, setCurrentTime] = useState(0);
 
   // Đổi sang bài khác thì đặt lại bộ đếm
-  useEffect(() => {
-    lastSavedAt.current = 0;
-    setCurrentTime(0);
-  }, [lessonId]);
+useEffect(() => {
+  setCurrentTime(0);
+}, [lessonId]);
 
   const where = locateLesson(course.data?.sections, lessonId);
   const sectionId = where?.section.id;
@@ -49,7 +48,16 @@ export default function LearningPage() {
   // Kiểm tra quyền từ API mỗi khi tiến độ đã lưu thay đổi.
   useEffect(() => {
     let cancelled = false;
-    setCheckpointAccess(null);
+    setCheckpointAccess((previous) => {
+      const sameLesson =
+        previous?.courseId === courseId &&
+        previous?.sectionId === sectionId &&
+        previous?.lessonId === lessonId;
+
+      // Giữ trạng thái hiện tại khi kiểm tra lại cùng bài.
+      // Chuyển bài/section/khóa thì reset quyền.
+      return sameLesson ? previous : null;
+    });
     if (!sectionId) return;
     fetchSectionQuiz(sectionId, courseId, lessonId)
       .then(() => {
@@ -93,18 +101,6 @@ export default function LearningPage() {
     (l) => l.lesson_id === lessonId
   )?.completed;
 
-  const handleTimeUpdate = (t) => {
-    setCurrentTime(t);
-    if (Math.abs(t - lastSavedAt.current) >= 10) {
-      lastSavedAt.current = t;
-      progress.save(t, videoRef.current?.duration);
-    }
-  };
-
-  const saveNow = () => {
-    const v = videoRef.current;
-    if (v) progress.save(v.currentTime, v.duration);
-  };
 
   const handleSeek = (seconds) => {
     if (videoRef.current) {
@@ -168,12 +164,12 @@ export default function LearningPage() {
       <div className="learning-layout">
         <div className="learning-main">
           <VideoPlayer
+            key={`${courseId}:${lessonId}`}
             src={lesson.data.videoUrl}
             videoRef={videoRef}
-            onTimeUpdate={handleTimeUpdate}
+            onTimeUpdate={setCurrentTime}
             startAt={progress.lastPosition}
-            onPause={saveNow}
-            onEnded={saveNow}
+            onProgress={progress.save}
           />
           <SummaryPanel summary={lesson.data.summary} />
         </div>

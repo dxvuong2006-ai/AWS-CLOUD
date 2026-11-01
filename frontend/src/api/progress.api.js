@@ -1,68 +1,122 @@
-import { request } from "./client";
+import { request, ApiError } from "./client";
 import courses from "../mocks/courses.mock.json";
-const COMPLETE_AT_PERCENT = 95 // xem từ mức này trở lên là hoàn thành
+import {
+  mergeWatchedRanges,
+  getWatchedSeconds,
+} from "../utils/watchedRanges";
+
+const COMPLETE_AT_PERCENT = 10;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
-const STORE_KEY = "learncloud.mock.progress";
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Tách khỏi dữ liệu cũ tính theo vị trí video.
+const STORE_KEY = "learncloud.mock.progress.v2";
 
 function readStore() {
-  try {
-    return JSON.parse(localStorage.getItem(STORE_KEY)) ?? {};
-  } catch {
-    return {};
-  }
+  const raw = localStorage.getItem(STORE_KEY);
+  return raw ? JSON.parse(raw) : {};
 }
 
-function writeStore(store) {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(store));
-  } catch {
-    // trình duyệt chặn lưu thì bỏ qua
-  }
-}
-
-// Mô phỏng response của GET /courses/{id}/progress 
 function buildCourseProgress(courseId) {
-  const course = courses.find((c) => c.id === courseId);
+  const course = courses.find((c) => String(c.id) === String(courseId));
+
+  if (!course) {
+    throw new ApiError(404, "Không tìm thấy khóa học.");
+  }
+
   const store = readStore();
-  const lessons = (course?.sections ?? [])
-    .flatMap((s) => s.lessons)
-    .map((l) => {
-      const saved = store[l.id] ?? { progress_percent: 0, last_position_seconds: 0 };
+
+  const lessons = (course.sections ?? [])
+    .flatMap((section) => section.lessons ?? [])
+    .map((lesson) => {
+      const saved = store[lesson.id] ?? {};
+      const duration = saved.duration_seconds ?? 0;
+      const ranges = mergeWatchedRanges(
+        saved.watched_ranges ?? [],
+        duration
+      );
+
+      const watchedSeconds = getWatchedSeconds(ranges);
+      const percent = duration > 0
+        ? Math.min(100, (watchedSeconds / duration) * 100)
+        : 0;
+
       return {
-        lesson_id: l.id,
-        progress_percent: saved.progress_percent,
-        last_position_seconds: saved.last_position_seconds,
-        completed: saved.progress_percent >= COMPLETE_AT_PERCENT, // ngưỡng thời lượng video để hoàn thành bài học đó
+        lesson_id: String(lesson.id),
+        // Làm tròn xuống để 94,9% không hiển thị thành 95%.
+        progress_percent: Math.floor(percent),
+        completed: percent >= COMPLETE_AT_PERCENT,
+        last_position_seconds: saved.last_position_seconds ?? 0,
+        watched_seconds: watchedSeconds,
+        watched_ranges: ranges,
       };
     });
-  const total = lessons.reduce((sum, l) => sum + l.progress_percent, 0);
+
+  const total = lessons.reduce(
+    (sum, lesson) => sum + lesson.progress_percent,
+    0
+  );
+
   return {
-    course_id: courseId,
-    overall_percent: lessons.length ? Math.round(total / lessons.length) : 0,
+    course_id: String(courseId),
+    overall_percent: lessons.length
+      ? Math.floor(total / lessons.length)
+      : 0,
     lessons,
   };
 }
 
 export async function fetchCourseProgress(courseId) {
   if (USE_MOCK) {
-    await delay(150);
     return buildCourseProgress(courseId);
   }
+
   return request(`/courses/${courseId}/progress`);
 }
 
-export async function saveLessonProgress(lessonId, { progressPercent, lastPositionSeconds }) {
-  const body = {
-    progress_percent: progressPercent,
-    last_position_seconds: lastPositionSeconds,
-  };
-  if (USE_MOCK) {
-    await delay(100);
-    const store = readStore();
-    store[lessonId] = body;
-    writeStore(store);
-    return body;
+export async function saveLessonProgress(
+  lessonId,
+  { lastPositionSeconds, durationSeconds, watchedRanges }
+) {
+  if (!USE_MOCK) {
+    // Chưa có contract/backend nhận khoảng xem.
+    // Không âm thầm quay về cách tính bằng vị trí video.
+    throw new ApiError(
+      501,
+      "Backend chưa hỗ trợ lưu các khoảng video đã xem."
+    );
   }
-  return request(`/lessons/${lessonId}/progress`, { method: "PUT", body });
+
+  if (
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0 ||
+    !Number.isFinite(lastPositionSeconds)
+  ) {
+    throw new ApiError(400, "Thông tin thời lượng video không hợp lệ.");
+  }
+
+  const store = readStore();
+  const previous = store[lessonId] ?? {};
+
+  const mergedRanges = mergeWatchedRanges(
+    [
+      ...(previous.watched_ranges ?? []),
+      ...(watchedRanges ?? []),
+    ],
+    durationSeconds
+  );
+
+  const saved = {
+    duration_seconds: durationSeconds,
+    last_position_seconds: Math.floor(
+      Math.max(0, Math.min(lastPositionSeconds, durationSeconds))
+    ),
+    watched_ranges: mergedRanges,
+  };
+
+  store[lessonId] = saved;
+
+  // Nếu lưu thất bại, để lỗi truyền lên giao diện.
+  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+
+  return saved;
 }

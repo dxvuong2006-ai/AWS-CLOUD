@@ -1,50 +1,78 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { fetchCourseProgress, saveLessonProgress } from "../api/progress.api";
+import {
+  fetchCourseProgress,
+  saveLessonProgress,
+} from "../api/progress.api";
 
 export function useLessonProgress(courseId, lessonId) {
   const [courseProgress, setCourseProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saveError, setSaveError] = useState(null);
-  const bestPercent = useRef(0);
 
-  const reload = useCallback(
-    () => fetchCourseProgress(courseId).then(setCourseProgress),
-    [courseId]
-  );
+  const generation = useRef(0);
+  const saveSequence = useRef(0);
 
   useEffect(() => {
+    const currentGeneration = ++generation.current;
+    let cancelled = false;
+
     setLoading(true);
     setError(null);
-    reload()
-      .catch(setError)
-      .finally(() => setLoading(false));
-  }, [reload]);
+    setSaveError(null);
+    setCourseProgress(null);
 
-  const current = courseProgress?.lessons.find((l) => l.lesson_id === lessonId);
+    fetchCourseProgress(courseId)
+      .then((data) => {
+        if (!cancelled) setCourseProgress(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  // Nhớ phần trăm cao nhất đã xem để không bị giảm khi tua lùi
-  useEffect(() => {
-    bestPercent.current = current?.progress_percent ?? 0;
-  }, [current?.progress_percent, lessonId]);
+    return () => {
+      cancelled = true;
+
+      if (generation.current === currentGeneration) {
+        generation.current += 1;
+      }
+    };
+  }, [courseId, lessonId]);
 
   const save = useCallback(
-    async (positionSeconds, durationSeconds) => {
-      if (!durationSeconds) return;
-      const percent = Math.min(100, Math.round((positionSeconds / durationSeconds) * 100));
-      bestPercent.current = Math.max(bestPercent.current, percent);
+    async (positionSeconds, durationSeconds, watchedRanges) => {
+      const currentGeneration = generation.current;
+      const sequence = ++saveSequence.current;
+
+      const isCurrent = () =>
+        generation.current === currentGeneration &&
+        saveSequence.current === sequence;
+
       try {
         await saveLessonProgress(lessonId, {
-          progressPercent: bestPercent.current,
-          lastPositionSeconds: Math.floor(positionSeconds),
+          lastPositionSeconds: positionSeconds,
+          durationSeconds,
+          watchedRanges,
         });
-        setSaveError(null);
-        await reload();
+
+        const data = await fetchCourseProgress(courseId);
+
+        if (isCurrent()) {
+          setCourseProgress(data);
+          setSaveError(null);
+        }
       } catch (err) {
-        setSaveError(err);
+        if (isCurrent()) setSaveError(err);
       }
     },
-    [lessonId, reload]
+    [courseId, lessonId]
+  );
+
+  const current = courseProgress?.lessons.find(
+    (lesson) => String(lesson.lesson_id) === String(lessonId)
   );
 
   return {
