@@ -28,10 +28,14 @@ export default function CheckpointPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null);
+  const [started, setStarted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setStarted(false);
+    setConfirmOpen(false);
+    setSubmitError(null);
     setError(null);
     setResult(null);
     setAnswers({});
@@ -98,6 +102,9 @@ export default function CheckpointPage() {
     setAnswers({});
     setIndex(0);
     setResult(null);
+    setSubmitError(null);
+    setConfirmOpen(false);
+    setStarted(false);
   };
 
   const subtitle = section
@@ -139,6 +146,35 @@ export default function CheckpointPage() {
             </p>
           )}
         </>
+      ) : !started ? (
+        <div className="card">
+          <h2>{quiz.title || "Checkpoint cuối section"}</h2>
+          <p>Bài kiểm tra gồm {total} câu hỏi trắc nghiệm.</p>
+          <p>
+            Bạn có thể chuyển giữa các câu để kiểm tra đáp án trước khi nộp.
+            Câu chưa trả lời sẽ được tính là sai.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              marginTop: 20,
+            }}
+          >
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={total === 0}
+              onClick={() => setStarted(true)}
+            >
+              Bắt đầu làm bài
+            </button>
+            <Link className="btn-secondary" to={`/courses/${courseId}`}>
+              Về lộ trình khóa học
+            </Link>
+          </div>
+        </div>
       ) : (
         <div className="quiz-layout">
           <QuizForm
