@@ -18,8 +18,13 @@ export default function CourseOutline({
             Section {i + 1}: {s.title}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
-            {s.lessons.map((l) => {
-              const label = `${l.title} · ${Math.round(l.duration / 60)} phút`;
+            {(s.lessons ?? []).map((l) => {
+              const durationSeconds = l.duration_seconds ?? l.duration;
+              const duration =
+                Number.isFinite(durationSeconds) && durationSeconds > 0
+                  ? ` · ${Math.round(durationSeconds / 60)} phút`
+                  : "";
+              const label = `${l.title}${duration}`;
               const isCurrent = l.id === currentLessonId;
               const done = completedIds.has(l.id);
               return (
