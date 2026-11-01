@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { useLesson } from "../hooks/useLesson";
 import { useLessonProgress } from "../hooks/useLessonProgress";
+import { fetchSectionQuiz } from "../api/quizzes.api";
 import "../components/learning/learning.css";
 import VideoPlayer from "../components/learning/VideoPlayer";
 import TranscriptPanel from "../components/learning/TranscriptPanel";
@@ -41,6 +42,41 @@ export default function LearningPage() {
     setCurrentTime(0);
   }, [lessonId]);
 
+  const where = locateLesson(course.data?.sections, lessonId);
+  const sectionId = where?.section.id;
+  const [checkpointAccess, setCheckpointAccess] = useState(null);
+
+  // Kiểm tra quyền từ API mỗi khi tiến độ đã lưu thay đổi.
+  useEffect(() => {
+    let cancelled = false;
+    setCheckpointAccess(null);
+    if (!sectionId) return;
+    fetchSectionQuiz(sectionId, courseId, lessonId)
+      .then(() => {
+        if (!cancelled) setCheckpointAccess({ courseId, sectionId, lessonId, allowed: true });
+      })
+      .catch((err) => {
+        if (!cancelled) setCheckpointAccess({
+          courseId,
+          sectionId,
+          lessonId,
+          allowed: false,
+          message: err.status === 403
+            ? (err.message && err.message !== "HTTP 403"
+              ? err.message
+              : "Checkpoint chưa được mở. Hãy tiếp tục học để đủ điều kiện.")
+            : err.status === 404
+              ? "Section này chưa có checkpoint."
+              : "Chưa xác nhận được quyền làm checkpoint. Hãy thử lại.",
+        });
+      });
+    return () => { cancelled = true; };
+  }, [courseId, sectionId, lessonId, progress.courseProgress]);
+
+  const canTakeCheckpoint =
+    checkpointAccess?.lessonId === lessonId && checkpointAccess?.courseId === courseId &&
+    checkpointAccess?.sectionId === sectionId && checkpointAccess?.allowed === true;
+
   if (lesson.loading || course.loading || progress.loading) {
     return <div className="page">Đang tải...</div>;
   }
@@ -53,7 +89,6 @@ export default function LearningPage() {
     );
   }
 
-  const where = locateLesson(course.data.sections, lessonId);
   const done = progress.courseProgress?.lessons.find(
     (l) => l.lesson_id === lessonId
   )?.completed;
@@ -100,9 +135,27 @@ export default function LearningPage() {
           <button className="btn-secondary" disabled title="Chưa có flashcard">
             Flashcard
           </button>
-          <button className="btn-primary" disabled title="Chưa có checkpoint">
-            → Làm checkpoint
-          </button>
+          {where && (
+            canTakeCheckpoint ? (
+              <Link
+                className="btn-primary"
+                to={`/courses/${courseId}/sections/${sectionId}/checkpoint`}
+                state={{ lessonId }}
+              >
+                → Làm checkpoint
+              </Link>
+            ) : (
+              <button
+                className="btn-secondary"
+                disabled
+                title={checkpointAccess?.lessonId === lessonId && checkpointAccess?.courseId === courseId && checkpointAccess?.sectionId === sectionId
+                  ? checkpointAccess.message
+                  : "Đang kiểm tra quyền làm checkpoint..."}
+              >
+                → Làm checkpoint
+              </button>
+            )
+          )}
         </div>
       </div>
 

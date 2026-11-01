@@ -1,1 +1,68 @@
-
+{
+  "s1": {
+    "id": "quiz-s1",
+    "title": "Checkpoint cuối section",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "Điện toán đám mây cho phép bạn làm gì?",
+        "concept": "Điện toán đám mây",
+        "options": [
+          { "id": "a", "text": "Thuê tài nguyên tính toán qua Internet" },
+          { "id": "b", "text": "Chỉ mua máy chủ vật lý riêng" },
+          { "id": "c", "text": "Chỉ lưu ảnh trên điện thoại" },
+          { "id": "d", "text": "Cài phần mềm hoàn toàn offline" }
+        ],
+        "correct_option_id": "a"
+      },
+      {
+        "id": "q2",
+        "text": "Mô hình chỉ trả tiền theo mức sử dụng gọi là gì?",
+        "concept": "Pay-as-you-go",
+        "options": [
+          { "id": "a", "text": "Thuê bao trọn đời" },
+          { "id": "b", "text": "Mua đứt" },
+          { "id": "c", "text": "Pay-as-you-go" },
+          { "id": "d", "text": "Trả trước một năm" }
+        ],
+        "correct_option_id": "c"
+      },
+      {
+        "id": "q3",
+        "text": "IaaS cho thuê thứ gì?",
+        "concept": "IaaS",
+        "options": [
+          { "id": "a", "text": "Phần mềm hoàn chỉnh" },
+          { "id": "b", "text": "Hạ tầng như máy ảo, mạng, lưu trữ" },
+          { "id": "c", "text": "Chỉ tên miền" },
+          { "id": "d", "text": "Chỉ dịch vụ email" }
+        ],
+        "correct_option_id": "b"
+      },
+      {
+        "id": "q4",
+        "text": "Gmail thuộc mô hình dịch vụ nào?",
+        "concept": "SaaS",
+        "options": [
+          { "id": "a", "text": "IaaS" },
+          { "id": "b", "text": "PaaS" },
+          { "id": "c", "text": "On-premises" },
+          { "id": "d", "text": "SaaS" }
+        ],
+        "correct_option_id": "d"
+      },
+      {
+        "id": "q5",
+        "text": "PaaS cho thuê thứ gì?",
+        "concept": "PaaS",
+        "options": [
+          { "id": "a", "text": "Nền tảng để triển khai ứng dụng mà không quản lý máy chủ" },
+          { "id": "b", "text": "Chỉ ổ cứng" },
+          { "id": "c", "text": "Chỉ băng thông" },
+          { "id": "d", "text": "Chỉ chứng chỉ SSL" }
+        ],
+        "correct_option_id": "a"
+      }
+    ]
+  }
+}
