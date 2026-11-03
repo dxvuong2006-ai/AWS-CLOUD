@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user, require_instructor
@@ -7,6 +7,7 @@ from app.schemas.lesson import (
     LessonCreateRequest,
     LessonResponse,
     LessonUpdateRequest,
+    LessonVideoUrlResponse,
 )
 from app.services import lesson_service
 
@@ -81,6 +82,40 @@ def get_lesson(
         lesson_service.LessonAccessDeniedError,
     ) as exc:
         _raise_service_error(exc)
+
+# API: GET /lessons/{lesson_id}/video-url
+@router.get(
+    "/lessons/{lesson_id}/video-url",
+    response_model=LessonVideoUrlResponse,
+    responses={
+        401: {"description": "User identity could not be resolved."},
+        403: {"description": "The current user cannot access this lesson."},
+        404: {"description": "Lesson, attached video, or S3 object not found."},
+        409: {"description": "The selected video is not an MP4 file."},
+        502: {"description": "S3 denied access or video storage is unavailable."},
+    },
+)
+def get_lesson_video_url(
+    lesson_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return lesson_service.get_video_url_for_user(
+            db, lesson_id, user_id=user.id, user_role=user.role
+        )
+    except (
+        lesson_service.LessonNotFoundError,
+        lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError,
+        lesson_service.CourseOwnershipError,
+        lesson_service.PublishedCourseRequiredError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
+
 
 # API: GET /sections/{section_id}/lessons
 @router.get(
