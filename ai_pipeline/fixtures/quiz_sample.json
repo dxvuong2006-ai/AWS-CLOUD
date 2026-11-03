@@ -23,15 +23,15 @@
       "explanation": "IaaS provides fundamental infrastructure resources, while the customer is generally responsible for managing the operating system and applications."
     },
     {
-      "question": "What is a common benefit of scaling a cloud application horizontally?",
+      "question": "How can cloud resources respond to changing demand?",
       "options": [
-        "Increasing the capacity of one server by adding more CPU and memory",
-        "Adding more instances to distribute the workload",
-        "Removing the need to monitor application performance",
-        "Guaranteeing that the application will never experience an outage"
+        "Resources can increase or decrease according to demand",
+        "Resources must remain fixed after deployment",
+        "Resources can only increase and never decrease",
+        "Resources must decrease whenever demand increases"
       ],
-      "correct_answer": "Adding more instances to distribute the workload",
-      "explanation": "Horizontal scaling adds instances so that workload can be distributed across more resources; it does not guarantee that outages will never occur."
+      "correct_answer": "Resources can increase or decrease according to demand",
+      "explanation": "The transcript describes flexible scaling: cloud resources can increase or decrease according to usage demand."
     }
   ]
 }

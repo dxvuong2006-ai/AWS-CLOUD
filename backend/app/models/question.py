@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -23,7 +24,7 @@ class Question(Base):
             "jsonb_typeof(options_json) = 'array' "
             "AND jsonb_array_length(options_json) >= 2",
             name="ck_questions_options_array",
-        ),
+        ).ddl_if(dialect="postgresql"),
         CheckConstraint(
             "(source_start_seconds IS NULL AND source_end_seconds IS NULL) OR "
             "(source_start_seconds IS NOT NULL AND source_end_seconds IS NOT NULL "
@@ -34,7 +35,12 @@ class Question(Base):
         CheckConstraint(
             "options_json ? correct_answer",
             name="ck_questions_correct_answer_in_options",
-        ),
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "json_type(options_json) = 'array' "
+            "AND json_array_length(options_json) >= 2",
+            name="ck_questions_options_array_sqlite",
+        ).ddl_if(dialect="sqlite"),
         CheckConstraint("position > 0", name="ck_questions_position"),
         UniqueConstraint("quiz_id", "position", name="uq_questions_quiz_position"),
     )
@@ -46,7 +52,7 @@ class Question(Base):
         nullable=False,
     )
     question = Column(Text, nullable=False)
-    options_json = Column(JSONB, nullable=False)
+    options_json = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
     correct_answer = Column(Text, nullable=False)
     explanation = Column(Text, nullable=True)
     topic = Column(String(255), nullable=True)

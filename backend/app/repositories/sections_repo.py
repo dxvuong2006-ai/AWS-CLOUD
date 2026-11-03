@@ -26,3 +26,13 @@ def list_by_course(db: Session, course_id: int) -> list[Section]:
         .order_by(Section.position.asc(), Section.id.asc())
         .all()
     )
+
+
+def get_section_by_id(db: Session, section_id: int) -> Section | None:
+    """Giữ tên truy vấn chương học tương thích với module Quiz/Unlock."""
+    return get_by_id(db, section_id)
+
+
+def list_sections_by_course(db: Session, course_id: int) -> list[Section]:
+    """Giữ tên truy vấn danh sách chương của phiên bản Người C."""
+    return list_by_course(db, course_id)
