@@ -32,6 +32,15 @@ sau khi đã chạy `schema.sql`.
 Với DB đã có dữ liệu, không chạy lại `schema.sql` để nâng cấp CHECK: lệnh
 `CREATE TABLE IF NOT EXISTS` không sửa constraint của bảng đã tồn tại.
 
+`0005_video_pipeline_ledger.sql` đã được review, **chưa tự áp dụng**. Tạo upload
+intents/processing ledger, ghi version 0005 cùng transaction và ràng buộc composite
+upload/lesson. Yêu cầu 0004 đã ghi/validated; không thay đổi migration 0004.
+Đây là file **one-time**: tự từ chối chạy lại hoặc nhận schema tồn tại không rõ lịch sử;
+bộ chạy registry bên dưới sẽ bỏ qua version đã có. Không drop/adopt bảng cũ để ép pass.
+Chạy [preflight chỉ đọc](../checks/video_pipeline_preflight.sql) và xem
+[review + PowerShell backup/apply/verify](../../docs/video-pipeline-migration-0005.md)
+trước khi tự triển khai; không chạy mọi migration chỉ để kiểm tra riêng 0005.
+
 `seed.sql` là dữ liệu demo, không phải migration. Kiểu khóa chính hiện tại là
 `SERIAL`/`INTEGER`; migration mới phải khớp kiểu này và các model SQLAlchemy.
 

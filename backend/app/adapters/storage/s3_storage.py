@@ -52,15 +52,15 @@ class S3StorageAdapter(StorageAdapter):
         object_key: str,
         content_type: str,
         expires_in: int = 900,
+        *,
+        prevent_overwrite: bool = False,
     ) -> str:
-
+        params = {"Bucket": self.bucket, "Key": object_key, "ContentType": content_type}
+        if prevent_overwrite:
+            params["IfNoneMatch"] = "*"
         return self.client.generate_presigned_url(
             ClientMethod="put_object",
-            Params={
-                "Bucket": self.bucket,
-                "Key": object_key,
-                "ContentType": content_type,
-            },
+            Params=params,
             ExpiresIn=expires_in,
             HttpMethod="PUT",
         )

@@ -14,6 +14,11 @@ from app.adapters.video.base import ProcessingReceipt, ProcessorDispatchError, V
 
 
 class LocalProcessor:
+    """Dispatch-only: a receipt never attests to a playable video or AI content.
+
+    FFmpeg is intentionally not invoked. No worker is installed by this adapter;
+    the application must not turn a pending manifest into a success status.
+    """
     def __init__(self, job_directory: Path):
         self.job_directory = Path(job_directory)
 

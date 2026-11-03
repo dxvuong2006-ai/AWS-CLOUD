@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:ap-southeast-1:${ACCOUNT_ID}:log-group:/aws/lambda/learncloud-video-*:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/*/raw/*",
+        "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/*/processed/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "lessons/*/raw/*",
+            "lessons/*/processed/*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "mediaconvert:CreateJob"
+      ],
+      "Resource": "arn:aws:mediaconvert:ap-southeast-1:${ACCOUNT_ID}:queues/${MEDIACONVERT_QUEUE_NAME}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "mediaconvert:GetJob"
+      ],
+      "Resource": "arn:aws:mediaconvert:ap-southeast-1:${ACCOUNT_ID}:jobs/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Resource": "${MEDIACONVERT_ROLE_ARN}",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "mediaconvert.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

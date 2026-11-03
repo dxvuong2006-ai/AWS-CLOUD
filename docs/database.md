@@ -44,6 +44,14 @@ tham chiếu tới một `quiz_attempt` để tạo remediation từ bài làm c
 | `tutor_sessions`    | Phiên remediation của student.                                  | Trigger xác minh student/section khớp quiz attempt nếu có.                                        |
 | `tutor_messages`    | Hội thoại thuộc một Tutor session.                              | role chỉ `USER` hoặc `ASSISTANT`; content không rỗng.                                             |
 | `schema_migrations` | Các version schema đã được áp dụng.                             | `version` là khóa chính.                                                                          |
+| `video_uploads` (0005, optional) | Intent cho presigned upload, chưa phải biên nhận xác nhận. | Source key duy nhất; UNIQUE `(id, lesson_id)` cho FK ghép. |
+| `video_pipeline_runs` (0005, optional) | Ledger claim/job/output và outbox retry. | UNIQUE `(upload_id, attempt)`; FK `(upload_id, lesson_id)` tới đúng cặp của video_uploads. |
+
+Hai bảng video chỉ có sau khi operator review/apply migration 0005; không nằm trong
+bootstrap và không tự tạo khi backend chạy. Gate xác nhận là S3 HEAD tại claim,
+không thêm confirmed_at/confirm-upload. Course/Lesson row locks và generation/owner/
+raw identity checks trong service ngăn callback cũ ghi đè output mới. Xem
+[review 0005, preflight và backup/apply/verify](video-pipeline-migration-0005.md).
 
 ## 4. Quy tắc nghiệp vụ được database bảo vệ
 

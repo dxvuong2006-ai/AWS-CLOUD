@@ -42,9 +42,12 @@ class ProcessingDispatchError(AppError):
     default_message = "Video processing could not be started."
 
 
-def get_video_processor() -> VideoProcessor:
+def get_video_processor(db: Session | None = None) -> VideoProcessor:
     if settings.APP_ENV.strip().lower() == "development" and settings.VIDEO_PROCESSOR_BACKEND == "local":
         return LocalProcessor(settings.LOCAL_VIDEO_JOB_DIR)
+    if settings.VIDEO_PIPELINE_ENABLED and settings.VIDEO_PROCESSOR_BACKEND == "eventbridge" and db is not None:
+        from app.services.video_pipeline_service import PipelineOutboxProcessor
+        return PipelineOutboxProcessor(db)
     raise WorkflowUnavailableError()
 
 
@@ -101,7 +104,7 @@ def retry_lesson(db: Session, lesson_id: int, *, user_id: int, user_role: str) -
             raise ConflictError("Only failed lessons can be retried.", code="LESSON_NOT_FAILED")
         if not lesson.raw_video_key or not lesson.raw_video_key.strip():
             raise ConflictError("An input video is required before retry.", code="RAW_VIDEO_REQUIRED")
-        processor = get_video_processor()
+        processor = get_video_processor(db)
         _verify_input(lesson.raw_video_key)
         request = VideoProcessingRequest(
             lesson_id=lesson.id, attempt=lesson.retry_count + 1, source_key=lesson.raw_video_key
