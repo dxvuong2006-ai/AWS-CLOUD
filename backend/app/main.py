@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api import quizzes, review
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
 from app.api.lessons import router as lessons_router
@@ -36,6 +37,8 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(courses_router)
+app.include_router(quizzes.router)
+app.include_router(review.router)
 app.include_router(sections_router)
 app.include_router(lessons_router)
 app.include_router(enrollments_router)

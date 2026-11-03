@@ -39,6 +39,7 @@ def _log_video_storage_error(exc, *, lesson_id: int, storage) -> None:
         label(os.environ.get("AWS_PROFILE") or os.environ.get("AWS_DEFAULT_PROFILE") or "default"),
         exc_info=False,
     )
+from app.repositories import lessons_repo, review_repo
 
 
 class LessonNotFoundError(Exception):
@@ -205,6 +206,10 @@ def get_lesson_for_user(
     _, course = _get_section_and_course(db, lesson.section_id)
     _check_lesson_access(db, course, user_id, user_role)
 
+    if user_role.upper() == "STUDENT" and lesson.status not in (
+        "APPROVED", "PUBLISHED",
+    ):
+        raise LessonAccessDeniedError("Lesson is awaiting instructor approval.")
     return lesson
 
 # cập nhật lesson
@@ -243,4 +248,8 @@ def list_lessons_for_section(
 ) -> list[Lesson]:
     _, course = _get_section_and_course(db, section_id)
     _check_lesson_access(db, course, user_id, user_role)
+    if user_role.upper() == "STUDENT":
+        return review_repo.list_visible_lessons(
+            db, section_id, skip=skip, limit=limit,
+        )
     return lessons_repo.get_by_section(db, section_id, skip=skip, limit=limit)
