@@ -1,5 +1,6 @@
 import { request, ApiError } from "./client";
 import courses from "../mocks/courses.mock.json";
+import { normalizeProgress } from "./normalizers";
 import {
   mergeWatchedRanges,
   getWatchedSeconds,
@@ -70,7 +71,7 @@ export async function fetchCourseProgress(courseId) {
     return buildCourseProgress(courseId);
   }
 
-  return request(`/courses/${courseId}/progress`);
+  return normalizeProgress(await request(`/courses/${courseId}/progress`));
 }
 
 export async function saveLessonProgress(

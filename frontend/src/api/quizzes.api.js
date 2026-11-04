@@ -2,6 +2,9 @@ import { request, ApiError } from "./client";
 import quizData from "../mocks/quiz.mock.json";
 import courses from "../mocks/courses.mock.json";
 import { fetchCourseProgress } from "./progress.api";
+import { normalizeQuiz, serializeAnswers, normalizeAttempt } from "./normalizers";
+
+const fetchedQuizzes = new Map();
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const ATTEMPT_KEY = "learncloud.mock.attempts";
@@ -110,9 +113,12 @@ export async function fetchSectionQuiz(
   lessonId
 ) {
   if (!USE_MOCK) {
-    return request(
-      `/sections/${encodeURIComponent(sectionId)}/quiz`
-    );
+    const suffix = lessonId == null ? "" : `?lesson_id=${encodeURIComponent(lessonId)}`;
+    const quiz = normalizeQuiz(await request(
+      `/sections/${encodeURIComponent(sectionId)}/quiz${suffix}`
+    ));
+    fetchedQuizzes.set(quiz.id, quiz);
+    return quiz;
   }
 
   await delay(200);
@@ -148,13 +154,17 @@ export async function submitAttempt(
   lessonId
 ) {
   if (!USE_MOCK) {
-    return request(
+    const data = await request(
       `/quizzes/${encodeURIComponent(quizId)}/attempts`,
       {
         method: "POST",
-        body: { answers },
+        body: {
+          answers: serializeAnswers(answers),
+          ...(lessonId == null ? {} : { lesson_id: Number(lessonId) }),
+        },
       }
     );
+    return normalizeAttempt(data, fetchedQuizzes.get(String(quizId)));
   }
 
   await delay(300);

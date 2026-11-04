@@ -13,7 +13,8 @@ function normalizeLesson(lesson) {
 
     // Backend hiện chưa trả các trường học liệu này.
     // Giữ dữ liệu mock nếu có; không lấy video mock thay cho bài thật.
-    videoUrl: lesson.videoUrl ?? null,
+    videoUrl: lesson.video_url ?? lesson.videoUrl ?? null,
+    keyConcepts: lesson.key_concepts ?? lesson.keyConcepts ?? [],
     summary: lesson.summary ?? "",
     transcript: Array.isArray(lesson.transcript)
       ? lesson.transcript

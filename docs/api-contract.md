@@ -21,6 +21,44 @@
 
 ---
 
+## Hợp đồng tích hợp frontend — 04/11/2026
+
+Phần này chốt dữ liệu cho các mục 1–3; khi khác với bảng đề xuất cũ bên dưới, dùng phần này.
+Trạng thái dưới đây dựa trên code, không phải xác nhận triển khai PostgreSQL/AWS.
+
+| API | Trạng thái code | Dữ liệu |
+|---|---|---|
+| GET /courses, /courses/{id} | Có router | Mảng CourseResponse / CourseResponse, không bọc data; ID integer |
+| GET /lessons/{id} | Có router metadata | Hiện LessonResponse chỉ có id, section_id, title, position |
+| GET /courses/{id}/progress | Chưa có router | CourseProgressResponse trong schemas/learning.py |
+| PUT /lessons/{id}/progress | Chưa có router | WatchedRangesRequest; không nhận completed hay progress_percent từ client |
+| GET /sections/{id}/quiz | Chưa có router | QuizDetailResponse; hỗ trợ query lesson_id tùy chọn |
+| POST /quizzes/{id}/attempts | Chưa có router | QuizAttemptSubmitRequest -> QuizAttemptResultResponse |
+
+- FE chuyển ID sang chuỗi tại lớp API. Backend và request JSON vẫn dùng ID số.
+- Nội dung học dự kiến theo LearningContentResponse: video_url nullable, summary, transcript [{start,text}],
+  key_concepts, duration_seconds. Đây là schema tích hợp, chưa được gắn vào router metadata.
+  Không trả raw S3 key thay URL phát; chỉ cung cấp học liệu đã duyệt cho người có quyền.
+- Quiz trả question/options_json (mảng text)/topic; FE chuyển thành text/options[{id:text,text}].
+  POST dùng selected_answer (text) và question_id (integer), không dùng selected_option_id trên wire.
+  Không trả correct_answer hoặc lời giải trước khi nộp.
+- answers=[] hợp lệ: tất cả câu tính sai. Response answers phải bao gồm mọi câu của quiz,
+  kể cả câu bỏ trống với selected_answer=null và is_correct=false. score là phần trăm 0–100.
+  passed do server quyết định; ID question phải thuộc quiz; từ chối câu trùng/đáp án ngoài options.
+- lesson_id (nếu có) phải thuộc section và đạt ngưỡng. Nếu không có, kiểm tra ít nhất một
+  lesson thuộc section đã đạt ngưỡng. Luôn kiểm tra enrollment, quyền section và trạng thái quiz.
+- Tiến độ: hợp nhất khoảng xem không trùng, tách last_position_seconds. Server lấy duration
+  từ lesson, kiểm tra tính hợp lý theo thời gian/session; khoảng xem client gửi không phải bằng chứng tin cậy.
+  Request không được gửi completed/progress_percent/duration để tự mở khóa.
+- Mock đang dùng ngưỡng 10% để test, ngưỡng dự kiến chính thức 95%; không coi số mock là cấu hình server.
+- Save tiến độ thật hiện chủ động báo 501 ở frontend để không giả lập thành công khi chưa có endpoint.
+- Lỗi: 401 thiếu/hết hạn token, 403 không đủ quyền/tiến độ, 404 tài nguyên hoặc đề chưa có,
+  422 payload sai. Frontend không tự biến lỗi API thành dữ liệu mock.
+- Bài học, tiến độ và quiz phải chạy cùng chế độ dữ liệu. VITE_USE_MOCK=true dành cho fixture;
+  false gọi backend, các endpoint chưa triển khai sẽ chưa dùng được.
+- Hợp đồng JWT: login trả access_token, token_type=bearer, expires_in, user.
+  GET /auth/me xác minh token và đọc role từ DB. Chi tiết tích hợp auth nằm ở mục cập nhật tiếp theo.
+
 ## 1. Quy ước chung
 
 ### 1.1. Phân loại, mức độ ưu tiên và trạng thái

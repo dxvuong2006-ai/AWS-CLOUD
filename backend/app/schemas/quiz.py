@@ -96,7 +96,9 @@ class QuizAnswerSubmit(BaseModel):
 
 
 class QuizAttemptSubmitRequest(BaseModel):
-    answers: list[QuizAnswerSubmit] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    lesson_id: int | None = Field(default=None, gt=0)
+    answers: list[QuizAnswerSubmit] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_unique_questions(self) -> "QuizAttemptSubmitRequest":
