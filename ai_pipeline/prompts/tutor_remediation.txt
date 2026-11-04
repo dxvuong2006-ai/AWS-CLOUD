@@ -1,0 +1,4 @@
+Dựa trên nội dung bài giảng sau, giải thích những câu trả lời sai và tạo câu hỏi luyện tập. Chỉ dùng thông tin có trong bài giảng. Trả JSON gồm explanation và practice_questions; mỗi câu có question, options, correct_answer và explanation.
+
+Bài giảng:
+{{transcript}}
