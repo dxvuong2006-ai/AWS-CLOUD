@@ -90,3 +90,37 @@ def complete(db, session):
     except Exception:
         db.rollback()
         raise
+
+
+def get_attempt_owner(db, attempt_id):
+    """Lấy chủ sở hữu lượt thi; trả None nếu không tồn tại."""
+    return db.query(QuizAttempt.student_id).filter(
+        QuizAttempt.id == attempt_id,
+    ).scalar()
+
+
+def get_session_owner(db, session_id):
+    """Lấy chủ sở hữu phiên; trả None nếu không tồn tại."""
+    return db.query(TutorSession.student_id).filter(
+        TutorSession.id == session_id,
+    ).scalar()
+
+
+def question_failure_rates(db, course_id):
+    """Tổng hợp tỷ lệ sai và chủ đề từng câu trong khóa học."""
+    from sqlalchemy import case, func
+
+    failures = func.sum(case((QuizAnswer.is_correct.is_(False), 1), else_=0))
+    total = func.count(QuizAnswer.id)
+    return (
+        db.query(Question.id, Question.question, Question.topic,
+                 failures.label("incorrect_count"), total.label("answer_count"))
+        .join(QuizAnswer, QuizAnswer.question_id == Question.id)
+        .join(QuizAttempt, QuizAttempt.id == QuizAnswer.attempt_id)
+        .join(Quiz, Quiz.id == Question.quiz_id)
+        .join(Section, Section.id == Quiz.section_id)
+        .filter(Section.course_id == course_id,
+                QuizAttempt.quiz_id == Question.quiz_id)
+        .group_by(Question.id, Question.question, Question.topic)
+        .all()
+    )

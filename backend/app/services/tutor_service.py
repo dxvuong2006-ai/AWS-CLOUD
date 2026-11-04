@@ -2,6 +2,7 @@
 
 import os
 import re
+import math
 from ai_pipeline.processors.build_tutor_context import build_tutor_context
 from app.models.tutor import TutorSession
 from app.repositories import tutor_repo
@@ -28,6 +29,45 @@ def _transcript(lesson):
     return ""
 
 
+def _timestamp(value):
+    """Chuẩn hóa số giây hợp lệ thành HH:MM:SS."""
+    try:
+        seconds = float(value)
+    except (ValueError, TypeError):
+        return None
+    if not math.isfinite(seconds) or seconds < 0:
+        return None
+    seconds = int(seconds)
+    return f"{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
+
+
+def _segments(lesson):
+    """Lấy các đoạn có nội dung và mốc thời gian hợp lệ."""
+    data = lesson.transcript_json
+    if not isinstance(data, dict) or not isinstance(data.get("segments"), list):
+        return []
+    result = []
+    for item in data["segments"]:
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+            continue
+        start_raw = item.get("start", item.get("start_seconds", item.get("start_time")))
+        end_raw = item.get("end", item.get("end_seconds", item.get("end_time")))
+        start, end = _timestamp(start_raw), _timestamp(end_raw)
+        if not start or not end or float(end_raw) < float(start_raw):
+            continue
+        if item["text"].strip():
+            result.append((item["text"].strip(), start, end))
+    return result
+
+
+def _grounded_transcript(lesson):
+    """Thêm mốc thời gian đã kiểm tra vào transcript gửi AI."""
+    segments = _segments(lesson)
+    if segments:
+        return "\n".join(f"[{start} - {end}] {text}" for text, start, end in segments)
+    return _transcript(lesson)
+
+
 def _public(session):
     """Ẩn đáp án khi trả câu luyện tập cho học viên."""
     return {"id": session.id, "lesson_id": session.lesson_id,
@@ -40,6 +80,9 @@ def _public(session):
 
 def create_session(db, student_id, attempt_id, ai_client=None):
     """Tạo phiên cho lượt thi chưa đạt của học viên."""
+    owner = tutor_repo.get_attempt_owner(db, attempt_id)
+    if owner is not None and owner != student_id:
+        raise TutorError(403, "Attempt belongs to another student.")
     row = tutor_repo.attempt_context(db, attempt_id, student_id)
     if row is None:
         raise TutorError(404, "Attempt not found.")
@@ -70,7 +113,7 @@ def create_session(db, student_id, attempt_id, ai_client=None):
             except AWS_FAILURES as exc:
                 raise AIClientError("Bedrock unavailable.") from exc
 
-    result = build_tutor_context(_transcript(lesson), incorrect, ai_client)
+    result = build_tutor_context(_grounded_transcript(lesson), incorrect, ai_client)
     session = TutorSession(student_id=student_id, lesson_id=lesson.id,
                            attempt_id=attempt_id,
                            practice_questions=result["practice_questions"],
@@ -81,6 +124,9 @@ def create_session(db, student_id, attempt_id, ai_client=None):
 
 def send_message(db, student_id, session_id, message):
     """Trả trích đoạn bài giảng có liên quan đến câu hỏi."""
+    owner = tutor_repo.get_session_owner(db, session_id)
+    if owner is not None and owner != student_id:
+        raise TutorError(403, "Tutor session belongs to another student.")
     session = tutor_repo.get_session(db, session_id, student_id)
     if session is None:
         raise TutorError(404, "Tutor session not found.")
@@ -90,6 +136,14 @@ def send_message(db, student_id, session_id, message):
     transcript = _transcript(lesson)
     words = {word.casefold() for word in re.findall(r"\w+", message)
              if len(word) > 3}
+    segments = _segments(lesson)
+    relevant = [(text, start, end) for text, start, end in segments
+                if words & {word.casefold() for word in re.findall(r"\w+", text)}]
+    if relevant:
+        text, start, end = relevant[0]
+        answer = f"Theo bài giảng: {text} Xem lại bài giảng tại [{start} - {end}]"
+        tutor_repo.save_messages(db, session.id, message, answer)
+        return {"message": answer}
     sentences = re.split(r"(?<=[.!?])\s+|\n+", transcript)
     matches = [line.strip() for line in sentences if words & {
         word.casefold() for word in re.findall(r"\w+", line)}]
@@ -101,6 +155,9 @@ def send_message(db, student_id, session_id, message):
 
 def submit_practice(db, student_id, session_id, answers):
     """Chấm đủ câu luyện tập và chỉ hoàn thành khi trả lời đúng tất cả."""
+    owner = tutor_repo.get_session_owner(db, session_id)
+    if owner is not None and owner != student_id:
+        raise TutorError(403, "Tutor session belongs to another student.")
     session = tutor_repo.get_session(db, session_id, student_id, lock=True)
     if session is None:
         raise TutorError(404, "Tutor session not found.")

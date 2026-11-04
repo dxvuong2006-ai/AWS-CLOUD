@@ -55,7 +55,7 @@ def test_tutor_rejects_other_student(db_session, learning_data):
     _, _, attempt = learning_data
     with pytest.raises(tutor_service.TutorError) as exc:
         tutor_service.create_session(db_session, 9999, attempt.id)
-    assert exc.value.code == 404
+    assert exc.value.code == 403
 
 
 def test_analytics_counts(db_session, learning_data):
@@ -120,3 +120,108 @@ def test_tutor_and_analytics_endpoints(db_session, learning_data):
             assert response.json()["failed_attempts"] == 1
     finally:
         app.dependency_overrides.clear()
+
+
+def test_idor_attempt_and_session_endpoints(db_session, learning_data):
+    """Học viên khác nhận 403 với lượt thi và phiên không thuộc mình."""
+    from fastapi.testclient import TestClient
+    from app.dependencies import get_current_user, get_db
+    from app.main import app
+    from app.models.user import User
+
+    student, course, attempt = learning_data
+    other = User(name="Other student", email="other-week4@example.test",
+                 role="STUDENT")
+    db_session.add(other)
+    db_session.flush()
+    db_session.add(Enrollment(student_id=other.id, course_id=course.id))
+    db_session.commit()
+    session = tutor_service.create_session(db_session, student.id, attempt.id)
+
+    def database_override():
+        """Cung cấp session SQLite."""
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: other
+    try:
+        with TestClient(app) as client:
+            assert client.post("/tutor/sessions", json={
+                "attempt_id": attempt.id,
+            }).status_code == 403
+            url = f"/tutor/sessions/{session['id']}"
+            assert client.post(url + "/messages", json={
+                "message": "Cloud là gì?",
+            }).status_code == 403
+            assert client.post(url + "/practice-attempts", json={
+                "answers": ["máy chủ"],
+            }).status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_analytics_denies_non_owner_instructor(db_session, learning_data):
+    """Giảng viên khác không xem được thống kê khóa học."""
+    from fastapi.testclient import TestClient
+    from app.dependencies import get_current_user, get_db
+    from app.main import app
+    from app.models.user import User
+
+    _, course, _ = learning_data
+    other = User(name="Other instructor", email="other-inst@example.test",
+                 role="INSTRUCTOR")
+    db_session.add(other)
+    db_session.commit()
+
+    def database_override():
+        """Cung cấp session SQLite."""
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: other
+    try:
+        with TestClient(app) as client:
+            assert client.get(
+                f"/instructor/courses/{course.id}/analytics"
+            ).status_code in (403, 404)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_timestamp_grounding_and_off_topic(db_session, learning_data):
+    """Trích dẫn đúng mốc của segment, từ chối nội dung ngoài bài."""
+    student, _, attempt = learning_data
+    lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+    lesson.transcript_json = {"segments": [
+        {"start": 12, "end": 25, "text": "Cloud cung cấp máy chủ."},
+        {"start": 28, "end": 35, "text": "AWS là nhà cung cấp."},
+    ]}
+    db_session.commit()
+    session = tutor_service.create_session(db_session, student.id, attempt.id)
+    result = tutor_service.send_message(
+        db_session, student.id, session["id"], "Cloud cung cấp gì?")
+    assert "[00:00:12 - 00:00:25]" in result["message"]
+    result = tutor_service.send_message(
+        db_session, student.id, session["id"], "khủng long tuyệt chủng?")
+    assert "Không tìm thấy" in result["message"]
+
+
+def test_weak_concepts_rate_and_topic(db_session, learning_data):
+    """Tính tỷ lệ sai theo tổng câu trả lời và trả chủ đề."""
+    student, course, attempt = learning_data
+    question = db_session.query(Question).one()
+    question.topic = "Cloud computing"
+    another = QuizAttempt(student_id=student.id, quiz_id=attempt.quiz_id,
+                          score=100, passed=True, attempt_number=2)
+    db_session.add(another)
+    db_session.flush()
+    db_session.add(QuizAnswer(attempt_id=another.id, question_id=question.id,
+                              selected_answer="máy chủ", is_correct=True))
+    db_session.commit()
+    result = analytics_service.get_course_analytics(db_session, course.id,
+                                                     student.id)
+    weak = result["weak_concepts"][0]
+    assert weak["topic"] == "Cloud computing"
+    assert weak["incorrect_count"] == 1
+    assert weak["answer_count"] == 2
+    assert weak["failure_rate"] == 50.0

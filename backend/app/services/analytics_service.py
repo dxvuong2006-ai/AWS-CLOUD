@@ -1,7 +1,7 @@
 """Tính chỉ số học tập dành cho giảng viên."""
 
 
-from app.repositories import analytics_repo
+from app.repositories import analytics_repo, tutor_repo
 
 
 def get_course_analytics(db, course_id, instructor_id):
@@ -14,7 +14,18 @@ def get_course_analytics(db, course_id, instructor_id):
     passed = int(passed or 0)
     total = int(total or 0)
     opportunities = enrolled * lessons
+    rows = tutor_repo.question_failure_rates(db, course_id)
+    weak = sorted(
+        ({"question_id": row.id, "question": row.question,
+          "topic": row.topic, "incorrect_count": row.incorrect_count,
+          "answer_count": row.answer_count,
+          "failure_rate": round(100 * row.incorrect_count / row.answer_count, 2)}
+         for row in rows if row.incorrect_count),
+        key=lambda item: (-item["failure_rate"], -item["incorrect_count"],
+                          item["question_id"]),
+    )[:10]
     return {
+        "weak_concepts": weak,
         "course_id": course_id, "enrollment_count": enrolled,
         "attempt_count": total, "passed_attempts": passed,
         "failed_attempts": total - passed,
