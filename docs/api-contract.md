@@ -21,6 +21,21 @@
 
 ---
 
+## Cập nhật xác thực — 04/11/2026
+
+Code hiện tại dùng JWT tự quản lý. Các mô tả X-Demo-User/Prepared trong phần lịch sử bên dưới
+không còn phản ánh đường xác thực đang chạy: get_current_user chỉ nhận Bearer JWT, không fallback ID demo.
+Frontend đăng nhập qua /auth/login, xác minh phiên qua /auth/me, lấy role từ response server.
+STUDENT -> /courses; INSTRUCTOR -> /instructor/dashboard; ADMIN -> /admin/users.
+Route UI và dependency API cùng kiểm tra vai trò; menu không thay thế việc bảo vệ API.
+
+Token nằm trong sessionStorage của tab và tự xóa khi hết hạn/401/đăng xuất.
+Đăng xuất hiện là xóa phiên ở client; JWT đã phát còn hiệu lực tới exp, chưa có revoke/refresh-token endpoint.
+Đăng nhập luôn gọi backend thật, kể cả VITE_USE_MOCK=true. Dữ liệu mock được tách theo user ID;
+đây chỉ là mô phỏng, localStorage không phải ranh giới bảo mật.
+Màn giảng viên/admin chưa triển khai hiển thị trạng thái đang xây dựng.
+Kiểm thử HTTP dùng repository double, không xác nhận migration hoặc PostgreSQL/AWS đang vận hành.
+
 ## Hợp đồng tích hợp frontend — 04/11/2026
 
 Phần này chốt dữ liệu cho các mục 1–3; khi khác với bảng đề xuất cũ bên dưới, dùng phần này.

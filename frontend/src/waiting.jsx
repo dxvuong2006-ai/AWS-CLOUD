@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.jsx";
+import { AuthProvider } from "./context/AuthContext";
 import logo from "./public/logo.png";
 
 export default function Root() {
@@ -58,7 +59,9 @@ export default function Root() {
 
   return (
     <BrowserRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

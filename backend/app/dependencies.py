@@ -1,10 +1,12 @@
-from typing import Generator
-
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.user import User
+from app.services import auth_service
+
+bearer = HTTPBearer(auto_error=False)
 
 
 def get_db():
@@ -15,19 +17,17 @@ def get_db():
         db.close()
 
 def get_current_user(
-    x_demo_user: str = Header(default="1", alias="X-Demo-User"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Resolve a demo user by ID; defaults to seeded user ID 1."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Authentication required",
+                            headers={"WWW-Authenticate": "Bearer"})
     try:
-        user_id = int(x_demo_user)
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="X-Demo-User must be a numeric user ID.")
-
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="Demo user not found.")
-    return user
+        return auth_service.user_from_access_token(db, credentials.credentials)
+    except auth_service.InvalidToken as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token",
+                            headers={"WWW-Authenticate": "Bearer"}) from exc
 
 
 def require_instructor(user: User = Depends(get_current_user)) -> User:

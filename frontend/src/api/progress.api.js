@@ -1,3 +1,4 @@
+import { mockStorageKey } from "./session";
 import { request, ApiError } from "./client";
 import courses from "../mocks/courses.mock.json";
 import { normalizeProgress } from "./normalizers";
@@ -13,7 +14,7 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const STORE_KEY = "learncloud.mock.progress.v2";
 
 function readStore() {
-  const raw = localStorage.getItem(STORE_KEY);
+  const raw = localStorage.getItem(mockStorageKey(STORE_KEY));
   return raw ? JSON.parse(raw) : {};
 }
 
@@ -117,7 +118,7 @@ export async function saveLessonProgress(
   store[lessonId] = saved;
 
   // Nếu lưu thất bại, để lỗi truyền lên giao diện.
-  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  localStorage.setItem(mockStorageKey(STORE_KEY), JSON.stringify(store));
 
   return saved;
 }

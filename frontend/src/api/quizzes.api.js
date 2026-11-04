@@ -1,3 +1,4 @@
+import { mockStorageKey } from "./session";
 import { request, ApiError } from "./client";
 import quizData from "../mocks/quiz.mock.json";
 import courses from "../mocks/courses.mock.json";
@@ -31,7 +32,7 @@ function nextAttemptNumber(quizId) {
   let store = {};
 
   try {
-    const parsed = JSON.parse(localStorage.getItem(ATTEMPT_KEY));
+    const parsed = JSON.parse(localStorage.getItem(mockStorageKey(ATTEMPT_KEY)));
 
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       store = parsed;
@@ -46,7 +47,7 @@ function nextAttemptNumber(quizId) {
   ) + 1;
 
   store[quizId] = next;
-  localStorage.setItem(ATTEMPT_KEY, JSON.stringify(store));
+  localStorage.setItem(mockStorageKey(ATTEMPT_KEY), JSON.stringify(store));
 
   return next;
 }
@@ -121,7 +122,11 @@ export async function fetchSectionQuiz(
     return quiz;
   }
 
+  const accountKey = mockStorageKey(ATTEMPT_KEY);
   await delay(200);
+  if (mockStorageKey(ATTEMPT_KEY) !== accountKey) {
+    throw new ApiError(401, "Phiên đăng nhập đã thay đổi.");
+  }
 
   await requireMockCheckpointAccess(
     sectionId,
@@ -167,7 +172,11 @@ export async function submitAttempt(
     return normalizeAttempt(data, fetchedQuizzes.get(String(quizId)));
   }
 
+  const accountKey = mockStorageKey(ATTEMPT_KEY);
   await delay(300);
+  if (mockStorageKey(ATTEMPT_KEY) !== accountKey) {
+    throw new ApiError(401, "Phiên đăng nhập đã thay đổi.");
+  }
 
   const course = findCourse(courseId);
 
@@ -195,6 +204,10 @@ export async function submitAttempt(
     course.id,
     lessonId
   );
+
+  if (mockStorageKey(ATTEMPT_KEY) !== accountKey) {
+    throw new ApiError(401, "Phiên đăng nhập đã thay đổi.");
+  }
 
   if (!Array.isArray(answers)) {
     throw new ApiError(400, "Danh sách câu trả lời không hợp lệ.");

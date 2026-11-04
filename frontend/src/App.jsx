@@ -1,35 +1,22 @@
 import AppRoutes from "./routes/AppRoutes";
 import Navbar from "./components/layout/Navbar";
+import { useAuth } from "./context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "./routes/AppRouter.css";
 
 export default function App() {
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-
-  // TODO: Thay dữ liệu mẫu bằng user lấy từ AuthContext/API.
-  // Test với Role khác : TEACHER,ADMIN
-  const user = {
-    name: "Vương Dũng",
-    role: "TEACHER",
-  };
-
-  // TODO: Đổi thành TEACHER hoặc ADMIN để thử các sidebar khác.
-  const role = user?.role || "STUDENT";
-
+  if (loading) return <div className="page">Đang xác thực...</div>;
   return (
     <>
-      <Navbar
-        user={user}
-        role={role}
-        onLogout={() => {
-          // TODO: Xóa token và gọi API logout khi tích hợp đăng nhập.
-          navigate("/login");
-        }}
-      />
-
-      <main className="app-content">
+      {user && <Navbar user={user} role={user.role} onLogout={() => {
+        logout();
+        navigate("/login", { replace: true });
+      }} />}
+      <div className={user ? "app-content" : undefined}>
         <AppRoutes />
-      </main>
+      </div>
     </>
   );
 }

@@ -6,11 +6,12 @@ const vm = require('node:vm');
 const root = path.join(__dirname, '../src');
 const courses = JSON.parse(fs.readFileSync(path.join(root, 'mocks/courses.mock.json')));
 const quizData = JSON.parse(fs.readFileSync(path.join(root, 'mocks/quiz.mock.json')));
-function setup() {
+function setup(delay = fn => fn()) {
+  let account = 'one';
   const completed = new Set(), storage = {};
   class ApiError extends Error { constructor(status, detail) { super(detail); this.status = status; } }
   const context = vm.createContext({
-    courses, quizData, ApiError, setTimeout: fn => fn(),
+    courses, quizData, ApiError, mockStorageKey: key => key + account, setTimeout: delay,
     localStorage: { getItem: k => storage[k] ?? null, setItem: (k,v) => storage[k] = v },
     request: () => { throw Error('Unexpected network request'); },
     fetchCourseProgress: async id => ({lessons: courses.find(c => c.id === id).sections.flatMap(s => s.lessons).map(l => ({lesson_id:l.id,completed:completed.has(l.id)}))}),
@@ -20,7 +21,7 @@ function setup() {
     .replace(/import.meta.env.VITE_USE_MOCK === "true"/g, 'true')
     .replace(/export /g, '');
   const api = vm.runInContext(source + ';({fetchSectionQuiz, submitAttempt})', context);
-  return { ...api, completed };
+  return { ...api, completed, setAccount: value => { account = value; } };
 }
 test('each section has a distinct valid quiz', () => {
   const ids = new Set();
@@ -55,4 +56,14 @@ test('grading, unanswered and attempt counters', async () => {
   assert.equal(fail.score_percent,0); assert.equal(fail.attempt_number,2);
   assert.equal((await a.submitAttempt('quiz-docker-s1',[],'2')).attempt_number,1);
   await assert.rejects(()=>a.submitAttempt(q.id,[answers[0],answers[0]],'1'),e=>e.status===400);
+});
+
+
+test('an in-flight submission cannot be credited to a different account', async () => {
+  const pending=[];
+  const a=setup(fn=>pending.push(fn)); a.completed.add('l1');
+  const request=a.submitAttempt('quiz-cloud-s1',[],'1','l1');
+  a.setAccount('two');
+  pending.shift()();
+  await assert.rejects(()=>request,e=>e.status===401);
 });
