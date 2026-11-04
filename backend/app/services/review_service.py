@@ -1,102 +1,219 @@
-"""Explicit instructor approval only. Content generation/editing remains C's scope."""
-from botocore.exceptions import BotoCoreError, ClientError
-from sqlalchemy.exc import OperationalError
+#Quản lý luồng kiểm duyệt học liệu của giảng viên (Human-in-the-loop)
+"""Điều phối sinh bản nháp và phê duyệt bởi giảng viên sở hữu khóa học."""
+
+import hashlib
+import json
+
 from sqlalchemy.orm import Session
 
-from app.adapters.storage.s3_storage import S3StorageAdapter
-from app.lesson_states import LessonStatus
-from app.repositories import courses_repo, lessons_repo
-from app.services import lesson_service
-from app.utils.errors import AppError, ConflictError, ExternalServiceError, ForbiddenError, NotFoundError
-from app.utils.logging import get_logger
-
-logger = get_logger(__name__)
-
-
-class ApprovalSchemaNotReadyError(AppError):
-    status_code = 503
-    code = "APPROVAL_SCHEMA_NOT_READY"
-    default_message = "The Lesson approval schema has not been applied."
+from app.adapters.ai.base import BaseAIAdapter
+from app.models.lesson import Lesson
+from app.models.quiz import Quiz
+from app.repositories import review_repo
+from app.schemas.review import (
+    DraftApproval, DraftContent, DraftGeneration, DraftUpdate, ReviewResponse,
+)
 
 
-class ApprovalStorageError(ExternalServiceError):
-    code = "APPROVAL_STORAGE_UNAVAILABLE"
-    default_message = "The processed video cannot currently be verified."
+class ReviewError(Exception):
+    """Biểu diễn lỗi nghiệp vụ duyệt bài với mã HTTP ổn định.
+
+    Vai trò kiến trúc: Service.
+    """
+
+    def __init__(self, status_code: int, message: str) -> None:
+        """Ghi mã lỗi và thông báo không chứa dữ liệu nội bộ.
+
+        Args:
+            status_code: Mã HTTP tương ứng.
+            message: Thông báo dành cho giảng viên.
+        """
+        super().__init__(message)
+        self.status_code = status_code
 
 
-def validate_review_content(lesson) -> None:
-    # Generic presence/shape checks only. C owns transcript normalization and AI validation.
-    if not lesson.processed_video_key or not lesson.processed_video_key.strip():
-        raise ConflictError("A processed video is required for approval.", code="PROCESSED_VIDEO_REQUIRED")
-    if not isinstance(lesson.transcript_json, (dict, list)) or not lesson.transcript_json:
-        raise ConflictError("A non-empty transcript is required for approval.", code="REVIEW_CONTENT_INCOMPLETE")
-    if not isinstance(lesson.summary, str) or not lesson.summary.strip():
-        raise ConflictError("A summary is required for approval.", code="REVIEW_CONTENT_INCOMPLETE")
-    if not isinstance(lesson.key_concepts_json, list) or not lesson.key_concepts_json:
-        raise ConflictError("Key concepts are required for approval.", code="REVIEW_CONTENT_INCOMPLETE")
+def _owned_lesson(
+    db: Session, lesson_id: int, instructor_id: int,
+) -> Lesson:
+    """Xác minh giảng viên và quyền sở hữu bài học.
+
+    Args:
+        db: Session hiện tại.
+        lesson_id: Bài học cần duyệt.
+        instructor_id: Tài khoản thực hiện.
+
+    Returns:
+        Bài học đã được kiểm tra quyền.
+    """
+    if not review_repo.is_instructor(db, instructor_id):
+        raise ReviewError(403, "Instructor role required.")
+    context = review_repo.get_context(db, lesson_id)
+    if context is None:
+        raise ReviewError(404, "Lesson not found.")
+    lesson, course = context
+    if course.instructor_id != instructor_id:
+        raise ReviewError(403, "You do not own this course.")
+    return lesson
 
 
-def _verify_processed_video(key: str) -> None:
-    try:
-        metadata = S3StorageAdapter().head_video(key)
-    except ClientError as exc:
-        code = str(exc.response.get("Error", {}).get("Code", ""))
-        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-        logger.warning("Approval video verification failed exception_type=%s", type(exc).__name__)
-        if code != "NoSuchBucket" and (code in {"404", "NoSuchKey", "NotFound"} or status == 404):
-            raise ConflictError("The processed video was not found.", code="PROCESSED_VIDEO_NOT_FOUND") from None
-        raise ApprovalStorageError() from None
-    except BotoCoreError as exc:
-        logger.warning("Approval video verification failed exception_type=%s", type(exc).__name__)
-        raise ApprovalStorageError() from None
-    if not isinstance(metadata.get("ContentLength"), int) or metadata["ContentLength"] <= 0:
-        raise ConflictError("The processed video is empty or invalid.", code="INVALID_PROCESSED_VIDEO")
+def _response(
+    db: Session, lesson: Lesson, quiz: Quiz | None,
+) -> ReviewResponse:
+    """Tạo DTO và dấu phiên bản từ nội dung hiện tại.
+
+    Args:
+        db: Session hiện tại.
+        lesson: Bài học cần biểu diễn.
+        quiz: Quiz cấp section.
+
+    Returns:
+        Bản nháp gồm đáp án; chỉ dùng trong API giảng viên.
+    """
+    if quiz is None or lesson.status not in (
+        "REVIEW_REQUIRED", "PUBLISHED",
+    ):
+        raise ReviewError(409, "No reviewable draft exists.")
+    values = dict(
+        lesson_id=lesson.id, section_id=lesson.section_id, quiz_id=quiz.id,
+        title=lesson.title, summary=lesson.summary,
+        key_concepts=lesson.key_concepts_json, quiz_title=quiz.title,
+        questions=[
+            dict(
+                question=item.question, options=item.options_json,
+                correct_answer=item.correct_answer,
+                explanation=item.explanation,
+            )
+            for item in review_repo.get_questions(db, quiz.id)
+        ],
+        status=lesson.status, quiz_approved=quiz.is_approved,
+    )
+    revision = hashlib.sha256(
+        json.dumps(values, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+    ).hexdigest()
+    return ReviewResponse(**values, revision=revision)
 
 
-def _response(lesson) -> dict:
-    return {"lesson_id": lesson.id, "status": lesson.status, "updated_at": lesson.updated_at}
+def get_draft(
+    db: Session, *, lesson_id: int, instructor_id: int,
+) -> ReviewResponse:
+    """Lấy nội dung chờ duyệt của giảng viên sở hữu.
+
+    Args:
+        db: Session hiện tại.
+        lesson_id: Mã bài học.
+        instructor_id: Mã giảng viên.
+
+    Returns:
+        DTO bản nháp và phiên bản hiện tại.
+    """
+    lesson = _owned_lesson(db, lesson_id, instructor_id)
+    return _response(db, lesson, review_repo.get_quiz(db, lesson.section_id))
 
 
-def approve_lesson(db: Session, lesson_id: int, *, instructor_id: int) -> dict:
-    try:
-        lesson, course = lesson_service.get_lesson_for_management(
-            db, lesson_id, user_id=instructor_id, user_role="INSTRUCTOR"
-        )
-        # Same order as retry/publish, including re-reading under the row lock.
-        course = courses_repo.lock_by_id(db, course.id)
-        if course is None:
-            raise NotFoundError("Course not found.")
-        if course.instructor_id != instructor_id:
-            raise ForbiddenError("You do not own this course.")
-        lesson = lessons_repo.lock_by_id(db, lesson_id)
-        if lesson is None:
-            raise NotFoundError("Lesson not found.")
-        if lesson.status == LessonStatus.APPROVED.value:
-            db.commit()
-            return _response(lesson)
-        if course.status != "DRAFT":
-            raise ConflictError("New approvals require a draft course.", code="COURSE_NOT_DRAFT")
-        if lesson.status != LessonStatus.REVIEW_REQUIRED.value:
-            raise ConflictError("Only lessons awaiting review can be approved.", code="LESSON_NOT_REVIEWABLE")
-        validate_review_content(lesson)
-        if not lessons_repo.approval_schema_ready(db):
-            raise ApprovalSchemaNotReadyError()
-        _verify_processed_video(lesson.processed_video_key)
-        lessons_repo.mark_approved(db, lesson)
-        db.commit()
-        logger.info("Lesson approved lesson_id=%s instructor_id=%s", lesson.id, instructor_id)
-        return _response(lesson)
-    except (lesson_service.LessonNotFoundError, lesson_service.SectionNotFoundError, lesson_service.CourseNotFoundError) as exc:
-        db.rollback()
-        raise NotFoundError(str(exc)) from None
-    except (lesson_service.CourseOwnershipError, lesson_service.LessonAccessDeniedError) as exc:
-        db.rollback()
-        raise ForbiddenError(str(exc)) from None
-    except OperationalError as exc:
-        db.rollback()
-        if getattr(exc.orig, "pgcode", None) == "55P03":
-            raise ConflictError("Another operation is updating this course or lesson.", code="REVIEW_BUSY") from None
-        raise
-    except Exception:
-        db.rollback()
-        raise
+def _editable(db: Session, quiz: Quiz | None) -> None:
+    """Ngăn sửa đề đã có lượt làm bài.
+
+    Args:
+        db: Session đã khóa.
+        quiz: Quiz hiện có hoặc None.
+
+    Returns:
+        None nếu có thể lưu mà không phá lịch sử.
+    """
+    if quiz is not None and review_repo.has_attempts(db, quiz.id):
+        raise ReviewError(409, "Quiz has attempts; a new version is required.")
+
+
+def generate_draft(
+    db: Session, *, lesson_id: int, instructor_id: int,
+    payload: DraftGeneration, ai: BaseAIAdapter,
+) -> ReviewResponse:
+    """Sinh nội dung ngoài khóa DB rồi lưu nguyên tử ở trạng thái chờ.
+
+    Args:
+        db: Session hiện tại.
+        lesson_id: Mã bài học.
+        instructor_id: Mã giảng viên.
+        payload: Transcript và cấu hình sinh.
+        ai: Adapter được tiêm để tránh gọi AWS thật khi kiểm thử.
+
+    Returns:
+        Nội dung REVIEW_REQUIRED, kể cả khi dùng Mock.
+    """
+    _owned_lesson(db, lesson_id, instructor_id)
+    summary = ai.generate_summary(payload.transcript)
+    concepts = ai.extract_key_concepts(payload.transcript)
+    quiz_data = ai.generate_quiz(
+        payload.transcript, num_questions=payload.num_questions,
+    )
+    content = DraftContent(
+        title=summary["title"], summary=summary["summary"],
+        key_concepts=concepts, quiz_title=summary["title"],
+        questions=quiz_data["questions"],
+    )
+    with review_repo.transaction(db):
+        review_repo.lock_section(db, lesson_id)
+        lesson = _owned_lesson(db, lesson_id, instructor_id)
+        quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+        _editable(db, quiz)
+        quiz = review_repo.replace_content(db, lesson, quiz, content)
+        lesson.transcript_json = {"text": payload.transcript}
+        result = _response(db, lesson, quiz)
+    return result
+
+
+def update_draft(
+    db: Session, *, lesson_id: int, instructor_id: int,
+    payload: DraftUpdate,
+) -> ReviewResponse:
+    """Thay nội dung nháp sau khi kiểm tra phiên bản và quyền.
+
+    Args:
+        db: Session hiện tại.
+        lesson_id: Mã bài học.
+        instructor_id: Mã giảng viên.
+        payload: Nội dung đã kiểm tra và dấu phiên bản đã xem.
+
+    Returns:
+        Bản nháp mới; không tự phê duyệt.
+    """
+    with review_repo.transaction(db):
+        review_repo.lock_section(db, lesson_id)
+        lesson = _owned_lesson(db, lesson_id, instructor_id)
+        quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+        current = _response(db, lesson, quiz)
+        if current.revision != payload.expected_revision:
+            raise ReviewError(409, "Draft changed; reload before editing.")
+        if lesson.status != "REVIEW_REQUIRED":
+            raise ReviewError(409, "Only pending drafts can be edited.")
+        _editable(db, quiz)
+        review_repo.replace_content(db, lesson, quiz, payload)
+        result = _response(db, lesson, quiz)
+    return result
+
+
+def approve_draft(
+    db: Session, *, lesson_id: int, instructor_id: int,
+    payload: DraftApproval,
+) -> ReviewResponse:
+    """Duyệt đúng phiên bản được giảng viên xác nhận.
+
+    Args:
+        db: Session hiện tại.
+        lesson_id: Mã bài học.
+        instructor_id: Mã giảng viên.
+        payload: Dấu phiên bản được duyệt tường minh.
+
+    Returns:
+        Nội dung PUBLISHED; quiz chờ các bài nháp khác cùng section.
+    """
+    with review_repo.transaction(db):
+        review_repo.lock_section(db, lesson_id)
+        lesson = _owned_lesson(db, lesson_id, instructor_id)
+        quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+        current = _response(db, lesson, quiz)
+        if current.revision != payload.expected_revision:
+            raise ReviewError(409, "Draft changed; reload before approving.")
+        review_repo.approve(db, lesson, quiz)
+        result = _response(db, lesson, quiz)
+    return result

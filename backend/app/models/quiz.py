@@ -1,3 +1,4 @@
+#Quản lý bài kiểm tra và kết quả làm bài
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -15,9 +16,18 @@ from sqlalchemy import (
 )
 
 from app.database import Base
+from app.models.question import Question  # Giữ tương thích import của Người C.
+
+
+MIN_PASSING_SCORE = 80.0
 
 
 class Quiz(Base):
+    """Lưu cấu hình bài trắc nghiệm của một chương học.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quizzes"
     __table_args__ = (
         CheckConstraint(
@@ -37,7 +47,7 @@ class Quiz(Base):
     passing_score = Column(
         Numeric(5, 2),
         nullable=False,
-        default=80.00,
+        default=MIN_PASSING_SCORE,
         server_default=text("80.00"),
     )
     is_approved = Column(Boolean, nullable=False, default=False, server_default=text("false"))
@@ -51,6 +61,11 @@ class Quiz(Base):
 
 
 class QuizAttempt(Base):
+    """Lưu điểm và trạng thái đạt của mỗi lượt nộp bài.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quiz_attempts"
     __table_args__ = (
         CheckConstraint("score >= 0 AND score <= 100", name="ck_quiz_attempts_score"),
@@ -77,11 +92,16 @@ class QuizAttempt(Base):
     )
     score = Column(Numeric(5, 2), nullable=False)
     passed = Column(Boolean, nullable=False)
-    attempt_number = Column(Integer, nullable=False)
+    attempt_number = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class QuizAnswer(Base):
+    """Lưu lựa chọn và kết quả chấm từng câu trong một lượt thi.
+
+    Vai trò kiến trúc: SQLAlchemy Model.
+    """
+
     __tablename__ = "quiz_answers"
     __table_args__ = (
         UniqueConstraint("attempt_id", "question_id", name="uq_quiz_answers_attempt_question"),

@@ -4,6 +4,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     func,
@@ -20,7 +21,11 @@ class Course(Base):
         CheckConstraint(
             "jsonb_typeof(learning_objectives) = 'array'",
             name="ck_courses_learning_objectives_array",
-        ),
+        ).ddl_if(dialect="postgresql"),
+        CheckConstraint(
+            "json_type(learning_objectives) = 'array'",
+            name="ck_courses_learning_objectives_array_sqlite",
+        ).ddl_if(dialect="sqlite"),
         CheckConstraint(
             "status IN ('DRAFT', 'PUBLISHED')",
             name="ck_courses_status",
@@ -37,10 +42,10 @@ class Course(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     learning_objectives = Column(
-        JSONB,
+        JSON().with_variant(JSONB(), "postgresql"),
         nullable=False,
         default=list,
-        server_default=text("'[]'::jsonb"),
+        server_default=text("'[]'"),
     )
     status = Column(
         String(20),

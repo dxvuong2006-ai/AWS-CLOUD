@@ -1,7 +1,118 @@
+#Định nghĩa hợp đồng dữ liệu (Data Transfer Objects - DTO) cho luồng làm bài thi và kiểm tra mở khóa bài học.
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AliasChoices, BaseModel, ConfigDict, Field, model_validator,
+)
+
+
+class QuestionResponse(BaseModel):
+    """Biểu diễn câu hỏi cho học viên mà không lộ đáp án.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    id: int
+    quiz_id: int
+    question: str
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
+    position: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuestionResultResponse(BaseModel):
+    """Biểu diễn đáp án và lời giải sau khi nộp bài.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    id: int
+    quiz_id: int
+    question: str
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
+    selected_answer: str
+    correct_answer: str
+    is_correct: bool
+    explanation: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuizDetailResponse(BaseModel):
+    """Biểu diễn đề thi với các câu hỏi đã ẩn đáp án.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    id: int
+    section_id: int
+    title: str
+    passing_score: float
+    questions: list[QuestionResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuizAnswerSubmit(BaseModel):
+    """Tiếp nhận lựa chọn của học viên cho một câu hỏi.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    question_id: int
+    selected_answer: str
+
+
+class QuizSubmitRequest(BaseModel):
+    """Tiếp nhận danh sách câu trả lời trong lần nộp bài.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    answers: list[QuizAnswerSubmit]
+
+
+class QuizAttemptResponse(BaseModel):
+    """Biểu diễn điểm và chi tiết kết quả một lượt thi.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    id: int
+    quiz_id: int
+    student_id: int
+    score: float
+    passed: bool
+    attempt_number: int
+    created_at: datetime
+    results: list[QuestionResultResponse] | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuizHistoryItemResponse(BaseModel):
+    """Biểu diễn một lượt thi trong lịch sử học viên.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    id: int
+    quiz_id: int
+    quiz_title: str | None
+    score: float
+    passed: bool
+    attempt_number: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QuizCreateRequest(BaseModel):
@@ -10,9 +121,11 @@ class QuizCreateRequest(BaseModel):
     passing_score: Decimal = Field(default=Decimal("80.00"), ge=0, le=100)
 
 
+
 class QuizUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     passing_score: Decimal | None = Field(default=None, ge=0, le=100)
+
 
 
 class QuestionCreateRequest(BaseModel):
@@ -55,24 +168,6 @@ class QuestionCreateRequest(BaseModel):
         return self
 
 
-class QuestionResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    quiz_id: int
-    question: str
-    options_json: list[str]
-    explanation: str | None = None
-    topic: str | None = None
-    source_start_seconds: Decimal | None = None
-    source_end_seconds: Decimal | None = None
-    position: int
-    created_at: datetime
-
-
-class QuestionReviewResponse(QuestionResponse):
-    correct_answer: str
-
 
 class QuizResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -86,14 +181,6 @@ class QuizResponse(BaseModel):
     updated_at: datetime
 
 
-class QuizDetailResponse(QuizResponse):
-    questions: list[QuestionResponse]
-
-
-class QuizAnswerSubmit(BaseModel):
-    question_id: int
-    selected_answer: str | None = None
-
 
 class QuizAttemptSubmitRequest(BaseModel):
     answers: list[QuizAnswerSubmit] = Field(min_length=1)
@@ -106,26 +193,17 @@ class QuizAttemptSubmitRequest(BaseModel):
         return self
 
 
+
 class QuizAnswerResult(BaseModel):
     question_id: int
     selected_answer: str | None = None
     is_correct: bool
 
 
-class QuizAttemptResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    student_id: int
-    quiz_id: int
-    score: Decimal
-    passed: bool
-    attempt_number: int
-    created_at: datetime
-
 
 class QuizAttemptResultResponse(QuizAttemptResponse):
     answers: list[QuizAnswerResult]
+
 
 
 class QuizAnswerResponse(BaseModel):
@@ -137,3 +215,24 @@ class QuizAnswerResponse(BaseModel):
     selected_answer: str | None = None
     is_correct: bool
     created_at: datetime
+
+
+class QuestionReviewResponse(BaseModel):
+    """Biểu diễn đầy đủ câu hỏi cho bước duyệt của giảng viên.
+
+    Vai trò kiến trúc: Pydantic DTO.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    quiz_id: int
+    question: str
+    options_json: list[str]
+    explanation: str | None = None
+    topic: str | None = None
+    source_start_seconds: Decimal | None = None
+    source_end_seconds: Decimal | None = None
+    position: int
+    created_at: datetime
+    correct_answer: str
