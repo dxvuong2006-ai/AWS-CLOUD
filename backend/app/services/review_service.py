@@ -70,7 +70,7 @@ def _response(
         Bản nháp gồm đáp án; chỉ dùng trong API giảng viên.
     """
     if quiz is None or lesson.status not in (
-        "REVIEW_REQUIRED", "APPROVED",
+        "REVIEW_REQUIRED", "PUBLISHED",
     ):
         raise ReviewError(409, "No reviewable draft exists.")
     values = dict(
@@ -205,7 +205,7 @@ def approve_draft(
         payload: Dấu phiên bản được duyệt tường minh.
 
     Returns:
-        Nội dung APPROVED; quiz chờ các bài nháp khác cùng section.
+        Nội dung PUBLISHED; quiz chờ các bài nháp khác cùng section.
     """
     with review_repo.transaction(db):
         review_repo.lock_section(db, lesson_id)

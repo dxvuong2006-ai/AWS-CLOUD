@@ -156,11 +156,11 @@ def test_edit_then_explicit_approval(db_session, review_context):
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
         payload=DraftApproval(expected_revision=revised.revision),
     )
-    assert approved.status == "APPROVED"
+    assert approved.status == "PUBLISHED"
     assert approved.quiz_approved
     assert lesson_service.get_lesson_for_user(
         db_session, lesson.id, user_id=student.id, user_role="STUDENT",
-    ).status == "APPROVED"
+    ).status == "PUBLISHED"
     public = quiz_service.get_quiz_for_student(
         db_session, section_id=lesson.section_id,
     )
@@ -188,7 +188,7 @@ def test_quiz_waits_for_other_pending_lesson(db_session, review_context):
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
         payload=DraftApproval(expected_revision=first.revision),
     )
-    assert result.status == "APPROVED"
+    assert result.status == "PUBLISHED"
     assert not result.quiz_approved
     second = review_service.get_draft(
         db_session, lesson_id=other.id, instructor_id=owner.id,
@@ -398,13 +398,13 @@ def test_review_routes_enforce_role_and_ownership(db_session, review_context):
             response = client.get(url)
             assert response.status_code == 200
             assert response.json()["revision"] == draft.revision
-            assert client.put(url, json={"status": "APPROVED"}).status_code == 422
+            assert client.put(url, json={"status": "PUBLISHED"}).status_code == 422
             response = client.post(
                 url + "/approvals",
                 json={"expected_revision": draft.revision},
             )
             assert response.status_code == 200
-            assert response.json()["status"] == "APPROVED"
+            assert response.json()["status"] == "PUBLISHED"
     finally:
         app.dependency_overrides.clear()
 
@@ -437,8 +437,8 @@ def test_missing_lesson_and_missing_draft(db_session, review_context):
     assert exc.value.status_code == 409
 
 
-def test_approved_content_cannot_be_edited(db_session, review_context):
-    """Không cho phép sửa trực tiếp nội dung đã được duyệt."""
+def test_published_content_cannot_be_edited(db_session, review_context):
+    """Không cho phép sửa trực tiếp nội dung đã được publish."""
     draft = make_draft(db_session, review_context)
     owner, _, _, lesson = review_context
     approved = review_service.approve_draft(
@@ -459,7 +459,7 @@ def test_approved_content_cannot_be_edited(db_session, review_context):
 
 
 def test_mock_fallback_still_requires_review(db_session, review_context):
-    """Nội dung dự phòng không thể tự trở thành APPROVED."""
+    """Nội dung dự phòng không thể tự chuyển thành PUBLISHED."""
     owner, _, _, lesson = review_context
     client = Mock()
     client.invoke_model.side_effect = NoCredentialsError()
@@ -475,7 +475,7 @@ def test_mock_fallback_still_requires_review(db_session, review_context):
 
 
 def test_approval_failure_rolls_back_status(db_session, review_context):
-    """Lỗi cập nhật quiz phải rollback cả trạng thái APPROVED của bài học."""
+    """Lỗi cập nhật quiz phải rollback trạng thái publish của bài học."""
     draft = make_draft(db_session, review_context)
     owner, _, _, lesson = review_context
 
@@ -522,7 +522,7 @@ def test_postgresql_model_ddl_and_review_lock(db_session):
     ddl = str(CreateTable(Lesson.__table__).compile(
         dialect=postgresql.dialect(),
     ))
-    assert "'APPROVED'" in ddl
+    assert "'PUBLISHED'" in ddl
     assert "JSONB" in ddl
     db = Mock()
     db.get_bind.return_value.dialect.name = "postgresql"

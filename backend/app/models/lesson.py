@@ -22,7 +22,7 @@ class Lesson(Base):
         CheckConstraint("position > 0", name="ck_lessons_position"),
         CheckConstraint(
             "status IN ('DRAFT', 'UPLOADED', 'PROCESSING', 'TRANSCRIBING', "
-            "'AI_PROCESSING', 'REVIEW_REQUIRED', 'APPROVED', 'PUBLISHED', 'FAILED')",
+            "'AI_PROCESSING', 'REVIEW_REQUIRED', 'PUBLISHED', 'FAILED')",
             name="ck_lessons_status",
         ),
         CheckConstraint(

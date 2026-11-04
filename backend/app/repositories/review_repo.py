@@ -198,7 +198,7 @@ def approve(db: Session, lesson: Lesson, quiz: Quiz) -> None:
     Returns:
         None; thay đổi vẫn thuộc giao dịch của bên gọi.
     """
-    lesson.status = "APPROVED"
+    lesson.status = "PUBLISHED"
     db.flush()
     pending = db.query(Lesson.id).filter(
         Lesson.section_id == lesson.section_id,
@@ -220,9 +220,9 @@ def list_visible_lessons(
         limit: Số phần tử tối đa.
 
     Returns:
-        Bài APPROVED hoặc PUBLISHED tương thích dữ liệu cũ.
+        Bài đã được publish sau review.
     """
     return db.query(Lesson).filter(
         Lesson.section_id == section_id,
-        Lesson.status.in_(("APPROVED", "PUBLISHED")),
+        Lesson.status == "PUBLISHED",
     ).order_by(Lesson.position, Lesson.id).offset(skip).limit(limit).all()

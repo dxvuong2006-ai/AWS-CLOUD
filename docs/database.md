@@ -67,7 +67,7 @@ owner, enrollment, publish/review và unlock trước khi đọc/ghi dữ liệu
 
 ```text
 DRAFT → UPLOADED → PROCESSING → TRANSCRIBING → AI_PROCESSING
-      → REVIEW_REQUIRED → APPROVED → PUBLISHED
+      → REVIEW_REQUIRED → PUBLISHED
 ```
 
 `FAILED` có thể phát sinh tại các bước xử lý; `error_message` và `retry_count`
