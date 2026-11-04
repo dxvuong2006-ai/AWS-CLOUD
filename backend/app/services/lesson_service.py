@@ -212,6 +212,21 @@ def get_lesson_for_user(
         raise LessonAccessDeniedError("Lesson is awaiting instructor approval.")
     return lesson
 
+
+def get_lesson_for_management(
+    db: Session, lesson_id: int, *, user_id: int, user_role: str, allow_admin: bool = False
+):
+    lesson = lessons_repo.get_by_id(db, lesson_id)
+    if lesson is None:
+        raise LessonNotFoundError("Lesson not found.")
+    _, course = _get_section_and_course(db, lesson.section_id)
+    if allow_admin and user_role.upper() == "ADMIN":
+        return lesson, course
+    if user_role.upper() != "INSTRUCTOR":
+        raise LessonAccessDeniedError("Instructor role required.")
+    _check_lesson_access(db, course, user_id, user_role)
+    return lesson, course
+
 # cập nhật lesson
 def update_lesson(
     db: Session, *, lesson_id: int, instructor_id: int, changes: dict

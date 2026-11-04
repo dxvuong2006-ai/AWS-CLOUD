@@ -1,0 +1,8 @@
+{
+  "InputPathsMap": {
+    "bucket": "$.detail.bucket.name",
+    "key": "$.detail.object.key",
+    "etag": "$.detail.object.etag"
+  },
+  "InputTemplate": "{\"kind\":\"upload\",\"bucket\":<bucket>,\"key\":<key>,\"etag\":<etag>}"
+}

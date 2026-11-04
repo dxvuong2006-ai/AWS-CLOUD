@@ -15,12 +15,31 @@ sau vào `schema_migrations`:
 | `0001` | LearnCloud core schema. |
 | `0002` | Flashcard, approval state và các constraint/trigger integrity. |
 
-Migration `0003_reconcile_legacy_schema.sql` bổ sung các cột mà database cũ
-có thể chưa có, gồm `password_hash`, timestamp của course/section và các trường
-bổ sung của lesson. Chạy migration này sau snapshot để nâng cấp database hiện
-có mà không xóa dữ liệu. Các migration tiếp theo bắt đầu từ **`0004_...sql`**.
+Repository hiện **không có** file `0003_reconcile_legacy_schema.sql` từng được
+nhắc trong tài liệu. Không coi `0003` là đã áp dụng hoặc tự tạo version giả.
+`V1__add_password_hash_to_users.sql` là script legacy riêng, không theo bộ chạy
+version bốn chữ số bên dưới.
+
+`0004_add_lesson_approved_status.sql` bổ sung APPROVED vào CHECK Lesson, đồng bộ
+chín trạng thái của contract/model. Script chưa được tự áp dụng; cần đọc
+[hướng dẫn review và preflight](../../docs/lesson-approval-migration.md) trước.
+Migration này không phụ thuộc file `0003` bị thiếu; nó yêu cầu bảng Lesson và
+schema_migrations của bootstrap hiện tại đã tồn tại. File tiếp theo dùng số
+version chưa được dùng trong repository/database chung.
 Không tạo lại `0001`/`0002`, và không thêm script cố đánh dấu lại hai version đó
 sau khi đã chạy `schema.sql`.
+
+Với DB đã có dữ liệu, không chạy lại `schema.sql` để nâng cấp CHECK: lệnh
+`CREATE TABLE IF NOT EXISTS` không sửa constraint của bảng đã tồn tại.
+
+`0005_video_pipeline_ledger.sql` đã được review, **chưa tự áp dụng**. Tạo upload
+intents/processing ledger, ghi version 0005 cùng transaction và ràng buộc composite
+upload/lesson. Yêu cầu 0004 đã ghi/validated; không thay đổi migration 0004.
+Đây là file **one-time**: tự từ chối chạy lại hoặc nhận schema tồn tại không rõ lịch sử;
+bộ chạy registry bên dưới sẽ bỏ qua version đã có. Không drop/adopt bảng cũ để ép pass.
+Chạy [preflight chỉ đọc](../checks/video_pipeline_preflight.sql) và xem
+[review + PowerShell backup/apply/verify](../../docs/video-pipeline-migration-0005.md)
+trước khi tự triển khai; không chạy mọi migration chỉ để kiểm tra riêng 0005.
 
 `seed.sql` là dữ liệu demo, không phải migration. Kiểu khóa chính hiện tại là
 `SERIAL`/`INTEGER`; migration mới phải khớp kiểu này và các model SQLAlchemy.

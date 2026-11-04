@@ -14,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
+from app.lesson_states import LESSON_STATUS_CHECK
 
 
 class Lesson(Base):

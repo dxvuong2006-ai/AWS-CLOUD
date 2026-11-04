@@ -303,6 +303,28 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["X-Amz-Expires"], ["900"])
         self.assertEqual(unquote(urlsplit(url).path), "/lessons/8/raw/upload-test.mp4")
 
+    async def test_upload_api_still_returns_sigv4_put(self):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/lessons/8/upload-url", json={
+                "filename": "input.mp4", "content_type": "video/mp4", "file_size": 1024,
+            })
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["method"], "PUT")
+        self.assertEqual(payload["content_type"], "video/mp4")
+        self.assertTrue(payload["object_key"].startswith("lessons/8/raw/"))
+        self.assertEqual(parse_qs(urlsplit(payload["upload_url"]).query)["X-Amz-Algorithm"], ["AWS4-HMAC-SHA256"])
+        self.assertEqual(self.db.execute.call_args.args[1], {"lesson_id": 8, "instructor_id": 1})
+
+    async def test_upload_api_still_requires_instructor(self):
+        self.user.role = "STUDENT"
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/lessons/8/upload-url", json={
+                "filename": "input.mp4", "content_type": "video/mp4", "file_size": 1024,
+            })
+        self.assertEqual(response.status_code, 403)
+        self.factory.assert_not_called()
+
     async def test_openapi_response_and_identity_dependency(self):
         response = await self.get("/openapi.json")
         operation = response.json()["paths"]["/lessons/{lesson_id}/video-url"]["get"]

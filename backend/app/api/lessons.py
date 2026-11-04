@@ -8,10 +8,55 @@ from app.schemas.lesson import (
     LessonResponse,
     LessonUpdateRequest,
     LessonVideoUrlResponse,
+    LessonProcessingStatusResponse,
 )
-from app.services import lesson_service
+from app.services import lesson_service, processing_service
 
 router = APIRouter(tags=["Lessons"])
+
+
+@router.get(
+    "/lessons/{lesson_id}/processing-status", response_model=LessonProcessingStatusResponse,
+    responses={401: {"description": "Invalid user identity."}, 403: {"description": "Owning instructor required."}, 404: {"description": "Lesson not found."}},
+)
+def get_processing_status(
+    lesson_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return processing_service.get_processing_status(db, lesson_id, user_id=user.id, user_role=user.role)
+    except (
+        lesson_service.LessonNotFoundError, lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError, lesson_service.CourseOwnershipError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/lessons/{lesson_id}/retry", response_model=LessonProcessingStatusResponse, status_code=202,
+    responses={
+        401: {"description": "Invalid user identity."}, 403: {"description": "Owner or admin required."},
+        404: {"description": "Lesson or input video not found."}, 409: {"description": "Invalid state or concurrent operation."},
+        502: {"description": "Input storage unavailable."}, 503: {"description": "Workflow disabled or dispatch failed."},
+    },
+)
+def retry_lesson(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return processing_service.retry_lesson(db, lesson_id, user_id=user.id, user_role=user.role)
+    except (
+        lesson_service.LessonNotFoundError, lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError, lesson_service.CourseOwnershipError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
 
 
 def _raise_service_error(exc: Exception) -> None:

@@ -1,4 +1,8 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+from app.lesson_states import LessonStatus
 
 
 class LessonCreateRequest(BaseModel):
@@ -24,3 +28,17 @@ class LessonVideoUrlResponse(BaseModel):
     video_url: str
     expires_in: int
     content_type: str
+
+
+class LessonProcessingStatusResponse(BaseModel):
+    lesson_id: int
+    status: LessonStatus
+    retry_count: int = Field(ge=0)
+    error_message: str | None = None
+    updated_at: datetime
+
+
+class LessonApprovalResponse(BaseModel):
+    lesson_id: int
+    status: Literal["APPROVED"]
+    updated_at: datetime
