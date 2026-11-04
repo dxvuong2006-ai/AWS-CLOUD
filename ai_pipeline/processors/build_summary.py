@@ -51,7 +51,7 @@ _IMPORTANT_TERMS = (
 )
 logger = logging.getLogger(__name__)
 
-
+#Thuật toán chấm điểm câu theo quy tắc
 def _sentence_score(sentence: str) -> int:
     """Tính điểm quan trọng của một câu theo quy tắc.
 
@@ -68,7 +68,7 @@ def _sentence_score(sentence: str) -> int:
         score += 2
     return score
 
-
+#Bộ sinh tóm tắt dự phòng
 def _fallback_summary(transcript_text: str) -> dict:
     """Tạo bản tóm tắt dự phòng từ các câu trong transcript.
 
@@ -117,7 +117,7 @@ def _fallback_summary(transcript_text: str) -> dict:
         _SCHEMA_PATH,
     )
 
-
+#Thẩm định và đóng gói kết quả từ AI
 def _validate_summary(response: Any) -> dict:
     """Chuẩn hóa và kiểm tra phản hồi tóm tắt của AI.
 
@@ -149,7 +149,7 @@ def _validate_summary(response: Any) -> dict:
         _SCHEMA_PATH,
     )
 
-
+#Hàm điều phối chính và xử lý lỗi phân nhánh
 def build_summary(
     transcript_text: str,
     ai_client: Any = None,

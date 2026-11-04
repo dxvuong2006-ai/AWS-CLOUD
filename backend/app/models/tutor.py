@@ -1,3 +1,4 @@
+#Lưu phiên trợ lý AI kèm học
 from sqlalchemy import (
     CheckConstraint,
     Column,

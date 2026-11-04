@@ -86,7 +86,7 @@ def test_prompt_missing_or_malformed_is_reported(tmp_path):
     with pytest.raises(ValueError, match="unsupported placeholders"):
         render_prompt(unknown_placeholder, transcript_text="lecture")
 
-
+#Chống xung đột biến trong Prompt Engineering
 def test_prompt_rendering_does_not_rewrite_placeholder_text_in_transcript(tmp_path):
     prompt_path = tmp_path / "prompt.txt"
     prompt_path.write_text(
@@ -149,7 +149,7 @@ def test_malformed_ai_json_falls_back_for_summary_and_concepts():
     assert "database" in summary["summary"]
     assert concepts[0]["definition"] == "A database stores structured information."
 
-
+#Thẩm định chi tiết quy tắc lựa chọn câu hỏi
 def test_quiz_strips_options_before_duplicate_validation():
     question = _valid_quiz_question()
     question["options"] = [" A ", "A", "C", "D"]
@@ -164,7 +164,7 @@ def test_quiz_correct_answer_must_match_a_stripped_option():
     with pytest.raises(ValueError, match="exactly match"):
         quiz_module._validate_quiz({"questions": [question]})
 
-
+#Kiểm tra ranh giới Quiz Fallback và chặn đề thi mẫu lệch chủ đề
 def test_quiz_fixture_fallback_requires_relevant_transcript_and_enough_questions():
     with pytest.raises(ValueError, match="does not match this transcript"):
         build_quiz("Photosynthesis converts light energy into chemical energy.")
@@ -227,7 +227,7 @@ def test_summary_and_concepts_ai_json_and_schema_validation():
         SCHEMAS / "summary.schema.json",
     )
 
-
+#Bảo vệ tương thích ngược chữ ký hàm
 def test_public_signatures_remain_backward_compatible():
     assert list(inspect.signature(normalize_transcript).parameters) == ["raw_data"]
     assert list(inspect.signature(build_summary).parameters) == [
@@ -261,7 +261,7 @@ def test_schema_helper_rejects_invalid_final_output():
             SCHEMAS / "quiz.schema.json",
         )
 
-
+#Phân định chính sách xử lý khi mất Prompt
 def test_prompt_missing_causes_transcript_fallback_in_summary_and_concepts(
     monkeypatch,
 ):
@@ -276,7 +276,6 @@ def test_prompt_missing_causes_transcript_fallback_in_summary_and_concepts(
     )
     assert summary["summary"] == "A system stores data."
     assert concepts[0]["definition"] == "A system stores data."
-
 
 def test_quiz_prompt_missing_is_visible_for_configured_ai_client(monkeypatch):
     monkeypatch.setattr(quiz_module, "_PROMPT_PATH", Path("missing-quiz-prompt.txt"))

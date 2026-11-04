@@ -33,7 +33,7 @@ _SCHEMA_PATH = (
 )
 logger = logging.getLogger(__name__)
 
-
+#Xác thực nghiệp vụ chi tiết
 def validate_key_concepts(result: Any) -> list[dict[str, str]]:
     """Chuẩn hóa danh sách thuật ngữ và định nghĩa.
 
@@ -65,7 +65,7 @@ def validate_key_concepts(result: Any) -> list[dict[str, str]]:
         raise ValueError("AI response must contain at least one key concept.")
     return concepts
 
-
+#Chốt chặn hợp đồng lược đồ
 def _validate_concepts(response: Any) -> list[dict[str, str]]:
     """Phân tích và kiểm tra phản hồi khái niệm của AI.
 
@@ -95,7 +95,7 @@ def _validate_concepts(response: Any) -> list[dict[str, str]]:
     )
     return concepts
 
-
+#Thuật toán trích xuất dự phòng
 def _fallback_concepts(transcript_text: str) -> list[dict[str, str]]:
     """Trích xuất khái niệm dự phòng từ transcript.
 
@@ -118,6 +118,7 @@ def _fallback_concepts(transcript_text: str) -> list[dict[str, str]]:
     return [{"term": "Ý chính", "definition": definition}]
 
 
+#Hàm điều phối chính và phân nhánh dự phòng
 def build_key_concepts(
     transcript_text: str,
     ai_client: Any = None,

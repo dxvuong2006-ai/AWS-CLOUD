@@ -1,3 +1,4 @@
+#Quản lý ngân hàng câu hỏi và đáp án 
 from sqlalchemy import (
     CheckConstraint,
     Column,

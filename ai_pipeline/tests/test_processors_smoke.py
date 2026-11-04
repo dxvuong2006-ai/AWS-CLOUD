@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ProcessorSmokeTests(unittest.TestCase):
     """Verify output contracts and explicit failure/fallback policies."""
-
+    #Nạp dữ liệu mẫu và kiểm định hợp đồng Schema
     @classmethod
     def setUpClass(cls):
         """Load mock data only inside the test harness."""
@@ -56,6 +56,7 @@ class ProcessorSmokeTests(unittest.TestCase):
         self.assertEqual(set(quiz), {'questions'})
         self.assertIn('options', quiz['questions'][0])
 
+    #Chính sách riêng biệt của bộ tạo trắc nghiệm
     def test_quiz_fallback_default_and_strict_mode(self):
         with patch.object(Path, 'open', side_effect=AssertionError('file IO')):
             with self.assertRaises(AIClientError):
@@ -77,10 +78,12 @@ class ProcessorSmokeTests(unittest.TestCase):
             build_quiz('Lecture text.', fail)
         self.assertIsInstance(error.exception.__cause__, TimeoutError)
 
+
     def test_quiz_rejects_malformed_response(self):
         with self.assertRaises(ValueError):
             build_quiz('Lecture text.', lambda _: 'not-json')
 
+    #Kiểm tra chính sách dự phòng và chế độ nghiêm ngặt
     def test_fallback_default_and_strict_mode(self):
         for builder in (build_summary, build_key_concepts):
             with self.subTest(builder=builder.__name__):
@@ -112,6 +115,7 @@ class ProcessorSmokeTests(unittest.TestCase):
                     )
                 self.assertTrue(result)
 
+    #Phân định lỗi AI và lỗi lập trình
     def test_known_provider_errors_allow_fallback(self):
         for builder in (build_summary, build_key_concepts):
             for error_type in (AIClientError, TimeoutError, ConnectionError):
@@ -158,6 +162,7 @@ class ProcessorSmokeTests(unittest.TestCase):
                             'Lecture text.', lambda _: self.summary,
                         ))
 
+    #Kiểm thử xử lý dữ liệu xấu và trường hợp biên
     def test_empty_transcript_is_not_content(self):
         for builder in (build_summary, build_key_concepts):
             with self.subTest(builder=builder.__name__):

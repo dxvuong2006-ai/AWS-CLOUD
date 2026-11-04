@@ -62,6 +62,7 @@ def extract_definition_concepts(text: str) -> list[dict[str, str]]:
     Returns:
         Danh sách cặp term/definition có thuật ngữ không trùng nhau.
     """
+    #Hàm bóc tách khái niệm bằng quy tắc
     definition_re = re.compile(
         r"\b(?P<marker>defined\s+as|is|are)\b|"
         r"(?P<vi_marker>bao gồm|cung cấp|là|cho phép)",
@@ -124,6 +125,7 @@ def render_prompt(
         ValueError: Thiếu, lặp hoặc xuất hiện biến thay thế không hỗ trợ.
         OSError: Không đọc được tệp chỉ dẫn.
     """
+    #Hàm ghép lời nhắc
     template = prompt_path.read_text(encoding="utf-8")
     values = {"transcript": transcript_text, **(replacements or {})}
     placeholders = list(_PLACEHOLDER_RE.finditer(template))
@@ -172,6 +174,7 @@ def call_ai_client(
     Raises:
         TypeError: Đối tượng không cung cấp giao diện gọi AI phù hợp.
     """
+    #Hàm điều phối gọi AI Client
     for method_name in transcript_methods:
         method = getattr(ai_client, method_name, None)
         if callable(method):
@@ -211,6 +214,7 @@ def call_ai_client(
     if callable(ai_client):
         return ai_client(prompt)
 
+
     methods = ", ".join(
         (*transcript_methods, "generate", "invoke", "__call__")
     )
@@ -229,6 +233,7 @@ def parse_json_response(response: Any) -> Any:
     Raises:
         ValueError: Chuỗi phản hồi không phải JSON hợp lệ.
     """
+    #Hàm phân tích phản hồi JSON
     if isinstance(response, (dict, list)):
         return response
     if not isinstance(response, str):
@@ -261,6 +266,7 @@ def validate_schema(data: Any, schema_path: Path) -> Any:
         OSError: Không đọc được tệp schema.
         SchemaError: Định nghĩa JSON Schema không hợp lệ.
     """
+    #Hàm kiểm định hợp đồng dữ liệu
     with schema_path.open(encoding="utf-8") as schema_file:
         schema = json.load(schema_file)
     Draft7Validator.check_schema(schema)
