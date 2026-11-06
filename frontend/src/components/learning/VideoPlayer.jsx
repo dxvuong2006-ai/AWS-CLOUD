@@ -1,126 +1,51 @@
 import { useEffect, useRef } from "react";
 import { mergeWatchedRanges } from "../../utils/watchedRanges";
-
-export default function VideoPlayer({
-  src,
-  sourceVersion = 0,
-  onError,
-  videoRef,
-  onTimeUpdate,
-  onProgress,
-  startAt = 0,
-}) {
-  const resumePosition = useRef(null);
-  useEffect(() => { if (sourceVersion > 0) videoRef.current?.load(); }, [sourceVersion, videoRef]);
-  const previous = useRef(null);
-  const ranges = useRef([]);
-  const lastSavedAt = useRef(0);
-
-  const beginSegment = (video) => {
-    previous.current =
-      !video.paused && !video.seeking && !video.ended
-        ? {
-            position: video.currentTime,
-            wallTime: performance.now(),
-            rate: video.playbackRate,
-          }
-        : null;
+import { acceptedPlaybackRange } from "../../utils/playback";
+import { PROGRESS_SAVE_INTERVAL_MS } from "../../config/learning";
+export default function VideoPlayer({src,sourceVersion=0,onError,videoRef,onTimeUpdate,onProgress,onStart,startAt=0}) {
+  const previous=useRef(null), ranges=useRef([]), lastSavedAt=useRef(0), resume=useRef(null), interacted=useRef(false);
+  const callbacks=useRef({onProgress,onTimeUpdate,onStart});
+  callbacks.current={onProgress,onTimeUpdate,onStart};
+  const begin=(video)=>{
+    previous.current=!video.paused && !video.seeking && !video.ended
+      ? {position:video.currentTime,wallTime:performance.now(),rate:video.playbackRate}:null;
   };
-
-  const recordSegment = (video) => {
-    const now = performance.now();
-    const before = previous.current;
-
-    if (before && !video.seeking) {
-      const mediaDelta = video.currentTime - before.position;
-      const wallDelta = (now - before.wallTime) / 1000;
-
-      // Kiểm tra bước tiến có hợp lý với thời gian và tốc độ phát.
-      // Đây chỉ là kiểm tra phía client cho mock.
-      const maxExpected = wallDelta * before.rate + 0.25;
-
-      if (
-        mediaDelta > 0 &&
-        wallDelta >= 0 &&
-        mediaDelta <= maxExpected
-      ) {
-        ranges.current = mergeWatchedRanges(
-          [...ranges.current, [before.position, video.currentTime]],
-          video.duration
-        );
-      }
-    }
-
-    beginSegment(video);
+  const record=(video)=>{
+    const range=acceptedPlaybackRange(previous.current,video.currentTime,performance.now(),video.seeking);
+    if(range)ranges.current=mergeWatchedRanges([...ranges.current,range],video.duration);
+    begin(video);
   };
-
-  const persist = (video) => {
-    if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-
-    lastSavedAt.current = performance.now();
-
-    onProgress?.(
-      video.currentTime,
-      video.duration,
-      ranges.current.map((range) => [...range])
-    );
+  const persist=(video)=>{
+    if(!interacted.current || !Number.isFinite(video.duration) || video.duration<=0)return;
+    lastSavedAt.current=performance.now();
+    callbacks.current.onProgress?.(video.currentTime,video.duration,ranges.current.map(r=>[...r]));
   };
-
-  return (
-    <div className="video-box">
-      <video
-        ref={videoRef}
-        src={src}
-        controls
-        onError={onError}
-        onEmptied={() => { previous.current = null; }}
-        onLoadedMetadata={(event) => {
-          const video = event.currentTarget;
-
-          previous.current = null;
-          lastSavedAt.current = performance.now();
-
-          const resume = resumePosition.current ?? startAt;
-          if (resume > 0 && resume < video.duration) {
-            video.currentTime = resume;
-          }
-        }}
-        onPlaying={(event) => beginSegment(event.currentTarget)}
-        onTimeUpdate={(event) => {
-          const video = event.currentTarget;
-
-          recordSegment(video);
-          resumePosition.current = video.currentTime;
-          onTimeUpdate?.(video.currentTime);
-
-          if (performance.now() - lastSavedAt.current >= 5000) {
-            persist(video);
-          }
-        }}
-        onSeeking={() => {
-          // Không nối vị trí trước tua với vị trí sau tua.
-          previous.current = null;
-        }}
-        onSeeked={(event) => beginSegment(event.currentTarget)}
-        onRateChange={(event) => {
-          // Bắt đầu đoạn mới với tốc độ mới.
-          beginSegment(event.currentTarget);
-        }}
-        onWaiting={(event) => {
-          recordSegment(event.currentTarget);
-          previous.current = null;
-        }}
-        onPause={(event) => {
-          recordSegment(event.currentTarget);
-          previous.current = null;
-          persist(event.currentTarget);
-        }}
-        onEnded={(event) => {
-          recordSegment(event.currentTarget);
-          previous.current = null;
-          persist(event.currentTarget);
-        }}
-      />
-    </div>
-  );
+  useEffect(()=>{
+    const video=videoRef.current;
+    const flush=()=>{if(video){record(video);persist(video);}};
+    const onHidden=()=>{if(document.visibilityState==="hidden")flush();};
+    window.addEventListener("pagehide",flush);document.addEventListener("visibilitychange",onHidden);
+    return ()=>{flush();window.removeEventListener("pagehide",flush);document.removeEventListener("visibilitychange",onHidden);};
+  },[videoRef]);
+  useEffect(()=>{if(sourceVersion>0)videoRef.current?.load();},[sourceVersion,videoRef]);
+  return <div className="video-box"><video ref={videoRef} src={src} controls onError={onError}
+    onEmptied={()=>{previous.current=null;}}
+    onLoadedMetadata={event=>{
+      const video=event.currentTarget;previous.current=null;lastSavedAt.current=performance.now();
+      const position=resume.current ?? startAt;
+      if(position>0 && position<video.duration)video.currentTime=position;
+    }}
+    onPlaying={event=>{interacted.current=true;callbacks.current.onStart?.();begin(event.currentTarget);}}
+    onTimeUpdate={event=>{
+      const video=event.currentTarget;if(video.readyState===0)return;
+      record(video);resume.current=video.currentTime;callbacks.current.onTimeUpdate?.(video.currentTime);
+      if(performance.now()-lastSavedAt.current>=PROGRESS_SAVE_INTERVAL_MS)persist(video);
+    }}
+    onSeeking={()=>{previous.current=null;}}
+    onSeeked={event=>{resume.current=event.currentTarget.currentTime;begin(event.currentTarget);}}
+    onRateChange={event=>{record(event.currentTarget);}}
+    onWaiting={event=>{record(event.currentTarget);previous.current=null;}}
+    onPause={event=>{record(event.currentTarget);previous.current=null;persist(event.currentTarget);}}
+    onEnded={event=>{record(event.currentTarget);previous.current=null;persist(event.currentTarget);}}
+  /></div>;
 }

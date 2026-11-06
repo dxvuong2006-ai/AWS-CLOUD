@@ -5,7 +5,7 @@ import { fetchCourseById } from "./courses.api";
 import { mockEnrollments, mockEnroll, mockUnlockedSections, mockPassedSections } from "../mocks/enrollment.mock";
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 function normalize(row) {
-  if (!row?.course?.id) throw new ApiError(502, "D? li?u ??ng k? h?c kh?ng h?p l?.");
+  if (!row?.course?.id) throw new ApiError(502, "Dữ liệu đăng ký học không hợp lệ.");
   return { ...row, course: { ...row.course, id: String(row.course.id) },
     resume_lesson_id: row.resume_lesson_id == null ? null : String(row.resume_lesson_id),
     unlocked_section_ids: (row.unlocked_section_ids ?? []).map(String) };
@@ -13,7 +13,7 @@ function normalize(row) {
 export async function fetchMyCourses() {
   if (!USE_MOCK) {
     const data = await request("/students/me/courses");
-    if (!Array.isArray(data)) throw new ApiError(502, "D? li?u kh?a h?c kh?ng h?p l?.");
+    if (!Array.isArray(data)) throw new ApiError(502, "Dữ liệu khóa học không hợp lệ.");
     return data.map(normalize);
   }
   const accountKey = mockStorageKey("learncloud.mock.progress.v2");
@@ -32,7 +32,7 @@ export async function fetchMyCourses() {
       resume_lesson_id: recent?.id ?? available[0]?.id ?? null,
       unlocked_section_ids: unlocked };
   }));
-  if (accountKey !== mockStorageKey("learncloud.mock.progress.v2")) throw new ApiError(401, "Phi?n ??ng nh?p ?? thay ??i.");
+  if (accountKey !== mockStorageKey("learncloud.mock.progress.v2")) throw new ApiError(401, "Phiên đăng nhập đã thay đổi.");
   return rows;
 }
 export async function enrollCourse(courseId) {
@@ -40,5 +40,5 @@ export async function enrollCourse(courseId) {
   return request(`/courses/${encodeURIComponent(courseId)}/enroll`, { method: "POST" });
 }
 export const enrollmentError = (error) => [404, 405, 501].includes(error?.status)
-  ? "Ch?c n?ng ??ng k? h?c ch?a ???c k?t n?i ??y ??. Vui l?ng th? l?i sau."
-  : error?.message || "Kh?ng t?i ???c ??ng k? h?c. Vui l?ng th? l?i.";
+  ? "Chức năng đăng ký học chưa được kết nối đầy đủ. Vui lòng thử lại sau."
+  : error?.message || "Không tải được đăng ký học. Vui lòng thử lại.";

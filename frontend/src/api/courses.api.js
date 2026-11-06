@@ -59,6 +59,6 @@ export async function fetchCourseById(id) {
     data = await request(`/courses/${encodeURIComponent(courseId)}`);
   }
 
-  if (data.status !== "PUBLISHED") throw new ApiError(404, "Kh?a h?c ch?a ???c xu?t b?n.");
+  if (data.status !== "PUBLISHED") throw new ApiError(404, "Khóa học chưa được xuất bản.");
   return normalizeCourse(data);
 }

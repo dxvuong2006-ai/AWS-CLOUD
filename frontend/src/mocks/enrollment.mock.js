@@ -7,7 +7,7 @@ const read = (key) => JSON.parse(localStorage.getItem(mockStorageKey(key)) || "{
 export const mockEnrollments = () => read(KEY);
 export function mockEnroll(courseId) {
   const course = courses.find(c => String(c.id) === String(courseId) && c.status === "PUBLISHED");
-  if (!course) throw new ApiError(404, "Kh?ng t?m th?y kh?a h?c ?? xu?t b?n.");
+  if (!course) throw new ApiError(404, "Không tìm thấy khóa học đã xuất bản.");
   const rows = read(KEY);
   if (!rows[courseId]) {
     rows[courseId] = { course_id: String(courseId), enrolled_at: new Date().toISOString() };
@@ -33,10 +33,10 @@ export function mockUnlockedSections(course) {
   return unlocked;
 }
 export function requireMockEnrollment(courseId, sectionId) {
-  if (!read(KEY)[courseId]) throw new ApiError(403, "B?n c?n ??ng k? kh?a h?c tr??c khi h?c.");
+  if (!read(KEY)[courseId]) throw new ApiError(403, "Bạn cần đăng ký khóa học trước khi học.");
   const course = courses.find(c => String(c.id) === String(courseId) && c.status === "PUBLISHED");
-  if (!course) throw new ApiError(404, "Kh?a h?c ch?a ???c xu?t b?n.");
+  if (!course) throw new ApiError(404, "Khóa học chưa được xuất bản.");
   if (sectionId != null && !mockUnlockedSections(course).includes(String(sectionId)))
-    throw new ApiError(403, "H?y ??t checkpoint c?a section tr??c ?? m? b?i h?c n?y.");
+    throw new ApiError(403, "Hãy đạt checkpoint của section trước để mở bài học này.");
   return course;
 }

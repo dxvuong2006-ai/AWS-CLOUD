@@ -19,20 +19,20 @@ export default function CourseDetailPage() {
     catch(err) { if(err.status===409) enrollments.reload(); setFailure(err); }
     finally { pending.current=false; setBusy(false); }
   }
-  if(loading)return <div className="page">?ang t?i...</div>;
-  if(error)return <div className="page"><p>Kh?ng t?i ???c kh?a h?c.</p><Link to="/courses">V? danh s?ch</Link></div>;
-  return <div className="page"><Link to="/courses">? Kh?m ph? kh?a h?c</Link>
+  if(loading)return <div className="page">Đang tải...</div>;
+  if(error)return <div className="page"><p>Không tải được khóa học.</p><Link to="/courses">Về danh sách</Link></div>;
+  return <div className="page"><Link to="/courses">← Khám phá khóa học</Link>
     <h1>{course.title}</h1><p>{course.description}</p>
-    {enrollments.loading ? <p>?ang ki?m tra ??ng k?...</p> : enrollment ? <>
-      <p>? ?? ??ng k?</p>{enrollment.resume_lesson_id && <Link className="btn-primary" to={`/courses/${courseId}/lessons/${enrollment.resume_lesson_id}`}>Ti?p t?c h?c</Link>}
-    </> : <button className="btn-primary" disabled={busy || success} onClick={enroll}>{busy ? "?ang ??ng k?..." : success ? "?? ??ng k?" : "??ng k? h?c"}</button>}
-    {(failure || enrollments.error) && <p role="alert">{enrollmentError(failure || enrollments.error)} <button onClick={enrollments.reload}>Th? t?i l?i</button></p>}
-    <h2>L? tr?nh kh?a h?c</h2>
+    {enrollments.loading ? <p>Đang kiểm tra đăng ký...</p> : enrollment ? <>
+      <p>✓ Đã đăng ký</p>{enrollment.resume_lesson_id && <Link className="btn-primary" to={`/courses/${courseId}/lessons/${enrollment.resume_lesson_id}`}>Tiếp tục học</Link>}
+    </> : <button className="btn-primary" disabled={busy || success} onClick={enroll}>{busy ? "Đang đăng ký..." : success ? "Đã đăng ký" : "Đăng ký học"}</button>}
+    {(failure || enrollments.error) && <p role="alert">{enrollmentError(failure || enrollments.error)} <button onClick={enrollments.reload}>Thử tải lại</button></p>}
+    <h2>Lộ trình khóa học</h2>
     <CourseOutline sections={course.sections} courseId={enrollment ? courseId : null} completedIds={completedIds} unlockedSectionIds={enrollment?.unlocked_section_ids ?? []} />
     <dialog ref={dialog} aria-labelledby="enrolled-title" onClose={()=>{}}>
-      <h2 id="enrolled-title">??ng k? th?nh c?ng</h2><p>Kh?a h?c ?? ???c th?m v?o Kh?a h?c c?a t?i.</p>
-      <button autoFocus className="btn-primary" onClick={()=>dialog.current.close()}>Xem l? tr?nh</button>
-      <p><Link to="/my-courses">Kh?a h?c c?a t?i</Link></p>
+      <h2 id="enrolled-title">Đăng ký thành công</h2><p>Khóa học đã được thêm vào Khóa học của tôi.</p>
+      <button autoFocus className="btn-primary" onClick={()=>dialog.current.close()}>Xem lộ trình</button>
+      <p><Link to="/my-courses">Khóa học của tôi</Link></p>
     </dialog>
   </div>;
 }

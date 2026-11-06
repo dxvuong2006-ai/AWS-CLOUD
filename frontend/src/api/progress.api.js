@@ -1,3 +1,5 @@
+import { MOCK_COMPLETION_PERCENT } from "../config/learning";
+import { requireMockEnrollment } from "../mocks/enrollment.mock";
 import { mockStorageKey } from "./session";
 import { request, ApiError } from "./client";
 import courses from "../mocks/courses.mock.json";
@@ -7,7 +9,7 @@ import {
   getWatchedSeconds,
 } from "../utils/watchedRanges";
 
-const COMPLETE_AT_PERCENT = 10;
+
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 
 // Tách khỏi dữ liệu cũ tính theo vị trí video.
@@ -46,7 +48,7 @@ function buildCourseProgress(courseId) {
         lesson_id: String(lesson.id),
         // Làm tròn xuống để 94,9% không hiển thị thành 95%.
         progress_percent: Math.floor(percent),
-        completed: percent >= COMPLETE_AT_PERCENT,
+        completed: percent >= MOCK_COMPLETION_PERCENT,
         last_position_seconds: saved.last_position_seconds ?? 0,
         watched_seconds: watchedSeconds,
         watched_ranges: ranges,
@@ -60,6 +62,7 @@ function buildCourseProgress(courseId) {
 
   return {
     course_id: String(courseId),
+    completion_threshold_percent: MOCK_COMPLETION_PERCENT,
     overall_percent: lessons.length
       ? Math.floor(total / lessons.length)
       : 0,
@@ -77,16 +80,20 @@ export async function fetchCourseProgress(courseId) {
 
 export async function saveLessonProgress(
   lessonId,
-  { lastPositionSeconds, durationSeconds, watchedRanges }
+  { lastPositionSeconds, durationSeconds, watchedRanges, courseId, sessionId, sequence, requestId }
 ) {
   if (!USE_MOCK) {
-    // Chưa có contract/backend nhận khoảng xem.
-    // Không âm thầm quay về cách tính bằng vị trí video.
-    throw new ApiError(
-      501,
-      "Backend chưa hỗ trợ lưu các khoảng video đã xem."
-    );
+    // Never send duration, a percentage or a client-side completed flag.
+    return request(`/lessons/${encodeURIComponent(lessonId)}/progress`, {
+      method: "PUT", timeoutMs: 15000, keepalive: true,
+      body: { last_position_seconds: lastPositionSeconds, watched_ranges: watchedRanges,
+        playback_session_id: sessionId, sequence, request_id: requestId },
+    });
   }
+  const course = requireMockEnrollment(courseId);
+  const section = course.sections.find(s => s.lessons.some(l => String(l.id) === String(lessonId)));
+  if (!section) throw new ApiError(404, "Bài học không thuộc khóa học.");
+  requireMockEnrollment(courseId, section.id);
 
   if (
     !Number.isFinite(durationSeconds) ||
@@ -122,4 +129,13 @@ export async function saveLessonProgress(
   localStorage.setItem(mockStorageKey(STORE_KEY), JSON.stringify(store));
 
   return saved;
+}
+export async function startViewingSession(lessonId, courseId) {
+  if (USE_MOCK) {
+    requireMockEnrollment(courseId);
+    return { id: crypto.randomUUID() };
+  }
+  const data = await request(`/lessons/${encodeURIComponent(lessonId)}/viewing-sessions`, { method: "POST", timeoutMs: 15000 });
+  if (!data?.id) throw new ApiError(502, "Không tạo được phiên xem video.");
+  return data;
 }

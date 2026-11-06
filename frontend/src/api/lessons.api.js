@@ -7,15 +7,15 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 function mockLesson(id, courseId) {
   const course = courses.find(c => String(c.id) === String(courseId));
   const section = course?.sections.find(s => s.lessons.some(l => String(l.id) === String(id)));
-  if (!section || !lessons[id]) throw new ApiError(404, "Kh?ng t?m th?y b?i h?c trong kh?a h?c.");
+  if (!section || !lessons[id]) throw new ApiError(404, "Không tìm thấy bài học trong khóa học.");
   requireMockEnrollment(courseId, section.id);
   return lessons[id];
 }
 export function normalizeLesson(data) {
   // Require an explicit publication marker; never display an unreviewed draft.
-  if (data.publication_status !== "PUBLISHED") throw new ApiError(403, "H?c li?u ch?a ???c xu?t b?n.");
-  if (data.processing_status === "FAILED") throw new ApiError(422, "Video x? l? th?t b?i. Vui l?ng quay l?i sau.");
-  if (data.processing_status !== "READY") throw new ApiError(409, "Video ?ang ???c x? l? ho?c ch?a s?n s?ng.");
+  if (data.publication_status !== "PUBLISHED") throw new ApiError(403, "Học liệu chưa được xuất bản.");
+  if (data.processing_status === "FAILED") throw new ApiError(422, "Video xử lý thất bại. Vui lòng quay lại sau.");
+  if (data.processing_status !== "READY") throw new ApiError(409, "Video đang được xử lý hoặc chưa sẵn sàng.");
   return {
     id: String(data.id), section_id: String(data.section_id), course_id: String(data.course_id), title: data.title,
     summary: typeof data.summary === "string" ? data.summary : "",
@@ -28,7 +28,7 @@ export function normalizeLesson(data) {
 export async function fetchLesson(lessonId, courseId) {
   const data = USE_MOCK ? mockLesson(lessonId, courseId)
     : await request(`/lessons/${encodeURIComponent(lessonId)}/content`);
-  if (String(data.course_id) !== String(courseId)) throw new ApiError(404, "B?i h?c kh?ng thu?c kh?a h?c n?y.");
+  if (String(data.course_id) !== String(courseId)) throw new ApiError(404, "Bài học không thuộc khóa học này.");
   return normalizeLesson(data);
 }
 export async function fetchLessonVideo(lessonId, courseId) {
@@ -40,12 +40,12 @@ export async function fetchLessonVideo(lessonId, courseId) {
   } else {
     result = await request(`/lessons/${encodeURIComponent(lessonId)}/video-url`);
   }
-  if (account !== mockStorageKey("media")) throw new ApiError(401, "Phi?n ??ng nh?p ?? thay ??i.");
+  if (account !== mockStorageKey("media")) throw new ApiError(401, "Phiên đăng nhập đã thay đổi.");
   if (typeof result.video_url !== "string" || !result.video_url ||
       !(result.video_url.startsWith("/") || /^https?:\/\//.test(result.video_url)))
-    throw new ApiError(502, "Ch?a c? URL video h?p l?.");
+    throw new ApiError(502, "Chưa có URL video hợp lệ.");
   const expiresAt = result.expires_at == null ? null : Date.parse(result.expires_at);
   if (expiresAt != null && (!Number.isFinite(expiresAt) || expiresAt <= Date.now()))
-    throw new ApiError(502, "URL video ?? h?t h?n. H?y th? l?i.");
+    throw new ApiError(502, "URL video đã hết hạn. Hãy thử lại.");
   return { videoUrl: result.video_url, expiresAt };
 }

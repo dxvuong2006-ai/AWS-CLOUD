@@ -17,8 +17,9 @@ export default function CourseListPage() {
 
   return (
     <div className="page">
-      <h1>Khóa học</h1>
+      <h1>Khám phá khóa học</h1>
       <input
+        aria-label="Tìm khóa học"
         placeholder="Tìm khóa học..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}

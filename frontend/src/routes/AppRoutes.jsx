@@ -45,7 +45,7 @@ export default function AppRoutes() {
         <Route path="/courses/:courseId" element={<CourseDetailPage />} />
         <Route path="/courses/:courseId/lessons/:lessonId" element={<LearningPage />} />
         <Route path="/courses/:courseId/sections/:sectionId/checkpoint" element={<CheckpointPage />} />
-        <Route path="/my-courses" element={<Pending title="Khóa học của tôi" />} />
+        <Route path="/my-courses" element={<MyCoursesPage />} />
         <Route path="/flashcards" element={<Pending title="Flashcard" />} />
         <Route path="/progress" element={<Pending title="Tiến độ" />} />
       </Route>

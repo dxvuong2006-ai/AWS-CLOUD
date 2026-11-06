@@ -1,3 +1,4 @@
+import { MOCK_COMPLETION_PERCENT } from "../config/learning";
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
@@ -10,8 +11,8 @@ import TranscriptPanel from "../components/learning/TranscriptPanel";
 import SummaryPanel from "../components/learning/SummaryPanel";
 
 function errorMessage(err) {
-  if (err?.status === 403) return "Bạn chưa mở khóa bài học này.";
-  if (err?.status === 404) return "Không tìm thấy bài học.";
+  if ([403,409,422,502].includes(err?.status)) return err.message;
+  if ([404,405,501].includes(err?.status)) return "Bài học chưa có học liệu khả dụng. Vui lòng thử lại sau.";
   return "Không tải được bài học.";
 }
 
@@ -92,11 +93,13 @@ useEffect(() => {
     return (
       <div className="page">
         <p>{errorMessage(lesson.error ?? course.error)}</p>
+        <button onClick={lesson.reload}>Thử lại</button>
         <Link to={`/courses/${courseId}`}>← Về khóa học</Link>
       </div>
     );
   }
 
+  if (progress.error) return <div className="page"><p role="alert">Không tải được tiến độ học. Hãy thử lại để khôi phục đúng vị trí.</p><button onClick={progress.reload}>Thử lại</button><p><Link to={`/courses/${courseId}`}>Về khóa học</Link></p></div>;
   const done = progress.courseProgress?.lessons.find(
     (l) => l.lesson_id === lessonId
   )?.completed;
@@ -156,17 +159,18 @@ useEffect(() => {
         </div>
       </div>
 
-      {import.meta.env.VITE_USE_MOCK === "true" && <p role="note">Ch? ?? demo: video v? h?c li?u m?u ?? ki?m th?.</p>}
+      {import.meta.env.VITE_USE_MOCK === "true" && <p role="note">Chế độ demo: video và học liệu mẫu. Ngưỡng hoàn thành bài: {MOCK_COMPLETION_PERCENT}%.</p>}
       {progress.saveError && (
         <p style={{ color: "var(--error)" }}>
           Không lưu được tiến độ học. Tiến độ gần nhất có thể chưa được ghi.
+          <button onClick={progress.retry}>Thử lưu lại</button>
         </p>
       )}
 
       <div className="learning-layout">
         <div className="learning-main">
-          {lesson.mediaError && <div role="alert"><p>{lesson.mediaError.message}</p><button disabled={lesson.refreshing} onClick={lesson.refreshVideo}>T?i l?i video</button></div>}
-          {lesson.refreshing && <p role="status">?ang l?y l?i video...</p>}
+          {lesson.mediaError && <div role="alert"><p>{lesson.mediaError.message}</p><button disabled={lesson.refreshing} onClick={lesson.refreshVideo}>Tải lại video</button></div>}
+          {lesson.refreshing && <p role="status">Đang lấy lại video...</p>}
           <VideoPlayer
             key={`${courseId}:${lessonId}`}
             src={lesson.media?.videoUrl}
@@ -176,6 +180,7 @@ useEffect(() => {
             onTimeUpdate={setCurrentTime}
             startAt={progress.lastPosition}
             onProgress={progress.save}
+            onStart={progress.start}
           />
           <SummaryPanel summary={lesson.data.summary} keyConcepts={lesson.data.keyConcepts} />
         </div>

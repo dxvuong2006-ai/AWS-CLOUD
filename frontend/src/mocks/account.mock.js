@@ -61,7 +61,7 @@ export async function accountMock(action, payload = {}) {
     data.users[email] = { id: crypto.randomUUID(), name: payload.name.trim(), email,
       salt, hash: await passwordHash(payload.password, salt), verified: false, version: 0 };
     const nextAt = issue(data, email, "verify"); write(data);
-    return { message: "Mã xác minh mô phỏng đã sẵn sàng.", retry_after: Math.ceil((nextAt-Date.now())/1000) };
+    return { verification_required: true, message: "Mã xác minh mô phỏng đã sẵn sàng.", retry_after: Math.ceil((nextAt-Date.now())/1000) };
   }
   if (action === "resend" || action === "forgot") {
     const nextAt = issue(data, email, action === "resend" ? "verify" : "reset");

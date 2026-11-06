@@ -17,7 +17,7 @@ export default function CourseOutline({
         <div key={s.id} className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 15, margin: "0 0 12px" }}>
             Section {i + 1}: {s.title}
-            {courseId && !unlockedSectionIds.includes(String(s.id)) && " ? Kh?a ? c?n ??t checkpoint tr??c"}
+            {courseId && !unlockedSectionIds.includes(String(s.id)) && " · Khóa — cần đạt checkpoint trước"}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {(s.lessons ?? []).map((l) => {

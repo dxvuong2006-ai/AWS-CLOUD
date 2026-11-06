@@ -52,6 +52,10 @@ export function RegisterPage() {
       checkPasswords(form.password, form.confirm);
       const email = form.email.trim().toLowerCase();
       const result = await registerStudent({ ...form, email });
+      if (result.verification_required !== true) {
+        navigate("/login", { replace: true, state: { message: "Đã tạo tài khoản. Bạn có thể đăng nhập. Xác minh email chưa được kết nối trên hệ thống này." } });
+        return;
+      }
       sessionStorage.setItem(`learncloud.cooldown:verify:${email}`, String(Date.now()+(result.retry_after ?? 60)*1000));
       navigate("/verify-email?email=" + encodeURIComponent(email));
     }); }}>

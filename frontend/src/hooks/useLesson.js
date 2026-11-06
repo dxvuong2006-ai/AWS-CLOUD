@@ -35,7 +35,7 @@ export function useLesson(lessonId, courseId) {
   },[media,refreshVideo]);
   const onVideoError=()=>{
     if(!autoRetried.current){autoRetried.current=true;refreshVideo();}
-    else setMediaError(new Error("Kh?ng ph?t ???c video. H?y ki?m tra k?t n?i r?i th? l?i."));
+    else setMediaError(new Error("Không phát được video. Hãy kiểm tra kết nối rồi thử lại."));
   };
   return {data,loading,error,media,mediaError,refreshing,sourceVersion,refreshVideo,onVideoError,reload:()=>setVersion(v=>v+1)};
 }
