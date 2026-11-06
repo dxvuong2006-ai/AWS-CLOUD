@@ -108,6 +108,7 @@ export async function saveLessonProgress(
   );
 
   const saved = {
+    updated_at: Date.now(),
     duration_seconds: durationSeconds,
     last_position_seconds: Math.floor(
       Math.max(0, Math.min(lastPositionSeconds, durationSeconds))

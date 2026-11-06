@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useCourses } from "../hooks/useCourses";
-import { useCoursesProgress } from "../hooks/useCoursesProgress";
+
 import CourseCard from "../components/courses/CourseCard";
 
 export default function CourseListPage() {
   const { data, loading, error } = useCourses();
-  const percents = useCoursesProgress(data);
+
   const [query, setQuery] = useState("");
 
   if (loading) return <div className="page">Đang tải...</div>;
@@ -31,8 +31,7 @@ export default function CourseListPage() {
             <CourseCard
               key={c.id}
               course={c}
-              showProgress={percents[c.id] !== undefined}
-              progress={percents[c.id] ?? 0}
+              showProgress={false}
             />
           ))}
         </div>

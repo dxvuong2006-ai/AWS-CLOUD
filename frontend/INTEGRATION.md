@@ -18,3 +18,10 @@ Pending backend contracts (no backend code changed):
 - Password changes/reset must invalidate old tokens on server. Profile email is read-only.
 Current backend register may create users without verification; do not claim the real verification flow
 works until those endpoints are delivered. Real API errors never silently fall back to mock.
+
+## 5. Enrollment and roadmap (frontend)
+- POST /courses/{id}/enroll exists. A 409 is treated as already enrolled and triggers reload; the frontend also blocks repeated clicks.
+- Pending backend: GET /students/me/courses returns an array of `{course:{id,title,...}, status:NOT_STARTED|IN_PROGRESS|COMPLETED, progress_percent, resume_lesson_id, unlocked_section_ids:[]}`. Missing endpoint shows a retryable error, never fake success or local fallback.
+- `unlocked_section_ids` and completion in real mode must come from backend. Mock opens the first section, then requires checkpoint passes in order; watched-video completion alone never unlocks the next section.
+- Mock enrollment, passes and progress persist per user in localStorage. New users must enroll; existing progress is preserved. Refresh/sign in again with the same account restores it.
+- Discovery shows only published course metadata. Backend must enforce authorization and avoid returning protected content in metadata; UI filtering is not an access-control boundary.

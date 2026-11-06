@@ -41,7 +41,7 @@ export async function fetchCourses() {
     data = await request("/courses");
   }
 
-  return data.map(normalizeCourse);
+  return data.filter(course => course.status === "PUBLISHED").map(normalizeCourse);
 }
 
 export async function fetchCourseById(id) {
@@ -59,5 +59,6 @@ export async function fetchCourseById(id) {
     data = await request(`/courses/${encodeURIComponent(courseId)}`);
   }
 
+  if (data.status !== "PUBLISHED") throw new ApiError(404, "Kh?a h?c ch?a ???c xu?t b?n.");
   return normalizeCourse(data);
 }

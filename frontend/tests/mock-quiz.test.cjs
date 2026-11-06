@@ -11,6 +11,7 @@ function setup(delay = fn => fn()) {
   const completed = new Set(), storage = {};
   class ApiError extends Error { constructor(status, detail) { super(detail); this.status = status; } }
   const context = vm.createContext({
+    requireMockEnrollment: () => {}, mockRecordPass: () => {},
     courses, quizData, ApiError, mockStorageKey: key => key + account, setTimeout: delay,
     localStorage: { getItem: k => storage[k] ?? null, setItem: (k,v) => storage[k] = v },
     request: () => { throw Error('Unexpected network request'); },

@@ -5,6 +5,7 @@ export default function CourseOutline({
   courseId,
   currentLessonId,
   completedIds = new Set(),
+  unlockedSectionIds = [],
 }) {
   if (!sections || sections.length === 0) {
     return <p>Khóa học chưa có nội dung.</p>;
@@ -16,6 +17,7 @@ export default function CourseOutline({
         <div key={s.id} className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 15, margin: "0 0 12px" }}>
             Section {i + 1}: {s.title}
+            {courseId && !unlockedSectionIds.includes(String(s.id)) && " ? Kh?a ? c?n ??t checkpoint tr??c"}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
             {(s.lessons ?? []).map((l) => {
@@ -39,7 +41,7 @@ export default function CourseOutline({
                   >
                     {done ? "✓" : "○"}
                   </span>
-                  {courseId ? (
+                  {courseId && unlockedSectionIds.includes(String(s.id)) ? (
                     <Link
                       to={`/courses/${courseId}/lessons/${l.id}`}
                       style={{

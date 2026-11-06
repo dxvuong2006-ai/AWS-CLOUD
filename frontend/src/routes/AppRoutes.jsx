@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
+import MyCoursesPage from "../pages/MyCoursesPage";
 import CourseListPage from "../pages/CourseListPage";
 import CourseDetailPage from "../pages/CourseDetailPage";
 import LearningPage from "../pages/LearningPage";

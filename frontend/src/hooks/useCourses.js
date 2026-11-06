@@ -7,10 +7,12 @@ export function useCourses() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let active = true;
     fetchCourses()
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false));
+      .then(value => { if (active) setData(value); })
+      .catch(err => { if (active) setError(err); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   return { data, loading, error };
@@ -22,12 +24,15 @@ export function useCourse(courseId) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let active = true;
+    setData(null);
     setLoading(true);
     setError(null);
     fetchCourseById(courseId)
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false));
+      .then(value => { if (active) setData(value); })
+      .catch(err => { if (active) setError(err); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [courseId]);
 
   return { data, loading, error };

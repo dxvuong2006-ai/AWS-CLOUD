@@ -1,3 +1,4 @@
+import { requireMockEnrollment, mockRecordPass } from "../mocks/enrollment.mock";
 import { mockStorageKey } from "./session";
 import { request, ApiError } from "./client";
 import quizData from "../mocks/quiz.mock.json";
@@ -59,6 +60,7 @@ async function requireMockCheckpointAccess(
   courseId,
   lessonId
 ) {
+  requireMockEnrollment(courseId, sectionId);
   const course = findCourse(courseId);
   const section = (course.sections ?? []).find(
     (item) => String(item.id) === String(sectionId)
@@ -260,6 +262,8 @@ export async function submitAttempt(
 
   const total = quiz.questions.length;
   const scorePercent = Math.round((correct / total) * 100);
+
+  if (scorePercent >= MOCK_PASS_PERCENT) mockRecordPass(course.id, section.id);
 
   return {
     attempt_number: nextAttemptNumber(quiz.id),
