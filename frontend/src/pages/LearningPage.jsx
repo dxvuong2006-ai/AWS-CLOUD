@@ -30,7 +30,7 @@ function locateLesson(sections, lessonId) {
 export default function LearningPage() {
   const { courseId, lessonId } = useParams();
   const course = useCourse(courseId);
-  const lesson = useLesson(lessonId);
+  const lesson = useLesson(lessonId, courseId);
   const progress = useLessonProgress(courseId, lessonId);
   const videoRef = useRef(null);
  
@@ -88,7 +88,7 @@ useEffect(() => {
   if (lesson.loading || course.loading || progress.loading) {
     return <div className="page">Đang tải...</div>;
   }
-  if (lesson.error || course.error) {
+  if (lesson.error || course.error || !where) {
     return (
       <div className="page">
         <p>{errorMessage(lesson.error ?? course.error)}</p>
@@ -104,8 +104,9 @@ useEffect(() => {
 
   const handleSeek = (seconds) => {
     if (videoRef.current) {
-      videoRef.current.currentTime = seconds;
-      videoRef.current.play();
+      if (!Number.isFinite(seconds) || !Number.isFinite(videoRef.current.duration)) return;
+      videoRef.current.currentTime = Math.max(0, Math.min(seconds, videoRef.current.duration));
+      videoRef.current.play().catch(() => {});
     }
   };
 
@@ -155,6 +156,7 @@ useEffect(() => {
         </div>
       </div>
 
+      {import.meta.env.VITE_USE_MOCK === "true" && <p role="note">Ch? ?? demo: video v? h?c li?u m?u ?? ki?m th?.</p>}
       {progress.saveError && (
         <p style={{ color: "var(--error)" }}>
           Không lưu được tiến độ học. Tiến độ gần nhất có thể chưa được ghi.
@@ -163,15 +165,19 @@ useEffect(() => {
 
       <div className="learning-layout">
         <div className="learning-main">
+          {lesson.mediaError && <div role="alert"><p>{lesson.mediaError.message}</p><button disabled={lesson.refreshing} onClick={lesson.refreshVideo}>T?i l?i video</button></div>}
+          {lesson.refreshing && <p role="status">?ang l?y l?i video...</p>}
           <VideoPlayer
             key={`${courseId}:${lessonId}`}
-            src={lesson.data.videoUrl}
+            src={lesson.media?.videoUrl}
+            sourceVersion={lesson.sourceVersion}
+            onError={lesson.onVideoError}
             videoRef={videoRef}
             onTimeUpdate={setCurrentTime}
             startAt={progress.lastPosition}
             onProgress={progress.save}
           />
-          <SummaryPanel summary={lesson.data.summary} />
+          <SummaryPanel summary={lesson.data.summary} keyConcepts={lesson.data.keyConcepts} />
         </div>
         <TranscriptPanel
           segments={lesson.data.transcript}

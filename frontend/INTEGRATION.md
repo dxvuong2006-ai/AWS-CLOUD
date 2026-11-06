@@ -25,3 +25,9 @@ works until those endpoints are delivered. Real API errors never silently fall b
 - `unlocked_section_ids` and completion in real mode must come from backend. Mock opens the first section, then requires checkpoint passes in order; watched-video completion alone never unlocks the next section.
 - Mock enrollment, passes and progress persist per user in localStorage. New users must enroll; existing progress is preserved. Refresh/sign in again with the same account restores it.
 - Discovery shows only published course metadata. Backend must enforce authorization and avoid returning protected content in metadata; UI filtering is not an access-control boundary.
+
+## 6. Published lesson media (pending backend contract)
+- GET /lessons/{id}/content: `{id,course_id,section_id,title,publication_status:"PUBLISHED",processing_status:"READY",summary:string,key_concepts:string[],transcript:[{start:number,text:string}]}`. `PROCESSING`/missing READY blocks rendering; FAILED shows an error; missing PUBLISHED blocks drafts. This is a proposed integration endpoint, not an existing backend feature.
+- GET /lessons/{id}/video-url: `{video_url:string,expires_at:ISO8601|null}`. Authorize enrollment and section access every time. Backend returns signed URLs only for published content; do not expose raw storage keys in discovery metadata. Current backend does not provide this endpoint.
+- Frontend refreshes 10 seconds before expiry and once automatically on a media error, then offers manual retry. Position and locally watched intervals survive URL refresh; a changed lesson resets them. Transcript seeks are clamped to media duration.
+- Mock media is explicitly labeled demo and requires enrollment/section access too. l3?l5 use a sample video to exercise the complete roadmap, not authentic course content.

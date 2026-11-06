@@ -1,13 +1,17 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { mergeWatchedRanges } from "../../utils/watchedRanges";
 
 export default function VideoPlayer({
   src,
+  sourceVersion = 0,
+  onError,
   videoRef,
   onTimeUpdate,
   onProgress,
   startAt = 0,
 }) {
+  const resumePosition = useRef(null);
+  useEffect(() => { if (sourceVersion > 0) videoRef.current?.load(); }, [sourceVersion, videoRef]);
   const previous = useRef(null);
   const ranges = useRef([]);
   const lastSavedAt = useRef(0);
@@ -68,15 +72,17 @@ export default function VideoPlayer({
         ref={videoRef}
         src={src}
         controls
+        onError={onError}
+        onEmptied={() => { previous.current = null; }}
         onLoadedMetadata={(event) => {
           const video = event.currentTarget;
 
           previous.current = null;
-          ranges.current = [];
           lastSavedAt.current = performance.now();
 
-          if (startAt > 0 && startAt < video.duration - 2) {
-            video.currentTime = startAt;
+          const resume = resumePosition.current ?? startAt;
+          if (resume > 0 && resume < video.duration) {
+            video.currentTime = resume;
           }
         }}
         onPlaying={(event) => beginSegment(event.currentTarget)}
@@ -84,6 +90,7 @@ export default function VideoPlayer({
           const video = event.currentTarget;
 
           recordSegment(video);
+          resumePosition.current = video.currentTime;
           onTimeUpdate?.(video.currentTime);
 
           if (performance.now() - lastSavedAt.current >= 5000) {
