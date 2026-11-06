@@ -3,6 +3,7 @@ import CourseListPage from "../pages/CourseListPage";
 import CourseDetailPage from "../pages/CourseDetailPage";
 import LearningPage from "../pages/LearningPage";
 import CheckpointPage from "../pages/CheckpointPage";
+import { RegisterPage, VerifyEmailPage, RegisterSuccessPage, ForgotPasswordPage, ResetPasswordPage, ProfilePage } from "../pages/AccountPages";
 import LoginPage from "../pages/LoginPage";
 import ProtectedRoute from "./ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
@@ -27,8 +28,14 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/register-success" element={<RegisterSuccessPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Home />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/forbidden" element={<Forbidden />} />
         <Route path="*" element={<div className="page">Không tìm thấy trang.</div>} />
       </Route>

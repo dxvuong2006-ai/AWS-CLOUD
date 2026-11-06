@@ -171,6 +171,7 @@ export default function Navbar({ user, role, onLogout }) {
       <div className="navbar__account">
         {accountMenuOpen && onLogout && (
           <div className="navbar__account-menu">
+            <Link className="navbar__logout" to="/profile" onClick={() => setAccountMenuOpen(false)}>Hồ sơ và mật khẩu</Link>
             <button
               type="button"
               className="navbar__logout"

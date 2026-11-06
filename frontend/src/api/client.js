@@ -13,6 +13,7 @@ export class ApiError extends Error {
 
 export async function request(path, { method = "GET", body, auth = true } = {}) {
   const token = auth ? readSession()?.token : null;
+  if (token?.startsWith("mock:")) throw new ApiError(401, "T?i kho?n m? ph?ng kh?ng th? g?i API th?t.");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const res = await fetch(`${BASE_URL}${normalizedPath}`, {
     method,

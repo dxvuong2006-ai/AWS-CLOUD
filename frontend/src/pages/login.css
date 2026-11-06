@@ -150,3 +150,11 @@
   .login-brand-copy h2 { font-size: 28px; }
   .login-form-panel { padding: 36px 24px 48px; }
 }
+
+.account-field { margin-bottom: 16px; }
+.account-form .login-register { margin: 16px 0; }
+.account-profile { max-width: 760px; }
+.account-profile .card { margin-bottom: 20px; }
+.account-profile input { display: block; }
+.login-register, .login-submit { text-decoration: none; }
+.login-notice { overflow-wrap: anywhere; }

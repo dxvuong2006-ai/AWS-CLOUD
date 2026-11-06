@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { homeForRole } from "../utils/roles";
 import "./login.css";
+import { AUTH_MOCK } from "../api/auth.api";
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -12,7 +13,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [notice, setNotice] = useState("");
+
   if (loading) return <div className="page">Đang xác thực...</div>;
   const from = location.state?.from;
   const returnTo = typeof from === "string" && from.startsWith("/") &&
@@ -30,6 +31,8 @@ export default function LoginPage() {
     } catch (err) {
       setError(err.status === 401
         ? "Email hoặc mật khẩu không đúng."
+        : err.status === 403
+          ? "Email chưa được xác minh. Vui lòng xác minh trước khi đăng nhập."
         : err.status === 422
           ? "Vui lòng kiểm tra email và mật khẩu."
           : "Không đăng nhập được. Vui lòng thử lại.");
@@ -81,10 +84,7 @@ export default function LoginPage() {
             </div>
 
             <div className="login-forgot-row">
-              <button type="button" className="login-text-button"
-                onClick={() => setNotice("Chức năng khôi phục mật khẩu chưa được triển khai. Vui lòng liên hệ quản trị viên.")}>
-                Quên mật khẩu?
-              </button>
+              <Link className="login-text-button" to="/forgot-password">Quên mật khẩu?</Link>
             </div>
 
             {error && <p id="login-error" className="login-error" role="alert">{error}</p>}
@@ -94,17 +94,11 @@ export default function LoginPage() {
           </form>
 
           <div className="login-divider"><span>Chưa có tài khoản?</span></div>
-          <button type="button" className="login-register"
-            onClick={() => setNotice("Màn hình đăng ký học viên chưa được triển khai. Vui lòng liên hệ quản trị viên để được hỗ trợ tài khoản.")}>
-            <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
-              stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-              <circle cx="10" cy="7" r="3" />
-              <path d="M4 20v-2a6 6 0 0 1 12 0v2M19 7v6m-3-3h6" />
-            </svg>
-            Đăng ký tài khoản học viên
-          </button>
+          <Link className="login-register" to="/register">Đăng ký tài khoản học viên</Link>
           <p className="login-account-note">Tài khoản giảng viên và quản trị viên do quản trị viên cấp.</p>
-          {notice && <p className="login-notice" role="status">{notice}</p>}
+          {location.state?.message && <p className="login-notice" role="status">{location.state.message}</p>}
+          {AUTH_MOCK && <p className="login-notice">Tài khoản mô phỏng: đăng ký tài khoản mới để thử. Không dùng mật khẩu thật.</p>}
+          {error && <p><Link to="/verify-email">Xác minh email / gửi lại mã</Link></p>}
         </div>
       </section>
     </main>

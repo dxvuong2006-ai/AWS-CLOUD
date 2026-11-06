@@ -70,8 +70,16 @@ export function AuthProvider({ children }) {
     setUser(response.user);
   };
 
+  const refreshUser = async () => {
+    const session = readSession();
+    const account = await fetchCurrentUser();
+    if (!session || readSession()?.token !== session.token) return;
+    writeSession({ ...session, user: account });
+    setUser(account);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
