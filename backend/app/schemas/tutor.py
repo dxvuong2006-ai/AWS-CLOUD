@@ -1,45 +1,24 @@
-from datetime import datetime
-from typing import Literal
+"""DTO của phiên Tutor và luyện tập."""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TutorSessionCreateRequest(BaseModel):
-    lesson_id: int
-    attempt_id: int | None = None
+    """Nhận mã lượt thi chưa đạt."""
+
+    model_config = ConfigDict(extra="forbid")
+    attempt_id: int = Field(gt=0)
 
 
 class TutorMessageCreateRequest(BaseModel):
-    content: str = Field(min_length=1)
+    """Nhận câu hỏi của học viên."""
 
-    @field_validator("content")
-    @classmethod
-    def validate_content(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("Message content must not be blank")
-        return value
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    message: str = Field(min_length=1, max_length=2000)
 
 
-class TutorMessageResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class PracticeSubmission(BaseModel):
+    """Nhận danh sách đáp án theo thứ tự câu hỏi."""
 
-    id: int
-    session_id: int
-    role: Literal["USER", "ASSISTANT"]
-    content: str
-    created_at: datetime
-
-
-class TutorSessionResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    student_id: int
-    lesson_id: int
-    attempt_id: int | None = None
-    created_at: datetime
-
-
-class TutorSessionDetailResponse(TutorSessionResponse):
-    messages: list[TutorMessageResponse]
+    model_config = ConfigDict(extra="forbid")
+    answers: list[str] = Field(min_length=1)

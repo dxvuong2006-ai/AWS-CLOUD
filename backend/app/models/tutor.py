@@ -1,4 +1,6 @@
+#Lưu phiên trợ lý AI kèm học
 from sqlalchemy import (
+    Boolean, JSON, text,
     CheckConstraint,
     Column,
     DateTime,
@@ -8,6 +10,8 @@ from sqlalchemy import (
     Text,
     func,
 )
+
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.database import Base
 
@@ -31,6 +35,13 @@ class TutorSession(Base):
         Integer,
         ForeignKey("quiz_attempts.id", ondelete="SET NULL"),
         nullable=True,
+    )
+    practice_questions = Column(
+        JSON().with_variant(JSONB(), "postgresql"), nullable=False,
+        default=list, server_default=text("'[]'"),
+    )
+    remediation_completed = Column(
+        Boolean, nullable=False, default=False, server_default=text("false"),
     )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

@@ -1,4 +1,4 @@
-#Tự động sinh cau hỏi trắc nghiệm từ transcript
+#Tự động sinh câu hỏi trắc nghiệm từ transcript
 import json
 import logging
 from pathlib import Path
@@ -42,7 +42,7 @@ _TRANSCRIPT_FIXTURE_PATH = (
 )
 logger = logging.getLogger(__name__)
 
-
+#Hàm thẩm định và làm sạch đề thi
 def _validate_quiz(
     response: Any, *, expected_count: int | None = None
 ) -> dict:
@@ -124,7 +124,7 @@ def _validate_quiz(
 
     return validate_schema({"questions": validated_questions}, _SCHEMA_PATH)
 
-
+#Hàm nạp đề mẫu và kiểm tra tương đồng từ vựng
 def _load_fallback(transcript_text: str, num_questions: int) -> dict:
     """Đọc đề mẫu phục vụ chế độ dự phòng tương thích cục bộ.
 
@@ -168,7 +168,7 @@ def _load_fallback(transcript_text: str, num_questions: int) -> dict:
     )
     return {"questions": quiz["questions"][:num_questions]}
 
-
+#Hàm điều phối sinh đề thi
 def build_quiz(
     transcript_text: str,
     ai_client: Any = None,

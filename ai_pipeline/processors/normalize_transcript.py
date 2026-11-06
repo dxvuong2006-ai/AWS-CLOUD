@@ -43,7 +43,7 @@ _ENGLISH_WORDS = {
     "with",
 }
 
-
+#Hàm chuẩn hóa mốc thời gian
 def _to_timestamp(value: Any) -> float | None:
     """Chuyển giá trị thành mốc thời gian hợp lệ.
 
@@ -61,7 +61,7 @@ def _to_timestamp(value: Any) -> float | None:
         return None
     return timestamp if math.isfinite(timestamp) and timestamp >= 0 else None
 
-
+#Hàm thu thập và bóc tách đoạn thoại
 def _collect_segments(data: Any) -> list[dict[str, Any]]:
     """Thu thập các đoạn transcript từ dữ liệu lồng nhau.
 
@@ -113,7 +113,7 @@ def _collect_segments(data: Any) -> list[dict[str, Any]]:
         segments.append(segment)
     return segments
 
-
+#Hàm nhận diện ngôn ngữ
 def _detect_language(text: str, declared_language: Any = None) -> str:
     """Xác định tiếng Việt hoặc tiếng Anh của transcript.
 
@@ -141,7 +141,7 @@ def _detect_language(text: str, declared_language: Any = None) -> str:
     english_word_count = sum(word in _ENGLISH_WORDS for word in words)
     return "en" if words and english_word_count / len(words) >= 0.2 else "vi"
 
-
+#Hàm điều phối chuẩn hóa chính
 def normalize_transcript(raw_data: dict | list | str) -> dict:
     """Chuẩn hóa transcript và giữ các đoạn có thời gian hợp lệ.
 
