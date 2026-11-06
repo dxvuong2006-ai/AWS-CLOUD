@@ -10,6 +10,7 @@ export default function QuizForm({
   onPrev,
   onNext,
   onSubmit,
+  disabled = false,
 }) {
   const isLast = index === total - 1;
 
@@ -24,6 +25,7 @@ export default function QuizForm({
         {question.options.map((o, i) => (
           <button
             key={o.id}
+            disabled={disabled}
             role="radio"
             aria-checked={selectedId === o.id}
             className={`quiz-option${selectedId === o.id ? " selected" : ""}`}

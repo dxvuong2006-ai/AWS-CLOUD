@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -62,7 +63,6 @@ class QuestionResponse(BaseModel):
     quiz_id: int
     question: str
     options_json: list[str]
-    explanation: str | None = None
     topic: str | None = None
     source_start_seconds: Decimal | None = None
     source_end_seconds: Decimal | None = None
@@ -72,6 +72,7 @@ class QuestionResponse(BaseModel):
 
 class QuestionReviewResponse(QuestionResponse):
     correct_answer: str
+    explanation: str | None = None
 
 
 class QuizResponse(BaseModel):
@@ -88,15 +89,20 @@ class QuizResponse(BaseModel):
 
 class QuizDetailResponse(QuizResponse):
     questions: list[QuestionResponse]
+    attempt_count: int = 0
+    previous_score: Decimal | None = None
+    can_retry: bool = True
 
 
 class QuizAnswerSubmit(BaseModel):
-    question_id: int
+    model_config = ConfigDict(extra="forbid")
+    question_id: int = Field(gt=0)
     selected_answer: str | None = None
 
 
 class QuizAttemptSubmitRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    request_id: UUID
     lesson_id: int | None = Field(default=None, gt=0)
     answers: list[QuizAnswerSubmit] = Field(default_factory=list)
 
@@ -128,6 +134,8 @@ class QuizAttemptResponse(BaseModel):
 
 class QuizAttemptResultResponse(QuizAttemptResponse):
     answers: list[QuizAnswerResult]
+    can_retry: bool
+    remediation_required: bool
 
 
 class QuizAnswerResponse(BaseModel):

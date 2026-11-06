@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
-import { fetchSectionQuiz, submitAttempt } from "../api/quizzes.api";
+import { fetchSectionQuiz, submitAttempt, readPendingAttempt, recoverPendingCheckpoint } from "../api/quizzes.api";
 import QuizForm from "../components/quiz/QuizForm";
 import QuizNavigator from "../components/quiz/QuizNavigator";
 import QuizResult from "../components/quiz/QuizResult";
@@ -29,8 +29,14 @@ export default function CheckpointPage() {
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null);
   const [started, setStarted] = useState(false);
+  const [submissionPending, setSubmissionPending] = useState(false);
+  const submissionBusy = useRef(false);
+  const generation = useRef(0);
 
   useEffect(() => {
+    generation.current += 1;
+    submissionBusy.current = false;
+    setSubmitting(false);
     let cancelled = false;
     setLoading(true);
     setStarted(false);
@@ -40,12 +46,31 @@ export default function CheckpointPage() {
     setResult(null);
     setAnswers({});
     setIndex(0);
-    fetchSectionQuiz(sectionId, courseId, fromLessonId)
-      .then((q) => !cancelled && setQuiz(q))
+    setSubmissionPending(false);
+    recoverPendingCheckpoint(courseId, sectionId).then(async (recovered) => {
+      // A low-score retry is blocked, but replaying the same submission is valid.
+      if (recovered?.result.can_retry === false) {
+        return { id: recovered.quizId, questions: [], recoveredResult: recovered.result };
+      }
+      const q = await fetchSectionQuiz(sectionId, courseId, fromLessonId);
+      return { ...q, recoveredResult: recovered?.result };
+    })
+      .then((q) => {
+        if (cancelled) return;
+        setQuiz(q);
+        if (q.recoveredResult) setResult(q.recoveredResult);
+        const pending = readPendingAttempt(q.id);
+        if (pending) {
+          setAnswers(Object.fromEntries(pending.answers.map(a => [String(a.question_id), a.selected_answer])));
+          setSubmissionPending(true);
+          setStarted(true);
+        }
+      })
       .catch((e) => !cancelled && setError(e))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
+      generation.current += 1;
     };
   }, [courseId, sectionId, fromLessonId]);
 
@@ -78,10 +103,15 @@ export default function CheckpointPage() {
     }
   };
 
-  const handleSelect = (questionId, optionId) =>
-    setAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  const handleSelect = (questionId, optionId) => {
+    if (!submissionPending) setAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+  };
 
   const handleSubmit = async () => {
+    if (submissionBusy.current) return;
+    const currentGeneration = generation.current;
+    submissionBusy.current = true;
+    setSubmissionPending(true);
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -89,12 +119,20 @@ export default function CheckpointPage() {
       const payload = quiz.questions
         .filter((q) => answers[q.id])
         .map((q) => ({ question_id: q.id, selected_option_id: answers[q.id] }));
-      setResult(await submitAttempt(quiz.id, payload, courseId, fromLessonId));
+      const submitted = await submitAttempt(quiz.id, payload, courseId, fromLessonId);
+      if (generation.current !== currentGeneration) return;
+      setResult(submitted);
+      setSubmissionPending(false);
     } catch (err) {
+      if (generation.current !== currentGeneration) return;
       setSubmitError(err);
+      setSubmissionPending(Boolean(readPendingAttempt(quiz.id)));
     } finally {
-      setSubmitting(false);
-      setConfirmOpen(false);
+      if (generation.current === currentGeneration) {
+        submissionBusy.current = false;
+        setSubmitting(false);
+        setConfirmOpen(false);
+      }
     }
   };
 
@@ -122,7 +160,7 @@ export default function CheckpointPage() {
           <h1>{result ? "Kết quả checkpoint" : "Checkpoint cuối section"}</h1>
           <div className="breadcrumb">{subtitle}</div>
         </div>
-        {result && (
+        {result && result.can_retry !== false && (
           <button className="btn-secondary" onClick={handleRetry}>
             Làm lại checkpoint
           </button>
@@ -134,10 +172,12 @@ export default function CheckpointPage() {
           Không nộp được bài. Câu trả lời của bạn vẫn còn, hãy thử nộp lại.
         </p>
       )}
+      {submissionPending && <p role="status">Đang chờ xác nhận lần nộp trước. Hãy nộp lại để lấy kết quả; câu trả lời được giữ nguyên.</p>}
 
       {result ? (
         <>
           <QuizResult result={result} />
+          {result.remediation_required && <p role="status">Bạn cần hoàn thành ôn tập AI, xem lại học liệu và đạt practice trước khi làm lại checkpoint.</p>}
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>
@@ -150,6 +190,7 @@ export default function CheckpointPage() {
         <div className="card">
           <h2>{quiz.title || "Checkpoint cuối section"}</h2>
           <p>Bài kiểm tra gồm {total} câu hỏi trắc nghiệm.</p>
+          {quiz.attemptCount > 0 && <p>Đã làm {quiz.attemptCount} lần. Điểm lần gần nhất: {quiz.previousScore}%.</p>}
           <p>
             Bạn có thể chuyển giữa các câu để kiểm tra đáp án trước khi nộp.
             Câu chưa trả lời sẽ được tính là sai.
@@ -178,6 +219,7 @@ export default function CheckpointPage() {
       ) : (
         <div className="quiz-layout">
           <QuizForm
+            disabled={submissionPending || submitting}
             question={quiz.questions[index]}
             index={index}
             total={total}

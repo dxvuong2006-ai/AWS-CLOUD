@@ -12,6 +12,55 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const ATTEMPT_KEY = "learncloud.mock.attempts";
 const MOCK_PASS_PERCENT = 80;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const pendingRequests = new Map();
+const pendingKey = (quizId) => mockStorageKey(`learncloud.pending.checkpoint:${quizId}`);
+const sectionKey = (courseId, sectionId) => mockStorageKey(`learncloud.checkpoint:${courseId}:${sectionId}`);
+
+export async function recoverPendingCheckpoint(courseId, sectionId) {
+  if (USE_MOCK) return null;
+  const quizId = sessionStorage.getItem(sectionKey(courseId, sectionId));
+  if (!quizId || !readPendingAttempt(quizId)) return null;
+  const result = await submitRealAttempt(quizId, [], undefined);
+  return { quizId, result };
+}
+
+export function readPendingAttempt(quizId) {
+  if (USE_MOCK) return null;
+  const raw = sessionStorage.getItem(pendingKey(quizId));
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function submitRealAttempt(quizId, answers, lessonId) {
+  const key = pendingKey(quizId);
+  if (pendingRequests.has(key)) return pendingRequests.get(key);
+  const existing = readPendingAttempt(quizId);
+  // Keep the exact request across network retries AND refreshes. Never create
+  // another attempt just because the first successful response was lost.
+  const body = existing ?? {
+    request_id: crypto.randomUUID(),
+    answers: serializeAnswers(answers),
+    ...(lessonId == null ? {} : { lesson_id: Number(lessonId) }),
+  };
+  sessionStorage.setItem(key, JSON.stringify(body));
+  const task = (async () => {
+    try {
+      const data = await request(`/quizzes/${encodeURIComponent(quizId)}/attempts`, {
+        method: "POST", body, timeoutMs: 15000,
+      });
+      sessionStorage.removeItem(key);
+      return normalizeAttempt(data, fetchedQuizzes.get(String(quizId)));
+    } catch (error) {
+      // A definite validation/access rejection permits editing a new request.
+      // Unknown outcomes and conflicts retain the key for safe replay.
+      if ([400, 401, 403, 404, 422].includes(error.status)) sessionStorage.removeItem(key);
+      throw error;
+    } finally {
+      pendingRequests.delete(key);
+    }
+  })();
+  pendingRequests.set(key, task);
+  return task;
+}
 
 function getQuizKey(courseId, sectionId) {
   return `${courseId}:${sectionId}`;
@@ -121,6 +170,7 @@ export async function fetchSectionQuiz(
       `/sections/${encodeURIComponent(sectionId)}/quiz${suffix}`
     ));
     fetchedQuizzes.set(quiz.id, quiz);
+    sessionStorage.setItem(sectionKey(courseId, sectionId), quiz.id);
     return quiz;
   }
 
@@ -161,17 +211,7 @@ export async function submitAttempt(
   lessonId
 ) {
   if (!USE_MOCK) {
-    const data = await request(
-      `/quizzes/${encodeURIComponent(quizId)}/attempts`,
-      {
-        method: "POST",
-        body: {
-          answers: serializeAnswers(answers),
-          ...(lessonId == null ? {} : { lesson_id: Number(lessonId) }),
-        },
-      }
-    );
-    return normalizeAttempt(data, fetchedQuizzes.get(String(quizId)));
+    return submitRealAttempt(quizId, answers, lessonId);
   }
 
   const accountKey = mockStorageKey(ATTEMPT_KEY);

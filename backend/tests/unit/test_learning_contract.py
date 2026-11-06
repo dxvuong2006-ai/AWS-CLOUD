@@ -1,4 +1,5 @@
 import unittest
+from uuid import uuid4
 from pydantic import ValidationError
 from app.schemas.progress import LessonProgressUpdateRequest
 from app.schemas.quiz import QuizAttemptSubmitRequest
@@ -17,9 +18,9 @@ class ContractTests(unittest.TestCase):
                 LessonProgressUpdateRequest(last_position_seconds=0, watched_ranges=ranges)
 
     def test_empty_answers_valid_but_duplicate_questions_rejected(self):
-        self.assertEqual(QuizAttemptSubmitRequest(answers=[]).answers, [])
+        self.assertEqual(QuizAttemptSubmitRequest(request_id=uuid4(), answers=[]).answers, [])
         with self.assertRaises(ValidationError):
-            QuizAttemptSubmitRequest(answers=[
+            QuizAttemptSubmitRequest(request_id=uuid4(), answers=[
                 {"question_id": 1, "selected_answer": "A"},
                 {"question_id": 1, "selected_answer": "B"},
             ])

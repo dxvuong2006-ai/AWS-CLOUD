@@ -1,4 +1,4 @@
-# Frontend delivery: items 4–7
+# Delivery: frontend items 4–7 and backend checkpoint item 8
 
 ## Item 4: accounts
 Default login remains the real backend. To exercise all account screens before backend delivery,
@@ -62,3 +62,58 @@ Real progress is not in localStorage; clearing it requires a backend test/reset 
 ## Automated validation
 - `npm test`: account lifecycle, OTP expiry/attempt limits, enrollment isolation/section gates, media publication and expiry, range merging/seek/2x, serialized saves, real payload shape, existing auth/quiz regression checks.
 - `npm run test:browser`: Chrome/Edge headless, dedicated temporary profile and random local Vite port. Explicit mock env is scoped to the child process; it does not change `.env.local` or touch your normal browser profile. Exercises registration through checkpoint and account recovery. Real backend acceptance remains pending.
+
+## 8. Backend checkpoints (UI Flow v4, screens 17-27)
+Status against the document: items 4-7 above are frontend delivery with mock coverage;
+they do not imply completed real email, media, progress or AI services. The checkpoint
+API/service files were empty before item 8. This item implements the checkpoint backend
+and only the frontend submission/response wiring required by its contract.
+
+Implemented routes (authenticated STUDENT only):
+- GET `/sections/{section_id}/quiz?lesson_id={id}` returns the approved quiz for that
+  section. Explicit public question DTOs omit both `correct_answer` and `explanation`.
+  Returns `attempt_count`, `previous_score`; no question data is returned when access
+  or mandatory remediation blocks the attempt.
+- POST `/quizzes/{quiz_id}/attempts` requires `{request_id:UUID,lesson_id?:number,
+  answers:[{question_id:number,selected_answer:string|null}]}`. Invalid question IDs,
+  options, duplicate answers and client grading flags are rejected. Omitted/null
+  answers are persisted as incorrect. Grade and all answers are committed atomically.
+- GET `/quizzes/{quiz_id}/attempts?limit=20&offset=0` returns only the current student's
+  persisted attempts, newest first. Results include `can_retry` and `remediation_required`.
+
+Policy: published course, enrollment, approved quiz, all previous section checkpoints
+passed, and server-stored completion of the specified published lesson are required.
+Without lesson_id, at least one published lesson in the current section must be complete.
+UI Flow v4 fixes passing at 80%; the checkpoint service does not accept a client threshold
+or use an alternative quiz.passing_score. Scores 50-79% permit immediate retry. Below 50%,
+all three server-verified remediation conditions are required: explanations completed,
+lesson/flashcard review completed, and 2-3 practice questions with at least 2/3 correct.
+Prior passes continue to unlock later sections even if a subsequent attempt fails.
+
+Idempotency: retain the same UUID and payload until the outcome is known. PostgreSQL
+locks the student's row to serialize submissions, plus a unique database index on
+(student_id,quiz_id,request_id) guards retries. Same key/payload returns the saved attempt,
+including after a low score blocks NEW attempts; changed payload with the same key gives
+409. A deliberately new submission uses a new UUID. The UI shares in-flight submissions
+and persists pending request data in user-scoped sessionStorage across reloads; it replays
+a pending submission before trying to fetch a potentially locked quiz. Backend permission
+controls the real-mode retry button. Existing demo quiz behavior is not the authority.
+
+Deployment prerequisite: apply `database/migrations/0004_checkpoint_attempt_idempotency.sql`
+after the existing baseline/migrations. It preserves old attempts, adds nullable UUID/hash
+columns and creates `checkpoint_remediation`. This change does not run a migration against
+your database. A fresh database also needs this migration after schema.sql.
+
+Remaining integration dependencies:
+- The progress backend from item 7 must populate authoritative LessonProgress.completed.
+- Trusted AI/review/practice services must record the three verified remediation fields
+  in checkpoint_remediation for the specific attempt. No student-facing endpoint accepts
+  arbitrary "review completed" flags. Until those services exist, a below-50 attempt stays
+  locked; this item does not pretend that the complete AI review flow is implemented.
+- PostgreSQL concurrent-request acceptance should be run on an isolated test database
+  after migration. The targeted unit/HTTP tests use in-memory SQLite and verify replay,
+  constraints, transaction rollback, permissions and PostgreSQL lock SQL, not live PG races.
+
+Targeted checks: backend `python -B -m unittest discover -s tests/unit -p test_checkpoint_backend.py -v`;
+frontend `node --test tests/checkpoint-submit.test.cjs tests/mock-quiz.test.cjs` and the
+`wire quiz` test in api-contract.test.cjs. No browser tests are required for item 8.
