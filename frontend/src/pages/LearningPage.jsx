@@ -1,6 +1,6 @@
 import { MOCK_COMPLETION_PERCENT } from "../config/learning";
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { useLesson } from "../hooks/useLesson";
 import { useLessonProgress } from "../hooks/useLessonProgress";
@@ -12,6 +12,7 @@ import SummaryPanel from "../components/learning/SummaryPanel";
 import SectionGate from "../components/learning/SectionGate";
 import { nextLesson } from "../utils/sectionAccess";
 import { useAuth } from "../context/AuthContext";
+import { remediationReturn } from "../utils/flashcardProgress";
 
 function errorMessage(err) {
   if ([403,409,422,502].includes(err?.status)) return err.message;
@@ -39,6 +40,10 @@ export default function LearningPage() {
 
 function LearningContent() {
   const { courseId, lessonId } = useParams();
+  const [search] = useSearchParams();
+  const sessionId = search.get("remediationSessionId");
+  const returnTo = remediationReturn(courseId, sessionId, search.get("returnTo"));
+  const flashcardSearch = returnTo ? `?${new URLSearchParams({ remediationSessionId: sessionId, returnTo })}` : "";
   const course = useCourse(courseId);
   const lesson = useLesson(lessonId, courseId);
   const progress = useLessonProgress(courseId, lessonId);
@@ -142,9 +147,9 @@ useEffect(() => {
             </h1>
         </div>
         <div className="page-actions">
-          <button className="btn-secondary" disabled title="Chưa có flashcard">
+          <Link className="btn-secondary" to={`/courses/${courseId}/sections/${sectionId}/lessons/${lessonId}/flashcards${flashcardSearch}`}>
             Flashcard
-          </button>
+          </Link>
           {where && (
             canTakeCheckpoint ? (
               <Link
@@ -201,6 +206,7 @@ useEffect(() => {
         />
       </div>
       <nav aria-label="Điều hướng bài học" style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+        {returnTo && <Link to={returnTo}>← Quay lại phiên ôn tập AI</Link>}
         <Link to={`/courses/${courseId}`}>← Lộ trình khóa học</Link>
         {next && <Link to={`/courses/${courseId}/lessons/${next.id}`}>Bài tiếp theo: {next.title} →</Link>}
       </nav>

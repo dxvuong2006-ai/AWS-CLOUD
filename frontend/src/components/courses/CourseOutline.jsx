@@ -42,7 +42,7 @@ export default function CourseOutline({
                     {done ? "✓" : "○"}
                   </span>
                   {courseId && unlockedSectionIds.includes(String(s.id)) ? (
-                    <Link
+                    <span><Link
                       to={`/courses/${courseId}/lessons/${l.id}`}
                       style={{
                         color: isCurrent ? "var(--accent)" : "inherit",
@@ -50,7 +50,7 @@ export default function CourseOutline({
                       }}
                     >
                       {label}
-                    </Link>
+                    </Link> · <Link to={`/courses/${courseId}/sections/${s.id}/lessons/${l.id}/flashcards`}>Ôn flashcard</Link></span>
                   ) : (
                     <span>{label}</span>
                   )}

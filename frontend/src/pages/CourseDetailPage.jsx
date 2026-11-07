@@ -28,6 +28,7 @@ export default function CourseDetailPage() {
     </> : <button className="btn-primary" disabled={busy || success} onClick={enroll}>{busy ? "Đang đăng ký..." : success ? "Đã đăng ký" : "Đăng ký học"}</button>}
     {(failure || enrollments.error) && <p role="alert">{enrollmentError(failure || enrollments.error)} <button onClick={enrollments.reload}>Thử tải lại</button></p>}
     <h2>Lộ trình khóa học</h2>
+    {enrollment && <p><Link className="btn-secondary" to={`/flashcards?courseId=${encodeURIComponent(courseId)}`}>Ôn flashcard</Link></p>}
     <CourseOutline sections={course.sections} courseId={enrollment ? courseId : null} completedIds={completedIds} unlockedSectionIds={enrollment?.unlocked_section_ids ?? []} />
     <dialog ref={dialog} aria-labelledby="enrolled-title" onClose={()=>{}}>
       <h2 id="enrolled-title">Đăng ký thành công</h2><p>Khóa học đã được thêm vào Khóa học của tôi.</p>

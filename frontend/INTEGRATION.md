@@ -182,3 +182,27 @@ configured in this repository; no new lint tooling is introduced as part of this
   may be stale after revocation; protected endpoints must reject requests regardless of UI.
 - No backend changes. Backend progress/session integration and enrollment metadata remain
   prerequisites documented above; this item does not claim API bypass protection is complete.
+
+## Item 11 - flashcards (frontend, screens 14-16)
+- Entry points: sidebar `/flashcards` (enrolled course/section/lesson picker), roadmap lesson
+  links and video. Deck route: `/courses/:courseId/sections/:sectionId/lessons/:lessonId/flashcards`.
+- Proposed backend endpoint (NOT implemented here): `GET /lessons/{lesson_id}/flashcards`.
+  Response: `{course_id, section_id, lesson_id, publication_status:"PUBLISHED", revision,
+  cards:[{id,front,back,source_seconds?}]}`. Optional source time is displayed only when provided.
+  Revision must change whenever published cards change. Empty cards
+  is a supported state. Validate enrollment/publication/unlock and return only approved content;
+  frontend rejects missing publication status, mismatched context and invalid cards.
+- Real-mode API failures never fall back to mock. Mock uses lesson concepts/summary as clearly
+  labeled demo cards, not AI-generated flashcards or a claim of production publication.
+- Progress is intentionally browser-local localStorage, namespaced by authenticated user,
+  course, section, lesson, deck revision and optional remediation session. Ratings and cursor
+  persist immediately; back/front is transient. Refresh/logout/login on the same browser restores
+  progress. No cross-device synchronization; if required, backend needs owner-scoped progress
+  GET/PUT with deck revision and concurrency semantics. Storage errors are visible/retryable.
+- Completion requires rating every card in the current round, not merely skipping to the end.
+  Review-only rounds retain remembered cards and revisit weak cards; full review is also available.
+- Future item 12 may supply `remediationSessionId` and URL-encoded `returnTo` query parameters.
+  Return links accept only routes within the current course and preserve the session ID. The
+  target remediation page and session ownership are item 12 responsibilities; no fake completion
+  event is sent. Local card completion NEVER unlocks a section, checkpoint retry or remediation.
+- No backend, browser or screenshot changes. Validate with flashcard/section unit tests and build.
