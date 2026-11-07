@@ -18,17 +18,20 @@ export async function request(path, { method = "GET", body, auth = true, timeout
   const controller = timeoutMs > 0 ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   let res;
-  try { res = await fetch(`${BASE_URL}${normalizedPath}`, {
-    method,
-    ...(controller ? { signal: controller.signal } : {}),
-    keepalive: keepalive && JSON.stringify(body ?? "").length < 60000,
-    headers: {
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  }); } finally { if (timer) clearTimeout(timer); }
-
+  try {
+    res = await fetch(`${BASE_URL}${normalizedPath}`, {
+      method,
+      ...(controller ? { signal: controller.signal } : {}),
+      keepalive: keepalive && JSON.stringify(body ?? "").length < 60000,
+      headers: {
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     let detail = "";
     try {
@@ -37,7 +40,6 @@ export async function request(path, { method = "GET", body, auth = true, timeout
     } catch {
       // Non-JSON errors retain their HTTP status.
     }
-    // A delayed response from an old session must not log out a new session.
     if (res.status === 401 && token && readSession()?.token === token) {
       clearSession();
       window.dispatchEvent(new Event("learncloud:unauthorized"));

@@ -2,7 +2,7 @@
   "l1": {
     "id": "l1",
     "title": "Cloud là gì?",
-    "videoUrl": "/sample.mp4",
+    "videoUrl": "/cloud.mp4",
     "transcript": [
       {
         "start": 0,
@@ -31,7 +31,7 @@
   "l2": {
     "id": "l2",
     "title": "IaaS, PaaS, SaaS",
-    "videoUrl": "/knowmyname.mp4",
+    "videoUrl": "/cloud.mp4",
     "transcript": [
       {
         "start": 0,
@@ -56,7 +56,7 @@
   "l3": {
     "id": "l3",
     "title": "S3 và presigned URL",
-    "videoUrl": "/sample.mp4",
+    "videoUrl": "/cloud.mp4",
     "transcript": [
       {
         "start": 0,
@@ -73,7 +73,7 @@
   "l4": {
     "id": "l4",
     "title": "Image và container",
-    "videoUrl": "/sample.mp4",
+    "videoUrl": "/cloud.mp4",
     "transcript": [
       {
         "start": 0,
@@ -90,7 +90,7 @@
   "l5": {
     "id": "l5",
     "title": "Dockerfile đầu tiên",
-    "videoUrl": "/sample.mp4",
+    "videoUrl": "/cloud.mp4",
     "transcript": [
       {
         "start": 0,

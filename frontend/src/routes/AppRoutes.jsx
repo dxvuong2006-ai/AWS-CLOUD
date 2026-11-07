@@ -7,6 +7,15 @@ import SectionPage from "../pages/SectionPage";
 import FlashcardPage from "../pages/FlashcardPage";
 import CheckpointPage from "../pages/CheckpointPage";
 import CheckpointResultPage from "../pages/CheckpointResultPage";
+import ProgressPage from "../pages/ProgressPage";
+import InstructorDashboardPage from "../pages/InstructorDashboardPage";
+import InstructorCoursesPage from "../pages/InstructorCoursesPage";
+import CourseEditorPage from "../pages/CourseEditorPage";
+import ReviewQueuePage from "../pages/ReviewQueuePage";
+import LessonReviewPage from "../pages/LessonReviewPage";
+import StudentReportPage from "../pages/StudentReportPage";
+import AdminUsersPage from "../pages/AdminUsersPage";
+import AdminMonitoringPage from "../pages/AdminMonitoringPage";
 import { RegisterPage, VerifyEmailPage, RegisterSuccessPage, ForgotPasswordPage, ResetPasswordPage, ProfilePage } from "../pages/AccountPages";
 import LoginPage from "../pages/LoginPage";
 import ProtectedRoute from "./ProtectedRoute";
@@ -53,19 +62,25 @@ export default function AppRoutes() {
         <Route path="/my-courses" element={<MyCoursesPage />} />
         <Route path="/flashcards" element={<FlashcardPage />} />
         <Route path="/courses/:courseId/sections/:sectionId/lessons/:lessonId/flashcards" element={<FlashcardPage />} />
-        <Route path="/progress" element={<Pending title="Tiến độ" />} />
+        <Route path="/progress" element={<ProgressPage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["INSTRUCTOR"]} />}>
-        <Route path="/instructor/dashboard" element={<Pending title="Tổng quan giảng viên" />} />
-        <Route path="/instructor/courses" element={<Pending title="Khóa học giảng viên" />} />
-        <Route path="/instructor/review-queue" element={<Pending title="Học liệu AI" />} />
-        <Route path="/instructor/student-report" element={<Pending title="Học viên và báo cáo" />} />
-        <Route path="/instructor/settings" element={<Pending title="Cài đặt giảng viên" />} />
+        <Route path="/instructor/dashboard" element={<InstructorDashboardPage />} />
+        <Route path="/instructor/courses" element={<InstructorCoursesPage />} />
+        <Route path="/instructor/courses/new" element={<CourseEditorPage />} />
+        <Route path="/instructor/courses/:courseId/edit" element={<CourseEditorPage />} />
+        <Route path="/instructor/review-queue" element={<ReviewQueuePage />} />
+        <Route path="/instructor/review/:lessonId" element={<LessonReviewPage />} />
+        <Route path="/instructor/student-report" element={<StudentReportPage />} />
+        <Route path="/instructor/students/:studentId" element={<StudentReportPage />} />
+        <Route path="/instructor/settings" element={<ProfilePage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
-        <Route path="/admin/users" element={<Pending title="Quản trị tài khoản" />} />
-        <Route path="/admin/roles" element={<Pending title="Vai trò và quyền" />} />
-        <Route path="/admin/monitoring" element={<Pending title="Giám sát hệ thống" />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/users/new" element={<AdminUsersPage />} />
+        <Route path="/admin/users/:userId/edit" element={<AdminUsersPage />} />
+        <Route path="/admin/roles" element={<AdminUsersPage />} />
+        <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />
       </Route>
     </Routes>
   );

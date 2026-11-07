@@ -17,7 +17,15 @@ export default function CourseDetailPage() {
   async function enroll() {
     if(pending.current)return; pending.current=true; setBusy(true); setFailure(null);
     try { await enrollCourse(courseId); setSuccess(true); enrollments.reload(); dialog.current.showModal(); }
-    catch(err) { if(err.status===409) enrollments.reload(); setFailure(err); }
+    catch(err) {
+      if(err.status===409) {
+        setSuccess(true);
+        await enrollments.reload();
+        dialog.current.showModal();
+      } else {
+        setFailure(err);
+      }
+    }
     finally { pending.current=false; setBusy(false); }
   }
   if(loading)return <div className="page student-page student-CourseDetailPage">Đang tải...</div>;

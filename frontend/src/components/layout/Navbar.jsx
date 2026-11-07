@@ -121,7 +121,7 @@ function NavIcon({ name }) {
   );
 }
 
-export default function Navbar({ user, role, onLogout }) {
+export default function Navbar({ user, role, onLogout, collapsed = false, onToggleCollapsed }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
@@ -136,15 +136,40 @@ export default function Navbar({ user, role, onLogout }) {
   const heading = ROLE_HEADINGS[rawRole] || "HỌC VIÊN";
 
   return (
-    <aside className="navbar">
-      <Link
-        to="/"
-        className="navbar__brand"
-        aria-label="LearnCloud - Trang chủ"
-      >
-        {currentRole === "STUDENT" ? <span className="student-brand-mark" aria-hidden="true">L</span> : <img className="navbar__logo" src={logo} alt="LearnCloud" />}
-        <span className="navbar__brand-name">LearnCloud</span>
-      </Link>
+    <aside className={`navbar ${collapsed ? "navbar--collapsed" : ""}`}>
+      <div className="navbar__header">
+        <Link
+          to="/"
+          className="navbar__brand"
+          aria-label="LearnCloud - Trang chủ"
+        >
+          <img className="navbar__logo" src={logo} alt="" />
+          <span className="navbar__brand-name">LearnCloud</span>
+        </Link>
+
+        <button
+          type="button"
+          className="navbar__collapse-toggle"
+          onClick={onToggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Mở navbar" : "Đóng navbar"}
+          title={collapsed ? "Mở navbar" : "Đóng navbar"}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          className="navbar__mobile-toggle"
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
+        >
+          {menuOpen ? "✕" : "☰"}
+        </button>
+      </div>
 
       <div className="navbar__section-title">{heading}</div>
 

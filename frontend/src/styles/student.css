@@ -16,7 +16,11 @@
 .student-page button:focus-visible, .student-page a:focus-visible { outline: 2px solid #3453df; outline-offset: 3px; }
 .student-page button:disabled { cursor: not-allowed; }
 .student-shell .navbar { width: 260px; padding: 27px 18px 20px; }
-.student-shell .navbar__brand { gap: 12px; margin: 0 9px 30px; color: #0f172a; }
+.student-shell .navbar--collapsed { width: 72px; }
+.student-shell.app-shell--collapsed > .app-content { margin-left: 72px; }
+.student-shell .navbar__header { width: 100%; margin-bottom: 25px; }
+.student-shell .navbar__brand { gap: 12px; margin: 0; color: #0f172a; }
+.student-shell .navbar__logo { width: 44px; height: 44px; }
 .student-brand-mark { display: grid; place-items: center; width: 33px; height: 33px; border-radius: 10px; background: #3453df; color: #fff; font-size: 17px; font-weight: 700; }
 .student-shell .navbar__brand-name { font-size: 18px; }
 .student-shell .navbar__section-title { margin: 0 12px 9px; font-size: 12px; font-weight: 600; }
@@ -189,8 +193,10 @@
 @media (max-width: 768px) {
   .student-shell > .app-content { margin-left: 0; padding-top: 110px; }
   .student-shell .navbar { width: 100%; height: auto; padding: 12px 18px; }
+  .student-shell .navbar__header { width: 100%; min-height: 38px; margin-bottom: 0; }
   .student-shell .navbar__brand { margin: 0 auto 0 0; }
-  .student-shell .navbar__nav { display: flex; flex-direction: row; overflow-x: auto; top: 58px; padding: 6px 12px; }
+  .student-shell .navbar__nav { display: none; flex-direction: row; overflow-x: auto; top: 58px; padding: 6px 12px; }
+  .student-shell .navbar__nav--open { display: flex; }
   .student-shell .navbar__link { white-space: nowrap; font-size: 13px; }
   .student-shell .navbar__account { padding: 0; }
   .student-page { padding: 24px 18px; }

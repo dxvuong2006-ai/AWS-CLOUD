@@ -1,0 +1,45 @@
+.management-page { max-width: none; padding: 34px 45px 48px; color: #0f172a; }
+.management-page h1 { margin: 0; font-size: 28px; }
+.management-page .page-head { align-items: center; }
+.management-subtitle { margin: 6px 0 22px; color: #64748b; }
+.management-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.management-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.management-card { border: 1px solid #e2e6ee; border-radius: 14px; background: #fff; padding: 20px; }
+.management-kpi-label { color: #64748b; font-size: 13px; }
+.management-kpi-value { margin-top: 8px; font-size: 26px; font-weight: 750; }
+.management-table-wrap { overflow-x: auto; border: 1px solid #e2e6ee; border-radius: 14px; background: #fff; }
+.management-table { width: 100%; border-collapse: collapse; }
+.management-table th, .management-table td { padding: 14px 16px; border-bottom: 1px solid #edf0f5; text-align: left; }
+.management-table th { color: #64748b; font-size: 12px; font-weight: 700; }
+.management-table tr:last-child td { border-bottom: 0; }
+.management-toolbar { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.management-toolbar input, .management-toolbar select, .management-form input, .management-form select, .management-form textarea {
+  height: 42px; max-width: none; border: 1px solid #dde3ed; border-radius: 10px; padding: 9px 12px;
+}
+.management-toolbar input { width: min(360px, 100%); }
+.management-form textarea { height: 100px; resize: vertical; }
+.management-form { display: grid; gap: 16px; max-width: 760px; }
+.management-form label { display: grid; gap: 7px; color: #334155; font-weight: 650; }
+.management-actions { display: flex; gap: 10px; }
+.status-chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 700; }
+.status-chip.success { background: #e8f7ef; color: #157347; }
+.status-chip.warning { background: #fff4df; color: #a5600a; }
+.status-chip.error { background: #fdeeee; color: #b3261e; }
+.status-chip.neutral { background: #eef1f5; color: #64748b; }
+.management-link { color: #3453d9; font-weight: 650; text-decoration: none; }
+.management-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+.management-tabs button { border: 0; border-radius: 9px; background: #eef1f5; color: #64748b; padding: 9px 14px; cursor: pointer; }
+.management-tabs button.active { background: #344fe3; color: #fff; }
+.review-layout { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
+.review-panel { border: 1px solid #e2e6ee; border-radius: 14px; background: #fff; padding: 20px; }
+.review-panel pre, .review-panel p { white-space: pre-wrap; line-height: 1.7; }
+.review-row { padding: 10px 0; border-bottom: 1px solid #edf0f5; }
+@media (max-width: 1000px) {
+  .management-grid, .management-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .review-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .management-page { padding: 24px 18px; }
+  .management-grid, .management-grid.three { grid-template-columns: 1fr; }
+  .management-toolbar { flex-direction: column; }
+}
