@@ -9,6 +9,9 @@ import "../components/learning/learning.css";
 import VideoPlayer from "../components/learning/VideoPlayer";
 import TranscriptPanel from "../components/learning/TranscriptPanel";
 import SummaryPanel from "../components/learning/SummaryPanel";
+import SectionGate from "../components/learning/SectionGate";
+import { nextLesson } from "../utils/sectionAccess";
+import { useAuth } from "../context/AuthContext";
 
 function errorMessage(err) {
   if ([403,409,422,502].includes(err?.status)) return err.message;
@@ -30,6 +33,12 @@ function locateLesson(sections, lessonId) {
 
 export default function LearningPage() {
   const { courseId, lessonId } = useParams();
+  const { user } = useAuth();
+  return <SectionGate key={`${user.id}:${courseId}:${lessonId}`} courseId={courseId} lessonId={lessonId}><LearningContent /></SectionGate>;
+}
+
+function LearningContent() {
+  const { courseId, lessonId } = useParams();
   const course = useCourse(courseId);
   const lesson = useLesson(lessonId, courseId);
   const progress = useLessonProgress(courseId, lessonId);
@@ -44,6 +53,7 @@ useEffect(() => {
 
   const where = locateLesson(course.data?.sections, lessonId);
   const sectionId = where?.section.id;
+  const next = nextLesson(course.data?.sections, lessonId);
   const [checkpointAccess, setCheckpointAccess] = useState(null);
 
   // Kiểm tra quyền từ API mỗi khi tiến độ đã lưu thay đổi.
@@ -190,6 +200,10 @@ useEffect(() => {
           onSeek={handleSeek}
         />
       </div>
+      <nav aria-label="Điều hướng bài học" style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+        <Link to={`/courses/${courseId}`}>← Lộ trình khóa học</Link>
+        {next && <Link to={`/courses/${courseId}/lessons/${next.id}`}>Bài tiếp theo: {next.title} →</Link>}
+      </nav>
     </div>
   );
 }

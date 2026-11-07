@@ -168,3 +168,17 @@ Backend gaps, documented only (NO backend files changed for item 9):
 Validation for item 9: targeted draft/result/submission/mock-quiz unit tests, the `wire quiz`
 contract test, and frontend build. No browser runs and no full test-suite run. Lint is not
 configured in this repository; no new lint tooling is introduced as part of this item.
+
+## Item 10 - section access (frontend)
+- Screens 11-13 use published course metadata and owner-scoped
+  `GET /students/me/courses` -> `unlocked_section_ids`. Missing permission fails closed.
+- Direct lesson navigation checks enrollment/unlock before mounting video/content hooks.
+  The locked screen links to the previous section from the actual course order; navigation
+  never treats watched percentage as permission to unlock the next section.
+- Backend must return sections/lessons in learning order and authoritative unlock IDs after
+  checkpoint passes (>=80%). It must independently enforce enrollment, publication and
+  unlock on content, video URL, flashcard and checkpoint endpoints. UI guards are not security.
+- Roadmap remount and the locked screen's retry button reload access. Existing opened pages
+  may be stale after revocation; protected endpoints must reject requests regardless of UI.
+- No backend changes. Backend progress/session integration and enrollment metadata remain
+  prerequisites documented above; this item does not claim API bypass protection is complete.
