@@ -12,11 +12,11 @@ export default function CourseOutline({
   }
 
   return (
-    <div>
+    <div className={courseId ? "course-outline is-enrolled" : "course-outline"}>
       {sections.map((s, i) => (
-        <div key={s.id} className="card" style={{ marginBottom: 16 }}>
+        <div key={s.id} className={"card outline-section " + (courseId && !unlockedSectionIds.includes(String(s.id)) ? "is-locked" : "")}>
           <h3 style={{ fontSize: 15, margin: "0 0 12px" }}>
-            Section {i + 1}: {s.title}
+            Section {i + 1} · {s.title}<span className="outline-count">{s.lessons?.length ?? 0} lesson</span>
             {courseId && !unlockedSectionIds.includes(String(s.id)) && " · Đang khóa"}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
@@ -30,7 +30,7 @@ export default function CourseOutline({
               const isCurrent = l.id === currentLessonId;
               const done = completedIds.has(l.id);
               return (
-                <li key={l.id} style={{ display: "flex", gap: 8, padding: "4px 0" }}>
+                <li key={l.id} className={"outline-lesson " + (done ? "is-done" : isCurrent ? "is-current" : "")}>
                   <span
                     title={done ? "Đã hoàn thành" : "Chưa hoàn thành"}
                     style={{
@@ -39,7 +39,7 @@ export default function CourseOutline({
                       fontWeight: 700,
                     }}
                   >
-                    {done ? "✓" : "○"}
+                    {done ? "✓" : courseId && unlockedSectionIds.includes(String(s.id)) ? "○" : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V6a4 4 0 0 1 8 0v4" /></svg>}
                   </span>
                   {courseId && unlockedSectionIds.includes(String(s.id)) ? (
                     <span><Link

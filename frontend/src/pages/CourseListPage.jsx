@@ -1,3 +1,4 @@
+import "../styles/student.css";
 import { useState } from "react";
 import { useCourses } from "../hooks/useCourses";
 
@@ -8,17 +9,17 @@ export default function CourseListPage() {
 
   const [query, setQuery] = useState("");
 
-  if (loading) return <div className="page">Đang tải...</div>;
-  if (error) return <div className="page">Không tải được danh sách khóa học.</div>;
+  if (loading) return <div className="page student-page student-CourseListPage">Đang tải...</div>;
+  if (error) return <div className="page student-page student-CourseListPage">Không tải được danh sách khóa học.</div>;
 
   const filtered = data.filter((c) =>
     c.title.toLowerCase().includes(query.toLowerCase())
   );
 
   return (
-    <div className="page">
-      <h1>Khám phá khóa học</h1>
-      <input
+    <div className="page student-page student-CourseListPage">
+      <h1>Khám phá khóa học</h1><p className="student-subtitle">Chọn khóa học đã publish, xem chi tiết rồi đăng ký.</p>
+      <input className="course-search"
         aria-label="Tìm khóa học"
         placeholder="Tìm khóa học..."
         value={query}

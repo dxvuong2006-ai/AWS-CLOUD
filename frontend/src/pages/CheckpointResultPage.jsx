@@ -1,3 +1,4 @@
+import "../styles/student.css";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchAttemptResult } from "../api/quizzes.api";
@@ -14,7 +15,7 @@ export default function CheckpointResultPage() {
       .catch(err => { if (active) setError(err); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [quizId, attemptId, retry]);
-  return <div className="page"><Link to="/my-courses">← Khóa học của tôi</Link><h1>Kết quả checkpoint</h1>
+  return <div className="page student-page student-CheckpointResultPage"><Link to="/my-courses">← Khóa học của tôi</Link><h1>Kết quả checkpoint</h1>
     {loading ? <p>Đang tải kết quả...</p> : error ? <div role="alert">
       <p>{[403,404].includes(error.status) ? "Không tìm thấy kết quả thuộc tài khoản của bạn." : "Không tải được kết quả. Vui lòng thử lại."}</p>
       <button onClick={() => setRetry(v => v + 1)}>Thử lại</button>

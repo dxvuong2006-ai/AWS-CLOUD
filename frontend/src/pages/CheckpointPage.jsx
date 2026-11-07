@@ -1,3 +1,4 @@
+import "../styles/student.css";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
@@ -11,7 +12,20 @@ import SubmitConfirmDialog from "../components/quiz/SubmitConfirmDialog";
 import "../components/quiz/quiz.css";
 
 function errorMessage(err) {
-  if (err?.status === 403) return "Bạn chưa mở khóa checkpoint này.";
+  if (err?.status === 403) {
+    const detail = err.message;
+    if (detail === "Mandatory AI review and practice must be completed before retrying." ||
+        detail === "Bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại.") {
+      return "Lượt checkpoint gần nhất dưới 50% nên bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại: xem giải thích lỗi, ôn bài hoặc flashcard và đạt bài practice. Chỉ hoàn thành flashcard chưa đủ mở lại checkpoint. Luồng ôn AI hiện chưa được triển khai đầy đủ trong phiên bản này.";
+    }
+    if (detail === "Complete the current lesson before this checkpoint.") {
+      return "Bạn cần hoàn thành tiến độ xem bài học trước khi làm checkpoint. Hoàn thành flashcard không thay thế tiến độ xem bài học.";
+    }
+    if (detail === "Pass the previous section checkpoint first.") {
+      return "Bạn cần đạt checkpoint của section trước để mở checkpoint này.";
+    }
+    return detail && detail !== "HTTP 403" ? detail : "Bạn chưa mở khóa checkpoint này.";
+  }
   if (err?.status === 404) return "Section này chưa có checkpoint.";
   return "Không tải được checkpoint.";
 }
@@ -104,10 +118,10 @@ export default function CheckpointPage() {
     : `/courses/${courseId}`;
   const backLabel = fromLessonId ? "← Quay lại bài học" : "← Về khóa học";
 
-  if (loading || course.loading) return <div className="page">Đang tải...</div>;
+  if (loading || course.loading) return <div className="page student-page student-CheckpointPage">Đang tải...</div>;
   if (error) {
     return (
-      <div className="page">
+      <div className="page student-page student-CheckpointPage">
         <p>{errorMessage(error)}</p>
         <button className="btn-secondary" onClick={() => setLoadVersion(v => v + 1)}>Thử lại</button>
         <Link to={backTo}>{backLabel}</Link>
@@ -204,14 +218,14 @@ export default function CheckpointPage() {
     : "";
 
   return (
-    <div className="page">
+    <div className="page student-page student-CheckpointPage">
       <Link className="back-link" to={backTo} onClick={handleLeave}>
         {backLabel}
       </Link>
 
       <div className="page-head">
         <div>
-          <h1>{result ? "Kết quả checkpoint" : "Checkpoint cuối section"}</h1>
+          <h1>{result ? "Kết quả checkpoint" : "Checkpoint Section " + (sectionIdx + 1)}</h1>
           <div className="breadcrumb">{subtitle}</div>
         </div>
         {result && (
@@ -244,9 +258,8 @@ export default function CheckpointPage() {
           )}
         </>
       ) : !started ? (
-        <div className="card">
-          <h2>{quiz.title || "Checkpoint cuối section"}</h2>
-          <p>Bài kiểm tra gồm {total} câu hỏi trắc nghiệm.</p>
+        <div className="checkpoint-intro"><div className="card checkpoint-start"><h2>Trước khi bắt đầu</h2>
+          <dl className="student-facts"><div><dt>Số câu hỏi</dt><dd>{total}</dd></div><div><dt>Điểm đạt</dt><dd>80%</dd></div><div><dt>Thời gian</dt><dd>Không giới hạn</dd></div><div><dt>Lần làm</dt><dd>Lần {(quiz.attemptCount ?? 0) + 1}</dd></div></dl>
           {quiz.attemptCount > 0 && <p>Đã làm {quiz.attemptCount} lần. Điểm lần gần nhất: {quiz.previousScore}%.</p>}
           <p>
             Bạn có thể chuyển giữa các câu để kiểm tra đáp án trước khi nộp.
@@ -272,7 +285,7 @@ export default function CheckpointPage() {
               Về lộ trình khóa học
             </Link>
           </div>
-        </div>
+        </div><aside className="card checkpoint-rules"><h3>Kết quả sẽ dẫn tới</h3><p><span className="badge badge-success">● ≥ 80%</span><span>Đạt, mở section tiếp theo.</span></p><p><span className="badge badge-warning">● 50–79%</span><span>Ôn lại, có thể hỏi AI Tutor và làm lại ngay.</span></p><p><span className="badge badge-error">● &lt; 50%</span><span>Bắt buộc ôn tập với AI trước khi làm lại.</span></p></aside></div>
       ) : (
         <div className="quiz-layout">
           <QuizForm

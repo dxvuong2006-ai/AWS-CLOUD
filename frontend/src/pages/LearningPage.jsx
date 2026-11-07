@@ -1,3 +1,4 @@
+import "../styles/student.css";
 import { MOCK_COMPLETION_PERCENT } from "../config/learning";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
@@ -102,11 +103,11 @@ useEffect(() => {
     checkpointAccess?.sectionId === sectionId && checkpointAccess?.allowed === true;
 
   if (lesson.loading || course.loading || progress.loading) {
-    return <div className="page">Đang tải...</div>;
+    return <div className="page student-page student-LearningPage">Đang tải...</div>;
   }
   if (lesson.error || course.error || !where) {
     return (
-      <div className="page">
+      <div className="page student-page student-LearningPage">
         <p>{errorMessage(lesson.error ?? course.error)}</p>
         <button onClick={lesson.reload}>Thử lại</button>
         <Link to={`/courses/${courseId}`}>← Về khóa học</Link>
@@ -114,7 +115,7 @@ useEffect(() => {
     );
   }
 
-  if (progress.error) return <div className="page"><p role="alert">Không tải được tiến độ học. Hãy thử lại để khôi phục đúng vị trí.</p><button onClick={progress.reload}>Thử lại</button><p><Link to={`/courses/${courseId}`}>Về khóa học</Link></p></div>;
+  if (progress.error) return <div className="page student-page student-LearningPage"><p role="alert">Không tải được tiến độ học. Hãy thử lại để khôi phục đúng vị trí.</p><button onClick={progress.reload}>Thử lại</button><p><Link to={`/courses/${courseId}`}>Về khóa học</Link></p></div>;
   const done = progress.courseProgress?.lessons.find(
     (l) => l.lesson_id === lessonId
   )?.completed;
@@ -129,7 +130,7 @@ useEffect(() => {
   };
 
   return (
-    <div className="page">
+    <div className="page student-page student-LearningPage">
       <div className="page-head">
         <div>
           <div className="breadcrumb">
@@ -144,7 +145,7 @@ useEffect(() => {
                   ✓ Đã hoàn thành
                 </span>
               )}
-            </h1>
+            </h1><p className="student-subtitle">Video, transcript và tóm tắt trong cùng một màn hình.</p>
         </div>
         <div className="page-actions">
           <Link className="btn-secondary" to={`/courses/${courseId}/sections/${sectionId}/lessons/${lessonId}/flashcards${flashcardSearch}`}>

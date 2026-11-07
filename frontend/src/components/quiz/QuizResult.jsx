@@ -4,7 +4,8 @@ export default function QuizResult({ result }) {
   const band = getScoreBand(result.score_percent, { passed: result.passed });
 
   return (
-    <>
+    <div className={result.passed ? "checkpoint-result result-passed" : "checkpoint-result"}>
+    {result.passed && <div className="result-success-banner">✓ Bạn đã đạt checkpoint. Quay lại lộ trình để xem section tiếp theo.</div>}
     <div className="result-grid">
       <div className="card">
         <h2>{result.passed ? "Đạt checkpoint" : result.score_percent < 50 ? "Cần ôn tập AI bắt buộc" : "Chưa đạt — có thể ôn và làm lại"}</h2>
@@ -47,13 +48,13 @@ export default function QuizResult({ result }) {
       <h2>Chi tiết từng câu</h2>
       {!(result.question_results ?? []).length && <p>Chưa có chi tiết câu trả lời cho lượt làm này.</p>}
       {(result.question_results ?? []).map(row => <article className="card" key={row.question_id}>
-        <h3>Câu {row.question_number}: {row.text}</h3>
+        <h3><span className={"result-question-icon " + (row.is_correct ? "correct" : "incorrect")} aria-hidden="true">{row.is_correct ? "✓" : "×"}</span>Câu {row.question_number} · {row.text}</h3>
         <p className={`badge badge-${row.is_correct ? "success" : "error"}`}>{row.is_correct ? "Đúng" : "Sai"}</p>
         <p>Bạn chọn: <strong>{row.selected_answer ?? "Chưa trả lời — tính là sai"}</strong></p>
         {row.correct_answer != null && <p>Đáp án đúng: <strong>{row.correct_answer}</strong></p>}
         <p><strong>Giải thích: </strong>{row.explanation || "Chưa có lời giải cho câu này."}</p>
       </article>)}
     </section>
-    </>
+    </div>
   );
 }

@@ -34,8 +34,14 @@ function useCooldown(email, purpose) {
     },
   };
 }
-function Field({ label, id, ...props }) {
-  return <div className="account-field"><label htmlFor={id}>{label}</label><input id={id} {...props} /></div>;
+function Field({ label, id, hint, ...props }) {
+  return <div className="account-field"><label htmlFor={id}>{label}</label>
+    <div className={props.type === "password" ? "account-password" : undefined}>
+      <input id={id} {...props} />
+      {props.type === "password" && <svg className="account-password-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>}
+    </div>
+    {hint && <p className="account-hint">{hint}</p>}
+  </div>;
 }
 function ErrorText({ error }) { return error ? <p role="alert" className="login-error">{error}</p> : null; }
 function checkPasswords(password, confirm) {
@@ -47,7 +53,7 @@ export function RegisterPage() {
   const { busy, error, run } = useAction();
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const field = (key) => ({ value: form[key], onChange: (e) => setForm({ ...form, [key]: e.target.value }) });
-  return <AccountLayout title="Đăng ký học viên" subtitle="Tạo tài khoản để bắt đầu học.">
+  return <AccountLayout variant="account-register" title="Đăng ký học viên" subtitle="Tạo tài khoản để bắt đầu học.">
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
       checkPasswords(form.password, form.confirm);
       const email = form.email.trim().toLowerCase();
@@ -59,14 +65,14 @@ export function RegisterPage() {
       sessionStorage.setItem(`learncloud.cooldown:verify:${email}`, String(Date.now()+(result.retry_after ?? 60)*1000));
       navigate("/verify-email?email=" + encodeURIComponent(email));
     }); }}>
-      <Field id="register-name" label="Họ tên" required maxLength={100} autoComplete="name" {...field("name")} />
-      <Field id="register-email" label="Email" type="email" required autoComplete="email" {...field("email")} />
-      <Field id="register-password" label="Mật khẩu (8–128 ký tự)" type="password" required minLength={8} maxLength={128} autoComplete="new-password" {...field("password")} />
-      <Field id="register-confirm" label="Nhập lại mật khẩu" type="password" required autoComplete="new-password" {...field("confirm")} />
-      <ErrorText error={error} /><button className="login-submit" disabled={busy}>{busy ? "Đang tạo..." : "Tạo tài khoản"}</button>
+      <Field id="register-name" label="Họ và tên" placeholder="Nhập họ và tên" required maxLength={100} autoComplete="name" {...field("name")} />
+      <Field id="register-email" label="Email" placeholder="ten@example.com" type="email" required autoComplete="email" {...field("email")} />
+      <Field id="register-password" label="Mật khẩu" hint="Ít nhất 8 ký tự, gồm chữ và số." placeholder="••••••••••" type="password" required minLength={8} maxLength={128} autoComplete="new-password" {...field("password")} />
+      <Field id="register-confirm" label="Xác nhận mật khẩu" placeholder="••••••••••" type="password" required autoComplete="new-password" {...field("confirm")} />
+      <label className="account-terms"><input type="checkbox" defaultChecked /> <span>Tôi đồng ý với điều khoản sử dụng</span></label><ErrorText error={error} /><button className="login-submit" disabled={busy}>{busy ? "Đang tạo..." : "Tạo tài khoản"}</button>
     </form>
-    <p><Link to="/verify-email">Đã đăng ký nhưng chưa xác minh?</Link></p>
-    <p><Link to="/login">Đã có tài khoản? Đăng nhập</Link></p>
+    <p className="account-secondary-link"><Link to="/verify-email">Đã đăng ký nhưng chưa xác minh?</Link></p>
+    <p className="account-footer">Đã có tài khoản? <Link to="/login">Đăng nhập</Link></p>
   </AccountLayout>;
 }
 
@@ -75,24 +81,28 @@ export function VerifyEmailPage() {
   const [email, setEmail] = useState(params.get("email") || "");
   const [code, setCode] = useState(""); const [message, setMessage] = useState("");
   const { busy, error, run } = useAction(); const cooldown = useCooldown(email, "verify");
-  return <AccountLayout title="Xác minh email" subtitle="Nhập mã 6 chữ số được gửi tới email của bạn.">
+  return <AccountLayout variant="account-verify" icon="mail" title="Xác minh email" subtitle={<>Mã gồm 6 chữ số đã được gửi tới<br /><strong>{email || "email của bạn"}</strong></>}>
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
       await verifyEmail(email.trim(), code); navigate("/register-success", { replace: true });
     }); }}>
-      <Field id="verify-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      <Field id="verify-code" label="Mã xác minh" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+      <details className="account-email-edit" open={!params.get("email")}><summary>Thay đổi email</summary><Field id="verify-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></details>
+      <div className="account-code">
+        <label className="account-sr-only" htmlFor="verify-code">Mã xác minh</label>
+        <input id="verify-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+        <div className="account-code-slots" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} className={index === code.length ? "is-current" : ""}>{code[index]}</span>)}</div>
+      </div>
       <ErrorText error={error} /><button className="login-submit" disabled={busy}>Xác minh</button>
     </form>
-    <button className="login-register" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
+    <button className="account-resend" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
       const result = await resendVerification(email.trim()); cooldown.start(result.retry_after ?? 60); setMessage(result.message);
     })}>{cooldown.seconds ? `Gửi lại sau ${cooldown.seconds}s` : "Gửi lại mã"}</button>
     {message && <p role="status">{message}</p>}
-    <Link to="/register">← Quay lại đăng ký</Link>
+    <Link className="account-back" to="/register">← Quay lại đăng ký</Link>
   </AccountLayout>;
 }
 
 export function RegisterSuccessPage() {
-  return <AccountLayout title="Đăng ký thành công" subtitle="Email của bạn đã được xác minh.">
+  return <AccountLayout variant="account-success" icon="success" title="Đăng ký thành công" subtitle={<>Tài khoản học viên của bạn đã sẵn sàng.<br />Hãy đăng nhập để bắt đầu học.</>}>
     <Link className="login-submit" to="/login">Đăng nhập</Link>
   </AccountLayout>;
 }
@@ -100,16 +110,16 @@ export function RegisterSuccessPage() {
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState(""); const { busy, error, run } = useAction();
   const navigate = useNavigate();
-  return <AccountLayout title="Quên mật khẩu" subtitle="Nhập email để nhận hướng dẫn đặt lại mật khẩu.">
+  return <AccountLayout variant="account-forgot" title="Quên mật khẩu" subtitle="Nhập email, chúng tôi sẽ gửi mã đặt lại mật khẩu.">
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
       const normalized = email.trim().toLowerCase();
       const result = await forgotPassword(normalized);
       sessionStorage.setItem(`learncloud.cooldown:reset:${normalized}`, String(Date.now()+(result.retry_after ?? 60)*1000));
       navigate("/reset-password?email=" + encodeURIComponent(normalized));
     }); }}>
-      <Field id="forgot-email" label="Email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <Field id="forgot-email" label="Email" placeholder="ten@example.com" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       <ErrorText error={error} /><button className="login-submit" disabled={busy}>Gửi mã đặt lại</button>
-    </form><p><Link to="/login">← Quay lại đăng nhập</Link></p>
+    </form><p className="account-footer"><Link className="account-back" to="/login">← Quay lại đăng nhập</Link></p>
   </AccountLayout>;
 }
 
@@ -118,21 +128,21 @@ export function ResetPasswordPage() {
   const [email, setEmail] = useState(params.get("email") || "");
   const [code, setCode] = useState(""); const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState("");
   const { busy, error, run } = useAction(); const cooldown = useCooldown(email, "reset");
-  return <AccountLayout title="Đặt lại mật khẩu" subtitle="Nếu email phù hợp, mã hướng dẫn đã được gửi. Vui lòng kiểm tra hộp thư.">
+  return <AccountLayout variant="account-reset" title="Đặt lại mật khẩu" subtitle="Nhập mã đã gửi tới email và mật khẩu mới.">
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
       checkPasswords(password, confirm); await resetPassword(email.trim(), code, password);
       navigate("/login", { replace: true, state: { message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập." } });
     }); }}>
-      <Field id="reset-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      <Field id="reset-code" label="Mã xác minh" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
-      <Field id="reset-password" label="Mật khẩu mới" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <Field id="reset-confirm" label="Nhập lại mật khẩu" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      <details className="account-email-edit" open={!params.get("email")}><summary>Thay đổi email</summary><Field id="reset-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></details>
+      <Field id="reset-code" label="Mã xác minh" placeholder="Nhập mã 6 chữ số" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
+      <Field id="reset-password" label="Mật khẩu mới" hint="Ít nhất 8 ký tự, gồm chữ và số." placeholder="••••••••••" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <Field id="reset-confirm" label="Xác nhận mật khẩu mới" placeholder="••••••••••" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       <ErrorText error={error} /><button className="login-submit" disabled={busy}>Đặt lại mật khẩu</button>
     </form>
-    <button className="login-register" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
+    <button className="account-resend" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
       const result = await forgotPassword(email.trim()); cooldown.start(result.retry_after ?? 60);
     })}>{cooldown.seconds ? `Gửi lại sau ${cooldown.seconds}s` : "Gửi lại mã"}</button>
-    <Link to="/login">← Quay lại đăng nhập</Link>
+    <Link className="account-back" to="/login">← Quay lại đăng nhập</Link>
   </AccountLayout>;
 }
 

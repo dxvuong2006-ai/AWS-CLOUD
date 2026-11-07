@@ -142,7 +142,7 @@ export default function Navbar({ user, role, onLogout }) {
         className="navbar__brand"
         aria-label="LearnCloud - Trang chủ"
       >
-        <img className="navbar__logo" src={logo} alt="LearnCloud" />
+        {currentRole === "STUDENT" ? <span className="student-brand-mark" aria-hidden="true">L</span> : <img className="navbar__logo" src={logo} alt="LearnCloud" />}
         <span className="navbar__brand-name">LearnCloud</span>
       </Link>
 

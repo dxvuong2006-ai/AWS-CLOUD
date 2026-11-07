@@ -26,7 +26,7 @@ export default function FlashcardDeck({ deck, courseId, sectionId, lessonId, ses
     {failure && <div role="alert"><p>{failure}</p><button onClick={() => update(progress)}>Thử lưu lại</button><button onClick={() => update(freshFlashcardProgress(deck.cards))}>Bắt đầu lại</button></div>}
     {progress.completed ? <div className="card flashcard-finish"><span className="flashcard-success" aria-hidden="true">✓</span><h2>Hoàn thành {progress.queue.length} / {progress.queue.length} thẻ</h2>
       <div className="flashcard-stats"><div><strong>{deck.cards.filter(row => progress.ratings[row.id] === "remembered").length}</strong>Đã nhớ</div><div><strong>{reviewCount}</strong>Cần ôn lại</div></div>
-      <div className="flashcard-actions"><button className="btn-secondary" disabled={!reviewCount} onClick={() => update(reviewFlashcards(progress, deck.cards))}>Ôn lại {reviewCount} thẻ cần ôn</button>
+      <p className="flashcard-eligibility-note">Hoàn thành flashcard không tự mở khóa checkpoint. Nếu lượt checkpoint gần nhất dưới 50%, bạn cần hoàn thành cả ôn tập AI và bài practice trước khi làm lại.</p><div className="flashcard-actions"><button className="btn-secondary" disabled={!reviewCount} onClick={() => update(reviewFlashcards(progress, deck.cards))}>Ôn lại {reviewCount} thẻ cần ôn</button>
         <Link className="btn-primary" to={`/courses/${courseId}/sections/${sectionId}/checkpoint`} state={{ lessonId }}>→ Làm checkpoint</Link></div>
       <button className="btn-secondary" onClick={() => update(reviewFlashcards(progress, deck.cards, false))}>Ôn lại tất cả</button>
       <p><Link to={`/courses/${courseId}`}>Về lộ trình khóa học</Link></p>
@@ -37,8 +37,8 @@ export default function FlashcardDeck({ deck, courseId, sectionId, lessonId, ses
         <span className="flashcard-badge">{flipped ? "Đáp án" : "Khái niệm"}</span>
         <h2>{flipped ? card.back : card.front}</h2>
         {!flipped && <small>Hãy thử nhớ câu trả lời trước khi lật thẻ.</small>}
-        {flipped && card.sourceSeconds != null && <small>Nguồn: {Math.floor(card.sourceSeconds / 60)}:{String(Math.floor(card.sourceSeconds % 60)).padStart(2, "0")}</small>}
-        <button className={flipped ? "btn-secondary" : "btn-primary"} onClick={() => setFlipped(value => !value)}>{flipped ? "Xem mặt trước" : "↻ Lật thẻ"}</button>
+        {flipped && card.sourceSeconds != null && <small>Nguồn <span className="time-chip">{Math.floor(card.sourceSeconds / 60)}:{String(Math.floor(card.sourceSeconds % 60)).padStart(2, "0")}</span></small>}
+        <button className={flipped ? "flashcard-return" : "btn-primary"} onClick={() => setFlipped(value => !value)}>{flipped ? "Xem mặt trước" : "↻ Lật thẻ"}</button>
       </div>
       {!flipped && <div className="flashcard-actions"><button className="btn-secondary" disabled={progress.index === 0} onClick={() => update({ ...progress, index: progress.index - 1 })}>← Thẻ trước</button>
         <button className="btn-secondary" disabled={progress.index === progress.queue.length - 1} onClick={() => update({ ...progress, index: progress.index + 1 })}>Thẻ tiếp →</button></div>}
