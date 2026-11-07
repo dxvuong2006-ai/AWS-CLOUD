@@ -1,0 +1,19 @@
+{
+  "source": [
+    "learncloud.video"
+  ],
+  "detail-type": [
+    "Video Retry Requested"
+  ],
+  "account": [
+    "${ACCOUNT_ID}"
+  ],
+  "detail": {
+    "bucket": [
+      "learncloud-videos-mentorcloud"
+    ],
+    "kind": [
+      "retry"
+    ]
+  }
+}

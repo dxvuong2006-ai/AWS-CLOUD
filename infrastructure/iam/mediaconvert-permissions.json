@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/*/raw/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/*/processed/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "lessons/*/raw/*",
+            "lessons/*/processed/*"
+          ]
+        }
+      }
+    }
+  ]
+}

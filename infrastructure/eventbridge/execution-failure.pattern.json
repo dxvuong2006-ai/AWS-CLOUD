@@ -1,0 +1,18 @@
+{
+  "source": [
+    "aws.states"
+  ],
+  "detail-type": [
+    "Step Functions Execution Status Change"
+  ],
+  "detail": {
+    "stateMachineArn": [
+      "${STATE_MACHINE_ARN}"
+    ],
+    "status": [
+      "FAILED",
+      "TIMED_OUT",
+      "ABORTED"
+    ]
+  }
+}

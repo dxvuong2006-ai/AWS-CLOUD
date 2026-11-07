@@ -1,0 +1,317 @@
+{
+  "Comment": "CODE READY / AWS NOT DEPLOYED. Standard workflow; Lambda CreateJob + bounded GetJob polling; no unsupported .sync assumption. Replace both ARN placeholders. No automatic submit retry.",
+  "StartAt": "Claim",
+  "TimeoutSeconds": 7200,
+  "States": {
+    "Claim": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "claim",
+          "payload.$": "$",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "OutputPath": "$.Payload",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.TooManyRequestsException",
+            "PipelineTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "InvalidUpload"
+        }
+      ],
+      "Next": "ClaimDecision"
+    },
+    "ClaimDecision": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.decision",
+          "StringEquals": "START",
+          "Next": "InitPolls"
+        }
+      ],
+      "Default": "DuplicateIgnored"
+    },
+    "InitPolls": {
+      "Type": "Pass",
+      "Parameters": {
+        "run_id.$": "$.run_id",
+        "ai_enabled.$": "$.ai_enabled",
+        "polls": 0
+      },
+      "Next": "SubmitMediaConvert"
+    },
+    "SubmitMediaConvert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "submit",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "WaitForJob"
+    },
+    "WaitForJob": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "PollMediaConvert"
+    },
+    "PollMediaConvert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "poll",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "PipelineTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "JobDecision"
+    },
+    "JobDecision": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.last.Payload.status",
+          "StringEquals": "COMPLETE",
+          "Next": "VerifyProcessedObject"
+        },
+        {
+          "Variable": "$.last.Payload.status",
+          "StringEquals": "FAILED",
+          "Next": "RecordFailure"
+        },
+        {
+          "Variable": "$.polls",
+          "NumericGreaterThanEquals": 119,
+          "Next": "RecordFailure"
+        }
+      ],
+      "Default": "IncrementPolls"
+    },
+    "IncrementPolls": {
+      "Type": "Pass",
+      "Parameters": {
+        "run_id.$": "$.run_id",
+        "ai_enabled.$": "$.ai_enabled",
+        "polls.$": "States.MathAdd($.polls, 1)"
+      },
+      "Next": "WaitForJob"
+    },
+    "VerifyProcessedObject": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "verify",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "PipelineTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "AIEnabled"
+    },
+    "AIEnabled": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ai_enabled",
+          "BooleanEquals": true,
+          "Next": "GenerateAIContent"
+        }
+      ],
+      "Default": "VideoReadyAIPending"
+    },
+    "GenerateAIContent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AI_WORKER_ARN}",
+        "Payload": {
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 900,
+      "ResultPath": "$.last",
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "ValidateAIAndRequireReview"
+    },
+    "ValidateAIAndRequireReview": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "finalize_ai",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id",
+          "proof.$": "$.last.Payload"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "PipelineTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "ReviewRequired"
+    },
+    "RecordFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "fail",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Next": "PipelineFailed"
+    },
+    "PipelineFailed": {
+      "Type": "Fail",
+      "Error": "VideoPipelineFailed",
+      "Cause": "Video processing failed. Inspect restricted execution history and the pipeline ledger."
+    },
+    "InvalidUpload": {
+      "Type": "Fail",
+      "Error": "InvalidUploadOrClaimFailed",
+      "Cause": "Upload could not be claimed. No unverified lesson may be processed."
+    },
+    "DuplicateIgnored": {
+      "Type": "Succeed",
+      "Comment": "Duplicate or stale event. No new processing."
+    },
+    "VideoReadyAIPending": {
+      "Type": "Succeed",
+      "Comment": "Video verified and saved. AI incomplete: Lesson remains PROCESSING; ledger VIDEO_READY. This is not approval."
+    },
+    "ReviewRequired": {
+      "Type": "Succeed",
+      "Comment": "C attested completion and persisted AI fields passed validation. Instructor must approve explicitly."
+    }
+  }
+}

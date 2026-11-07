@@ -1,0 +1,32 @@
+{
+  "source": [
+    "aws.s3"
+  ],
+  "detail-type": [
+    "Object Created"
+  ],
+  "region": [
+    "ap-southeast-1"
+  ],
+  "account": [
+    "${ACCOUNT_ID}"
+  ],
+  "detail": {
+    "bucket": {
+      "name": [
+        "learncloud-videos-mentorcloud"
+      ]
+    },
+    "object": {
+      "key": [
+        {
+          "wildcard": "lessons/*/raw/*"
+        }
+      ]
+    },
+    "reason": [
+      "PutObject",
+      "CompleteMultipartUpload"
+    ]
+  }
+}
