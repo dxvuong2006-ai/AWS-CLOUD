@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
-import { fetchSectionQuiz, submitAttempt, readPendingAttempt, recoverPendingCheckpoint } from "../api/quizzes.api";
+import { fetchSectionQuiz, submitAttempt, readPendingAttempt, recoverPendingCheckpoint, knownCheckpointQuizId } from "../api/quizzes.api";
+import { createCheckpointDraft, restoreCheckpointDraft, saveCheckpointDraft } from "../utils/checkpointDraft";
+import CheckpointHistory from "../components/quiz/CheckpointHistory";
 import QuizForm from "../components/quiz/QuizForm";
 import QuizNavigator from "../components/quiz/QuizNavigator";
 import QuizResult from "../components/quiz/QuizResult";
@@ -32,11 +34,19 @@ export default function CheckpointPage() {
   const [submissionPending, setSubmissionPending] = useState(false);
   const submissionBusy = useRef(false);
   const generation = useRef(0);
+  const draft = useRef(null);
+  const [draftError, setDraftError] = useState(null);
+  const [restored, setRestored] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     generation.current += 1;
     submissionBusy.current = false;
     setSubmitting(false);
+    draft.current = null;
+    setDraftError(null);
+    setRestored(false);
+    setQuiz(null);
     let cancelled = false;
     setLoading(true);
     setStarted(false);
@@ -59,6 +69,18 @@ export default function CheckpointPage() {
         if (cancelled) return;
         setQuiz(q);
         if (q.recoveredResult) setResult(q.recoveredResult);
+        if (!q.recoveredResult) {
+          try {
+            const saved = restoreCheckpointDraft(q, courseId, sectionId);
+            if (saved) {
+              draft.current = saved;
+              setAnswers(saved.answers);
+              setIndex(saved.index);
+              setStarted(true);
+              setRestored(true);
+            }
+          } catch (err) { setDraftError(err); }
+        }
         const pending = readPendingAttempt(q.id);
         if (pending) {
           setAnswers(Object.fromEntries(pending.answers.map(a => [String(a.question_id), a.selected_answer])));
@@ -72,7 +94,9 @@ export default function CheckpointPage() {
       cancelled = true;
       generation.current += 1;
     };
-  }, [courseId, sectionId, fromLessonId]);
+  }, [courseId, sectionId, fromLessonId, loadVersion]);
+
+  const historyQuizId = quiz?.id ?? knownCheckpointQuizId(courseId, sectionId);
 
   // Quay lại đúng bài học vừa học (LearningPage gửi kèm lessonId), không có thì về khóa học
   const backTo = fromLessonId
@@ -85,7 +109,9 @@ export default function CheckpointPage() {
     return (
       <div className="page">
         <p>{errorMessage(error)}</p>
+        <button className="btn-secondary" onClick={() => setLoadVersion(v => v + 1)}>Thử lại</button>
         <Link to={backTo}>{backLabel}</Link>
+        {historyQuizId && <CheckpointHistory quizId={historyQuizId} />}
       </div>
     );
   }
@@ -97,18 +123,40 @@ export default function CheckpointPage() {
   const unanswered = quiz.questions.filter((q) => !answers[q.id]).length;
 
   const handleLeave = (e) => {
-    const hasWork = !result && Object.keys(answers).length > 0;
-    if (hasWork && !window.confirm("Rời khỏi checkpoint? Các câu trả lời chưa nộp sẽ mất.")) {
+    if (draftError && !result && !window.confirm("Chưa lưu được nháp. Rời trang có thể mất các lựa chọn mới. Bạn vẫn muốn rời trang?")) {
       e.preventDefault();
     }
   };
 
   const handleSelect = (questionId, optionId) => {
-    if (!submissionPending) setAnswers((prev) => ({ ...prev, [questionId]: optionId }));
+    if (submissionPending || !draft.current) return;
+    const next = { ...draft.current.answers, [questionId]: optionId };
+    setAnswers(next);
+    draft.current = { ...draft.current, answers: next };
+    persistDraft(next, index);
+  };
+
+  const persistDraft = (selected, position) => {
+    try {
+      draft.current = saveCheckpointDraft(draft.current, selected, position);
+      setDraftError(null);
+      return true;
+    } catch (err) { setDraftError(err); return false; }
+  };
+  const start = () => {
+    try {
+      draft.current = createCheckpointDraft(quiz, courseId, sectionId);
+      setAnswers({}); setIndex(0); setDraftError(null); setRestored(false); setStarted(true);
+    } catch (err) { setDraftError(err); }
+  };
+  const goTo = (position) => {
+    setIndex(position);
+    if (draft.current && !submissionPending) persistDraft(draft.current.answers, position);
   };
 
   const handleSubmit = async () => {
     if (submissionBusy.current) return;
+    if (!submissionPending && (!draft.current || !persistDraft(answers, index))) return;
     const currentGeneration = generation.current;
     submissionBusy.current = true;
     setSubmissionPending(true);
@@ -119,9 +167,13 @@ export default function CheckpointPage() {
       const payload = quiz.questions
         .filter((q) => answers[q.id])
         .map((q) => ({ question_id: q.id, selected_option_id: answers[q.id] }));
-      const submitted = await submitAttempt(quiz.id, payload, courseId, fromLessonId);
+      const submitted = await submitAttempt(quiz.id, payload, courseId, fromLessonId, draft.current?.sessionId);
       if (generation.current !== currentGeneration) return;
       setResult(submitted);
+      draft.current = null;
+      setDraftError(null);
+      setRestored(false);
+      setQuiz(q => ({ ...q, attemptCount: submitted.attempt_number, previousScore: submitted.score_percent }));
       setSubmissionPending(false);
     } catch (err) {
       if (generation.current !== currentGeneration) return;
@@ -137,12 +189,14 @@ export default function CheckpointPage() {
   };
 
   const handleRetry = () => {
+    if (result?.can_retry !== true) return;
     setAnswers({});
     setIndex(0);
     setResult(null);
     setSubmitError(null);
     setConfirmOpen(false);
     setStarted(false);
+    setLoadVersion(v => v + 1);
   };
 
   const subtitle = section
@@ -160,8 +214,8 @@ export default function CheckpointPage() {
           <h1>{result ? "Kết quả checkpoint" : "Checkpoint cuối section"}</h1>
           <div className="breadcrumb">{subtitle}</div>
         </div>
-        {result && result.can_retry !== false && (
-          <button className="btn-secondary" onClick={handleRetry}>
+        {result && (
+          <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>
             Làm lại checkpoint
           </button>
         )}
@@ -172,12 +226,15 @@ export default function CheckpointPage() {
           Không nộp được bài. Câu trả lời của bạn vẫn còn, hãy thử nộp lại.
         </p>
       )}
+      {draftError && <p role="alert" className="quiz-warn">Chưa lưu được nháp: {draftError.message} Các lựa chọn mới vẫn ở trang này. {draft.current && <button onClick={() => persistDraft(answers, index)}>Thử lưu lại</button>}</p>}
+      {restored && !result && <p role="status">Đã khôi phục đáp án và vị trí câu hỏi của phiên đang làm.</p>}
+      {started && !result && !draftError && <p>Đáp án được lưu trong tab này ngay khi chọn. Không đóng tab nếu chưa nộp bài.</p>}
       {submissionPending && <p role="status">Đang chờ xác nhận lần nộp trước. Hãy nộp lại để lấy kết quả; câu trả lời được giữ nguyên.</p>}
 
       {result ? (
         <>
           <QuizResult result={result} />
-          {result.remediation_required && <p role="status">Bạn cần hoàn thành ôn tập AI, xem lại học liệu và đạt practice trước khi làm lại checkpoint.</p>}
+          {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}`}>Mở lại kết quả lượt làm này</Link></p>}
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>
@@ -207,7 +264,7 @@ export default function CheckpointPage() {
               type="button"
               className="btn-primary"
               disabled={total === 0}
-              onClick={() => setStarted(true)}
+              onClick={start}
             >
               Bắt đầu làm bài
             </button>
@@ -226,18 +283,20 @@ export default function CheckpointPage() {
             selectedId={answers[quiz.questions[index].id]}
             unanswered={unanswered}
             onSelect={handleSelect}
-            onPrev={() => setIndex((i) => Math.max(0, i - 1))}
-            onNext={() => setIndex((i) => Math.min(total - 1, i + 1))}
+            onPrev={() => goTo(Math.max(0, index - 1))}
+            onNext={() => goTo(Math.min(total - 1, index + 1))}
             onSubmit={() => setConfirmOpen(true)}
           />
           <QuizNavigator
             questions={quiz.questions}
             answers={answers}
             currentIndex={index}
-            onGo={setIndex}
+            onGo={goTo}
           />
         </div>
       )}
+
+      {(!started || result) && historyQuizId && <CheckpointHistory quizId={historyQuizId} refreshKey={result?.id} />}
 
       {confirmOpen && (
         <SubmitConfirmDialog

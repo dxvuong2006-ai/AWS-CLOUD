@@ -117,3 +117,54 @@ Remaining integration dependencies:
 Targeted checks: backend `python -B -m unittest discover -s tests/unit -p test_checkpoint_backend.py -v`;
 frontend `node --test tests/checkpoint-submit.test.cjs tests/mock-quiz.test.cjs` and the
 `wire quiz` test in api-contract.test.cjs. No browser tests are required for item 8.
+
+## 9. Checkpoint result UI and resumable drafts (frontend only)
+Screens 17-22 now show start/previous score, answering, submit confirmation, and distinct
+pass / optional review / mandatory AI-review outcomes. The server's `passed`, `can_retry`
+and `remediation_required` remain authoritative in real mode; the frontend does not grade.
+The result includes each returned answer's correct/incorrect status and unanswered items.
+AI Tutor/practice navigation is still unavailable; its buttons remain explicitly disabled.
+
+Draft policy:
+- sessionStorage, same browser tab, scoped by authenticated user + quiz + fresh UUID session.
+  Course and section IDs plus a signature of the public question/option data must also match.
+- Clicking Start creates a session. Every selection and question navigation persists immediately.
+  Refresh restores selections and question index. Closing the tab is not a durability guarantee;
+  cross-device/cross-tab synchronization and server-side drafts are not implemented.
+- Storage failures are visible and choices remain in memory. The UI does not claim an unsaved
+  change is durable. A changed quiz cannot reuse the old draft; the learner starts a new session.
+- Session UUID is also POST request_id. Pending payload is frozen on submission and retained
+  on unknown network outcomes. Only confirmed success retires the draft; a submitted marker
+  blocks late writes/restoration. A new attempt gets a new UUID and empty choices.
+- Completion/cleanup happens in the API adapter even if the page was left while submitting.
+  Request data remains retryable if local cleanup fails after the server accepted the attempt.
+
+Results/history:
+- History uses the EXISTING owner-scoped GET /quizzes/{id}/attempts?limit=20&offset=... .
+  `/checkpoint-results/:quizId/:attemptId` reopens a result by searching those pages. Missing
+  or unauthorized results show an error; no cached grade or another account's data is used.
+- Mock history is persisted separately in localStorage under
+  `learncloud.mock.checkpoint-history.v1:{quizId}:user:{userId}`. It stores immutable question
+  review snapshots, demo explanations, UUID and score. The mock locks retries below 50%.
+  To reset this demo history, remove the matching current-user keys as well as older progress/
+  attempts/pass keys. Do not clear other accounts or all browser storage.
+
+Backend gaps, documented only (NO backend files changed for item 9):
+- Existing attempt responses contain question_id, selected_answer and is_correct, but not
+  the historical question text, correct_answer or explanation. Return these as immutable
+  post-submit snapshot fields in `answers[]` (question_text, position, correct_answer,
+  explanation), for both submit responses and owner-scoped history. NEVER add solutions to
+  the public pre-submit quiz response. The adapter/rendering already accepts those fields.
+- Until these fields exist, real mode displays the status/selection it has and says that the
+  explanation is unavailable; historical questions without text are identified by question ID.
+  It does not invent an explanation or substitute today's edited question for historical text.
+- A direct owner-scoped attempt-detail endpoint is an optional future optimization; current
+  reopening works through paginated history. AI remediation confirmation remains item 8's gap.
+- On a fresh tab/device, a blocked checkpoint does not currently disclose its quiz ID.
+  Listing history from that section therefore needs safe quiz_id metadata or a section
+  status endpoint from backend; existing result URLs remain usable with authentication.
+  In the current tab the ID remembered when opening the quiz enables the history list.
+
+Validation for item 9: targeted draft/result/submission/mock-quiz unit tests, the `wire quiz`
+contract test, and frontend build. No browser runs and no full test-suite run. Lint is not
+configured in this repository; no new lint tooling is introduced as part of this item.

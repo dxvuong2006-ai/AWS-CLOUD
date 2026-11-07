@@ -4,6 +4,7 @@ import CourseListPage from "../pages/CourseListPage";
 import CourseDetailPage from "../pages/CourseDetailPage";
 import LearningPage from "../pages/LearningPage";
 import CheckpointPage from "../pages/CheckpointPage";
+import CheckpointResultPage from "../pages/CheckpointResultPage";
 import { RegisterPage, VerifyEmailPage, RegisterSuccessPage, ForgotPasswordPage, ResetPasswordPage, ProfilePage } from "../pages/AccountPages";
 import LoginPage from "../pages/LoginPage";
 import ProtectedRoute from "./ProtectedRoute";
@@ -45,6 +46,7 @@ export default function AppRoutes() {
         <Route path="/courses/:courseId" element={<CourseDetailPage />} />
         <Route path="/courses/:courseId/lessons/:lessonId" element={<LearningPage />} />
         <Route path="/courses/:courseId/sections/:sectionId/checkpoint" element={<CheckpointPage />} />
+        <Route path="/checkpoint-results/:quizId/:attemptId" element={<CheckpointResultPage />} />
         <Route path="/my-courses" element={<MyCoursesPage />} />
         <Route path="/flashcards" element={<Pending title="Flashcard" />} />
         <Route path="/progress" element={<Pending title="Tiến độ" />} />

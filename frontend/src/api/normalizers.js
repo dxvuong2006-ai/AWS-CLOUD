@@ -34,12 +34,26 @@ export function normalizeAttempt(data, quiz) {
   return {
     id: String(data.id),
     attempt_number: data.attempt_number,
+    quiz_id: data.quiz_id == null ? quiz?.id : String(data.quiz_id),
+    created_at: data.created_at ?? null,
     score_percent: Number(data.score),
     passed: data.passed,
     can_retry: data.can_retry === true,
     remediation_required: data.remediation_required === true,
     correct_count: results.filter((a) => a.is_correct).length,
     total_questions: results.length,
+    question_results: results.map((answer, index) => {
+      const question = quiz?.questions.find(q => q.id === String(answer.question_id));
+      return {
+        question_id: String(answer.question_id),
+        question_number: answer.position ?? index + 1,
+        text: answer.question_text ?? question?.text ?? `Câu hỏi #${answer.question_id}`,
+        selected_answer: answer.selected_answer ?? null,
+        correct_answer: answer.correct_answer ?? null,
+        explanation: answer.explanation ?? null,
+        is_correct: answer.is_correct === true,
+      };
+    }),
     review_concepts: results.flatMap((answer, index) => {
       if (answer.is_correct) return [];
       const question = quiz?.questions.find((q) => q.id === String(answer.question_id));

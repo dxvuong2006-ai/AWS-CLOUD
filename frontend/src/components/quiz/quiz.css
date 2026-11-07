@@ -113,3 +113,8 @@
 .modal p { margin: 0 0 20px; color: var(--text-muted); line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .quiz-warn { color: var(--warning); }
+.checkpoint-review .card, .checkpoint-history { margin-top: 16px; }
+.checkpoint-history li { margin: 10px 0; }
+.checkpoint-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.quiz-option:disabled { cursor: default; }
+@media (max-width: 700px) { .result-grid { grid-template-columns: 1fr; } }
