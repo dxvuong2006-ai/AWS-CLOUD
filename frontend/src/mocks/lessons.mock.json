@@ -4,22 +4,104 @@
     "title": "Cloud là gì?",
     "videoUrl": "/sample.mp4",
     "transcript": [
-      { "start": 0, "text": "Chào mừng các bạn đến với bài học đầu tiên." },
-      { "start": 12, "text": "Điện toán đám mây là việc thuê tài nguyên tính toán qua Internet." },
-      { "start": 30, "text": "Bạn trả tiền theo mức dùng thay vì mua máy chủ." }
+      {
+        "start": 0,
+        "text": "Chào mừng các bạn đến với bài học đầu tiên."
+      },
+      {
+        "start": 12,
+        "text": "Điện toán đám mây là việc thuê tài nguyên tính toán qua Internet."
+      },
+      {
+        "start": 30,
+        "text": "Bạn trả tiền theo mức dùng thay vì mua máy chủ."
+      }
     ],
     "summary": "Bài học giới thiệu khái niệm điện toán đám mây và mô hình trả tiền theo mức dùng.",
-    "keyConcepts": ["Điện toán đám mây", "Pay-as-you-go", "Tài nguyên theo yêu cầu"]
+    "course_id": "1",
+    "section_id": "s1",
+    "publication_status": "PUBLISHED",
+    "processing_status": "READY",
+    "key_concepts": [
+      "Điện toán đám mây",
+      "Pay-as-you-go",
+      "Tài nguyên theo yêu cầu"
+    ]
   },
   "l2": {
     "id": "l2",
     "title": "IaaS, PaaS, SaaS",
     "videoUrl": "/knowmyname.mp4",
     "transcript": [
-      { "start": 0, "text": "Có ba mô hình dịch vụ chính." },
-      { "start": 15, "text": "IaaS cho thuê hạ tầng, PaaS cho thuê nền tảng, SaaS là phần mềm hoàn chỉnh." }
+      {
+        "start": 0,
+        "text": "Có ba mô hình dịch vụ chính."
+      },
+      {
+        "start": 15,
+        "text": "IaaS cho thuê hạ tầng, PaaS cho thuê nền tảng, SaaS là phần mềm hoàn chỉnh."
+      }
     ],
     "summary": "So sánh ba mô hình dịch vụ đám mây.",
-    "keyConcepts": ["IaaS", "PaaS", "SaaS"]
+    "course_id": "1",
+    "section_id": "s1",
+    "publication_status": "PUBLISHED",
+    "processing_status": "READY",
+    "key_concepts": [
+      "IaaS",
+      "PaaS",
+      "SaaS"
+    ]
+  },
+  "l3": {
+    "id": "l3",
+    "title": "S3 và presigned URL",
+    "videoUrl": "/sample.mp4",
+    "transcript": [
+      {
+        "start": 0,
+        "text": "Video minh họa để kiểm thử lộ trình học."
+      }
+    ],
+    "summary": "Học liệu demo để kiểm thử giao diện và tiến độ.",
+    "course_id": "1",
+    "section_id": "s2",
+    "publication_status": "PUBLISHED",
+    "processing_status": "READY",
+    "key_concepts": []
+  },
+  "l4": {
+    "id": "l4",
+    "title": "Image và container",
+    "videoUrl": "/sample.mp4",
+    "transcript": [
+      {
+        "start": 0,
+        "text": "Video minh họa để kiểm thử lộ trình học."
+      }
+    ],
+    "summary": "Học liệu demo để kiểm thử giao diện và tiến độ.",
+    "course_id": "2",
+    "section_id": "s1",
+    "publication_status": "PUBLISHED",
+    "processing_status": "READY",
+    "key_concepts": []
+  },
+  "l5": {
+    "id": "l5",
+    "title": "Dockerfile đầu tiên",
+    "videoUrl": "/sample.mp4",
+    "transcript": [
+      {
+        "start": 0,
+        "text": "Video minh họa để kiểm thử lộ trình học."
+      }
+    ],
+    "summary": "Học liệu demo để kiểm thử giao diện và tiến độ.",
+    "course_id": "2",
+    "section_id": "s1",
+    "publication_status": "PUBLISHED",
+    "processing_status": "READY",
+    "key_concepts": []
   }
 }

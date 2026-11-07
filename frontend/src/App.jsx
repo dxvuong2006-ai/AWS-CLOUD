@@ -1,35 +1,23 @@
-import { useState } from "react";
 import AppRoutes from "./routes/AppRoutes";
 import Navbar from "./components/layout/Navbar";
+import { useAuth } from "./context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import "./routes/AppRouter.css";
+import "./styles/student.css";
 
 export default function App() {
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-  const [navbarCollapsed, setNavbarCollapsed] = useState(false);
-
-  const user = {
-    name: "Vương Dũng",
-    role: "STUDENT",
-  };
-
-  const role = user?.role || "STUDENT";
-
+  if (loading) return <div className="page">Đang xác thực...</div>;
   return (
-    <div className={`app-shell ${navbarCollapsed ? "app-shell--collapsed" : ""}`}>
-      <Navbar
-        user={user}
-        role={role}
-        collapsed={navbarCollapsed}
-        onToggle={() => setNavbarCollapsed((collapsed) => !collapsed)}
-        onLogout={() => {
-          navigate("/login");
-        }}
-      />
-
-      <main className="app-content">
+    <div className={String(user?.role).toUpperCase() === "STUDENT" ? "student-shell" : undefined}>
+      {user && <Navbar user={user} role={user.role} onLogout={() => {
+        logout();
+        navigate("/login", { replace: true });
+      }} />}
+      <div className={user ? "app-content" : undefined}>
         <AppRoutes />
-      </main>
+      </div>
     </div>
   );
 }

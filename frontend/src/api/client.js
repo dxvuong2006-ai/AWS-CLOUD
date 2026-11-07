@@ -1,51 +1,48 @@
+import { readSession, clearSession } from "./session";
+
 const BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
-  constructor(status, detail, code) {
+  constructor(status, detail) {
     super(detail || `HTTP ${status}`);
     this.status = status;
-    this.code = code;
   }
 }
 
-function getAccessToken() {
-  for (const storageName of ["sessionStorage", "localStorage"]) {
-    try {
-      const token = globalThis[storageName]?.getItem("access_token")?.trim();
-      if (token) return token;
-    } catch {
-      // Trình duyệt có thể chặn storage; vẫn cho phép gọi API công khai.
-    }
-  }
-  return null;
-}
-
-export async function request(path, { method = "GET", body, cache } = {}) {
-  const token = getAccessToken();
+export async function request(path, { method = "GET", body, auth = true, timeoutMs = 0, keepalive = false } = {}) {
+  const token = auth ? readSession()?.token : null;
+  if (token?.startsWith("mock:")) throw new ApiError(401, "Tài khoản mô phỏng không thể gọi API thật.");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const res = await fetch(`${BASE_URL}${normalizedPath}`, {
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  let res;
+  try { res = await fetch(`${BASE_URL}${normalizedPath}`, {
     method,
-    cache,
+    ...(controller ? { signal: controller.signal } : {}),
+    keepalive: keepalive && JSON.stringify(body ?? "").length < 60000,
     headers: {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }); } finally { if (timer) clearTimeout(timer); }
 
   if (!res.ok) {
     let detail = "";
-    let code;
     try {
       const data = await res.json();
       detail = typeof data.detail === "string" ? data.detail : "";
-      code = data.code;
     } catch {
-      // response không phải JSON, bỏ qua
+      // Non-JSON errors retain their HTTP status.
     }
-    throw new ApiError(res.status, detail, code);
+    // A delayed response from an old session must not log out a new session.
+    if (res.status === 401 && token && readSession()?.token === token) {
+      clearSession();
+      window.dispatchEvent(new Event("learncloud:unauthorized"));
+    }
+    throw new ApiError(res.status, detail);
   }
   return res.status === 204 ? null : res.json();
 }

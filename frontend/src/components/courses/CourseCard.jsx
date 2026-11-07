@@ -30,8 +30,8 @@ export default function CourseCard({
             <img src={image} alt={title} loading="lazy" />
           ) : (
             <div className="course-card__placeholder">
-              <span>LC</span>
-              <p>LearnCloud</p>
+              <svg width="46" height="46" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden="true"><path d="M13 36h23a9 9 0 0 0 1-18 13 13 0 0 0-25-1 10 10 0 0 0 1 19Z" /></svg>
+              
             </div>
           )}
 
@@ -43,14 +43,14 @@ export default function CourseCard({
         <div className="course-card__body">
           <h3 className="course-card__title">{title}</h3>
 
-          <p className="course-card__description">{description}</p>
+          <p className="course-card__meta">{course.section_count ?? course.sections?.length ?? "—"} section · {course.lesson_count ?? course.sections?.reduce((count, section) => count + (section.lessons?.length ?? 0), 0) ?? "—"} lesson</p><p className="course-card__description">{description}</p>
 
           <div className="course-card__instructor">
             <span className="course-card__instructor-avatar">
               {String(instructor).charAt(0).toUpperCase()}
             </span>
             <span>
-              {typeof instructor === "string" ? instructor : "Giảng viên"}
+              Giảng viên · <strong>{typeof instructor === "string" ? instructor : "Giảng viên"}</strong>
             </span>
           </div>
 
@@ -80,7 +80,7 @@ export default function CourseCard({
 
         <div className="course-card__footer">
           <span className="course-card__footer-label">
-            Xem chi tiết khóa học
+            Xem khóa học
           </span>
           <span className="course-card__arrow" aria-hidden="true">
             →

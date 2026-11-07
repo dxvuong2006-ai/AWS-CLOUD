@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
+from app.schemas.learning import WatchedRangesRequest
 
 
-class LessonProgressUpdateRequest(BaseModel):
-    watched_seconds: int = Field(ge=0)
-    completed: bool | None = None
+class LessonProgressUpdateRequest(WatchedRangesRequest):
+    """Compatibility name for the student watched-range contract."""
 
 
 class LessonProgressResponse(BaseModel):

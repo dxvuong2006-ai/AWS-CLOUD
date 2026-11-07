@@ -17,6 +17,7 @@ from app.api.sections import router as sections_router
 from app.api.enrollments import router as enrollments_router
 from app.api.uploads import router as uploads_router
 from app.api.auth import router as auth_router
+from app.api.quizzes import router as quizzes_router
 from app.api.review import router as review_router
 from app.utils.errors import register_exception_handlers
 from app.utils.logging import setup_logging, RequestLoggingMiddleware
@@ -47,6 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(quizzes_router)
 app.include_router(courses_router)
 app.include_router(quizzes.router)
 app.include_router(review.router)
