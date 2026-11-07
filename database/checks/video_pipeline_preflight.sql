@@ -61,13 +61,13 @@ DECLARE
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM public.schema_migrations WHERE version = '0004'
-          AND description = 'Allow APPROVED Lesson status for explicit review before course publishing'
+          AND description = 'Remove approved lesson status; publish directly after review'
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conrelid = 'public.lessons'::regclass
           AND conname = 'ck_lessons_status' AND contype = 'c' AND convalidated
-          AND pg_get_constraintdef(oid) LIKE '%''APPROVED''%'
+          AND pg_get_constraintdef(oid) NOT LIKE '%''APPROVED''%'
     ) THEN
-        RAISE EXCEPTION 'STOP: 0004 registry/validated APPROVED constraint is missing or incompatible';
+        RAISE EXCEPTION 'STOP: 0004 registry/validated non-APPROVED constraint is missing or incompatible';
     END IF;
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'

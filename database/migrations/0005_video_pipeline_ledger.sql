@@ -23,14 +23,14 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM public.schema_migrations
         WHERE version = '0004'
-          AND description = 'Allow APPROVED Lesson status for explicit review before course publishing'
+          AND description = 'Remove approved lesson status; publish directly after review'
     ) OR NOT EXISTS (
         SELECT 1 FROM pg_constraint
         WHERE conrelid = 'public.lessons'::regclass AND conname = 'ck_lessons_status'
           AND contype = 'c' AND convalidated
-          AND pg_get_constraintdef(oid) LIKE '%''APPROVED''%'
+          AND pg_get_constraintdef(oid) NOT LIKE '%''APPROVED''%'
     ) THEN
-        RAISE EXCEPTION 'Migration 0004 must already be recorded and validated; do not rerun bootstrap';
+        RAISE EXCEPTION 'Migration 0004 must remove APPROVED and be validated; do not rerun bootstrap';
     END IF;
     IF EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = '0005') THEN
         RAISE EXCEPTION 'Version 0005 already exists; verify its description/schema and skip this one-time file';

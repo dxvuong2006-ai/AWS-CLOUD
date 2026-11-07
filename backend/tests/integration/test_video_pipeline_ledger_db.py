@@ -118,7 +118,6 @@ class VideoPipelinePostgresTests(unittest.TestCase):
         for name in ("ck_lessons_status", "uq_video_upload_id_lesson", "fk_video_run_upload_lesson",
                      "uq_video_run_upload_attempt", "ck_video_upload_size", "ck_video_run_attempt", "ck_video_run_state"):
             self.assertTrue(constraints[name]["convalidated"], name)
-        self.assertIn("APPROVED", constraints["ck_lessons_status"]["definition"])
         self.assertIn("FOREIGN KEY (upload_id, lesson_id)", constraints["fk_video_run_upload_lesson"]["definition"])
 
     def test_database_rejects_cross_lesson_upload_reference(self):

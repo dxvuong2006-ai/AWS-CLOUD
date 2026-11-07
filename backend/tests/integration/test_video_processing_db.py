@@ -150,10 +150,6 @@ class ProcessingDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["code"], "LESSON_APPROVAL_REQUIRED")
         self.assertEqual(self.connection.execute(text("SELECT status FROM courses WHERE id=:id"), {"id": self.course_id}).scalar(), "DRAFT")
 
-    def approval_schema_ready(self):
-        with Session(bind=self.connection, join_transaction_mode="create_savepoint") as db:
-            return lessons_repo.approval_schema_ready(db)
-
     def make_review_required(self, lesson_id):
         self.connection.execute(text("""
             UPDATE lessons SET status='REVIEW_REQUIRED', processed_video_key='tests/processed.mp4',
@@ -162,22 +158,8 @@ class ProcessingDatabaseTests(unittest.IsolatedAsyncioTestCase):
             WHERE id=:id
         """), {"id": lesson_id})
 
-    async def test_approval_before_manual_migration_is_safe_and_does_not_apply_ddl(self):
-        if self.approval_schema_ready():
-            self.skipTest("Database already supports APPROVED")
-        self.connection.execute(text("UPDATE courses SET status='DRAFT' WHERE id=:id"), {"id": self.course_id})
-        self.make_review_required(self.lesson_id)
-        response = await self.call("POST", f"/lessons/{self.lesson_id}/approve")
-        self.assertEqual(response.status_code, 503, response.text)
-        self.assertEqual(response.json()["code"], "APPROVAL_SCHEMA_NOT_READY")
-        self.assertEqual(self.persisted()["status"], "REVIEW_REQUIRED")
-        self.assertFalse(self.approval_schema_ready())
-        self.review_storage.assert_not_called()
-
     async def test_approve_then_publish_after_operator_applies_migration(self):
-        # Never run DDL here: the operator, not the test suite, applies migration 0004.
-        if not self.approval_schema_ready():
-            self.skipTest("Apply migration 0004 manually on a reviewed test DB to verify the full DB lifecycle")
+        # Operator applies migration 0004 on a reviewed test DB before this lifecycle check.
         self.connection.execute(text("UPDATE courses SET status='DRAFT' WHERE id=:id"), {"id": self.course_id})
         lesson_ids = list(self.connection.execute(text("""
             SELECT l.id FROM lessons l JOIN sections s ON s.id=l.section_id
@@ -187,7 +169,7 @@ class ProcessingDatabaseTests(unittest.IsolatedAsyncioTestCase):
             self.make_review_required(lesson_id)
             approved = await self.call("POST", f"/lessons/{lesson_id}/approve")
             self.assertEqual(approved.status_code, 200, approved.text)
-            self.assertEqual(approved.json()["status"], "APPROVED")
+            self.assertEqual(approved.json()["status"], "PUBLISHED")
             duplicate = await self.call("POST", f"/lessons/{lesson_id}/approve")
             self.assertEqual(duplicate.json(), approved.json())
         published = await self.call("POST", f"/courses/{self.course_id}/publish")

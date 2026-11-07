@@ -39,13 +39,13 @@ def course_metrics(db, course_id):
     lessons = (db.query(func.count(Lesson.id)).join(
         Section, Section.id == Lesson.section_id).filter(
         Section.course_id == course_id,
-        Lesson.status.in_(("APPROVED", "PUBLISHED"))).scalar())
+        Lesson.status == "PUBLISHED").scalar())
     completed = (db.query(func.count(LessonProgress.id))
                  .join(Lesson, Lesson.id == LessonProgress.lesson_id)
                  .join(Section, Section.id == Lesson.section_id)
                  .join(Enrollment, (Enrollment.course_id == course_id) &
                        (Enrollment.student_id == LessonProgress.student_id))
                  .filter(Section.course_id == course_id,
-                         Lesson.status.in_(("APPROVED", "PUBLISHED")),
+                         Lesson.status == "PUBLISHED",
                          LessonProgress.completed.is_(True)).scalar())
     return enrollments, attempts, errors, lessons, completed

@@ -13,6 +13,7 @@ from app.repositories import review_repo
 from app.schemas.review import (
     DraftApproval, DraftContent, DraftGeneration, DraftUpdate, ReviewResponse,
 )
+from app.utils.errors import ConflictError
 
 
 class ReviewError(Exception):
@@ -30,6 +31,26 @@ class ReviewError(Exception):
         """
         super().__init__(message)
         self.status_code = status_code
+
+
+def validate_review_content(lesson: Lesson) -> None:
+    """Reject review finalization when generated lesson content is incomplete."""
+    transcript = lesson.transcript_json
+    summary = lesson.summary
+    key_concepts = lesson.key_concepts_json
+
+    if (
+        not isinstance(transcript, dict)
+        or not transcript
+        or not isinstance(summary, str)
+        or not summary.strip()
+        or not isinstance(key_concepts, list)
+        or not key_concepts
+    ):
+        raise ConflictError(
+            "Review content is incomplete.",
+            code="REVIEW_CONTENT_INCOMPLETE",
+        )
 
 
 def _owned_lesson(

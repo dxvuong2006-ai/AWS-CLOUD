@@ -45,7 +45,7 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
         for module, name, result in [
             ("lessons_repo", "get_by_id", self.lesson), ("lessons_repo", "get_section", self.section),
             ("lessons_repo", "get_course", self.course), ("lessons_repo", "lock_by_id", self.lesson),
-            ("lessons_repo", "approval_schema_ready", True), ("lessons_repo", "lock_by_course", [self.lesson]),
+            ("lessons_repo", "lock_by_course", [self.lesson]),
             ("courses_repo", "lock_by_id", self.course), ("courses_repo", "lock_sections", [self.section]),
         ]:
             self.repo[f"{module}.{name}"] = self.stack.enter_context(patch(
@@ -64,8 +64,9 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_explicit_approval_is_separate_from_publish_and_idempotent(self):
         response = await self.call()
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(set(response.json()), {"lesson_id", "status", "updated_at"})
-        self.assertEqual(response.json()["status"], "APPROVED")
+        self.assertEqual(response.json()["lesson_id"], 8)
+        self.assertEqual(response.json()["status"], "PUBLISHED")
+        self.assertIn("revision", response.json())
         self.assertEqual(self.course.status, "DRAFT")
         self.assertEqual(self.lesson.retry_count, 2)
         self.assertEqual(self.lesson.summary, "Reviewed summary")
@@ -99,7 +100,7 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_owner_required_before_approval_or_idempotency(self):
         self.course.instructor_id = 99
-        self.lesson.status = "APPROVED"
+        self.lesson.status = "PUBLISHED"
         self.assertEqual((await self.call()).status_code, 403)
         self.storage.assert_not_called()
 
@@ -147,15 +148,6 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.json()["code"], "REVIEW_CONTENT_INCOMPLETE")
         self.storage.assert_not_called()
 
-    async def test_unapplied_migration_returns_actionable_error_without_writes(self):
-        self.repo["lessons_repo.approval_schema_ready"].return_value = False
-        response = await self.call()
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["code"], "APPROVAL_SCHEMA_NOT_READY")
-        self.assertEqual(self.lesson.status, "REVIEW_REQUIRED")
-        self.db.flush.assert_not_called()
-        self.storage.assert_not_called()
-
     async def test_s3_errors_do_not_approve_or_leak_internal_messages(self):
         for code, http_status, expected in (("NoSuchKey", 404, 409), ("NoSuchBucket", 404, 502), ("AccessDenied", 403, 502)):
             self.storage.return_value.head_video.side_effect = ClientError({
@@ -195,7 +187,7 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_request_body_cannot_manufacture_review_state(self):
         self.lesson.status = "DRAFT"
-        response = await self.call(json={"status": "APPROVED", "processed_video_key": "attacker.mp4"})
+        response = await self.call(json={"status": "PUBLISHED", "processed_video_key": "attacker.mp4"})
         self.assertEqual(response.status_code, 409)
         self.storage.assert_not_called()
 
@@ -203,9 +195,9 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
         await self.call()
         response = await self.call("GET", "/lessons/8/processing-status")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "APPROVED")
+        self.assertEqual(response.json()["status"], "PUBLISHED")
 
-    async def test_openapi_has_approve_and_nine_statuses(self):
+    async def test_openapi_has_approve_and_eight_statuses(self):
         response = await self.call("GET", "/openapi.json")
         schema = response.json()
         self.assertIn("post", schema["paths"]["/lessons/{lesson_id}/approve"])
@@ -220,25 +212,26 @@ class ApprovalSchemaTests(unittest.TestCase):
         constraint = next(c for c in Lesson.__table__.constraints if isinstance(c, CheckConstraint) and c.name == "ck_lessons_status")
         self.assertEqual(set(re.findall(r"'([A-Z_]+)'", str(constraint.sqltext))), expected)
         bootstrap = (self.root / "database/schema.sql").read_text(encoding="utf-8")
-        migration = (self.root / "database/migrations/0004_add_lesson_approved_status.sql").read_text(encoding="utf-8")
+        migration = (self.root / "database/migrations/0004_remove_approved_lesson_status.sql").read_text(encoding="utf-8")
         for source in (bootstrap, migration):
-            clause = re.search(r"CONSTRAINT ck_lessons_status CHECK \(status IN \((.*?)\)\)", source, re.S).group(1)
+            constraint_start = source.find("ck_lessons_status")
+            clause_source = source[constraint_start:]
+            clause = re.search(r"status\s+IN\s*\((.*?)\)\s*(?:NOT VALID)?", clause_source, re.S).group(1)
             self.assertEqual(set(re.findall(r"'([A-Z_]+)'", clause)), expected)
 
     def test_unknown_status_is_rejected_by_response_validation(self):
         with self.assertRaises(ValidationError):
-            LessonProcessingStatusResponse(lesson_id=8, status="AUTO_APPROVED", retry_count=0, updated_at=datetime.now(timezone.utc))
+            LessonProcessingStatusResponse(lesson_id=8, status="AUTO_PUBLISHED", retry_count=0, updated_at=datetime.now(timezone.utc))
 
     def test_migration_is_transactional_and_does_not_rewrite_lesson_data(self):
-        source = (self.root / "database/migrations/0004_add_lesson_approved_status.sql").read_text(encoding="utf-8")
+        source = (self.root / "database/migrations/0004_remove_approved_lesson_status.sql").read_text(encoding="utf-8")
         sql = re.sub(r"--[^\n]*", "", source)
         self.assertIn("BEGIN;", sql)
         self.assertTrue(sql.rstrip().endswith("COMMIT;"))
         self.assertIn("SET LOCAL lock_timeout", sql)
         self.assertIn("VALIDATE CONSTRAINT ck_lessons_status", sql)
-        self.assertIn("Unexpected status constraint", sql)
         self.assertIn("ON CONFLICT (version) DO NOTHING", sql)
-        self.assertNotRegex(sql.upper(), r"DROP\s+TABLE|TRUNCATE|DELETE\s+FROM|UPDATE\s+(?:PUBLIC\.)?LESSONS|INSERT\s+INTO\s+(?:PUBLIC\.)?LESSONS")
+        self.assertNotRegex(sql.upper(), r"DROP\s+TABLE|TRUNCATE|DELETE\s+FROM|INSERT\s+INTO\s+(?:PUBLIC\.)?LESSONS")
 
     def test_preflight_is_read_only(self):
         source = (self.root / "database/checks/lesson_approval_preflight.sql").read_text(encoding="utf-8")

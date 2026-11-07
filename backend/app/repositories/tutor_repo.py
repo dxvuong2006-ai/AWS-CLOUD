@@ -24,7 +24,7 @@ def attempt_context(db, attempt_id, student_id):
     attempt, quiz, section, course = row
     lesson = (db.query(Lesson).filter(
         Lesson.section_id == section.id,
-        Lesson.status.in_(("APPROVED", "PUBLISHED")),
+        Lesson.status == "PUBLISHED",
     ).order_by(Lesson.position, Lesson.id).first())
     questions = (db.query(Question, QuizAnswer)
                  .outerjoin(QuizAnswer, (QuizAnswer.question_id == Question.id) &
@@ -45,7 +45,7 @@ def get_session(db, session_id, student_id, lock=False):
              .filter(TutorSession.id == session_id,
                      TutorSession.student_id == student_id,
                      Course.status == "PUBLISHED",
-                     Lesson.status.in_(("APPROVED", "PUBLISHED"))))
+                     Lesson.status == "PUBLISHED"))
     if lock:
         query = query.with_for_update()
     return query.first()

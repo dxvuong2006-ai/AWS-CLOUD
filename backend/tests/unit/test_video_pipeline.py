@@ -284,9 +284,9 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.lesson.status, "REVIEW_REQUIRED")
         self.assertEqual(self.course.status, "DRAFT")
         self.assertEqual(service.finalize_ai(self.db, run.id, OWNER, {}), {"status": "REVIEW_REQUIRED"})
-        self.lesson.status = "APPROVED"
+        self.lesson.status = "PUBLISHED"
         service.finalize_ai(self.db, run.id, OWNER, {})
-        self.assertEqual(self.lesson.status, "APPROVED")
+        self.assertEqual(self.lesson.status, "PUBLISHED")
 
     def test_retry_outbox_is_transactional_and_duplicates_are_fenced(self):
         run = self.transcode()

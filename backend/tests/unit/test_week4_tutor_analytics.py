@@ -13,7 +13,7 @@ def learning_data(db_session, quiz_course):
     student, course, sections = quiz_course
     db_session.add(Enrollment(student_id=student.id, course_id=course.id))
     lesson = Lesson(section_id=sections[0].id, title="Cloud", position=1,
-                    status="APPROVED", transcript_json={
+                    status="PUBLISHED", transcript_json={
                         "text": "Cloud cung cấp máy chủ. AWS cung cấp cloud."
                     })
     quiz = Quiz(section_id=sections[0].id, title="Cloud", is_approved=True)

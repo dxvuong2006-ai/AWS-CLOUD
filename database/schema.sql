@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS lessons (
     status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
         CONSTRAINT ck_lessons_status CHECK (status IN (
             'DRAFT', 'UPLOADED', 'PROCESSING', 'TRANSCRIBING',
-            'AI_PROCESSING', 'REVIEW_REQUIRED', 'APPROVED',
+            'AI_PROCESSING', 'REVIEW_REQUIRED',
             'PUBLISHED', 'FAILED'
         )),
     transcript_json JSONB,

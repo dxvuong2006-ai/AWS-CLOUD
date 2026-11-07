@@ -21,11 +21,7 @@ class Lesson(Base):
     __tablename__ = "lessons"
     __table_args__ = (
         CheckConstraint("position > 0", name="ck_lessons_position"),
-        CheckConstraint(
-            "status IN ('DRAFT', 'UPLOADED', 'PROCESSING', 'TRANSCRIBING', "
-            "'AI_PROCESSING', 'REVIEW_REQUIRED', 'PUBLISHED', 'FAILED')",
-            name="ck_lessons_status",
-        ),
+        CheckConstraint(LESSON_STATUS_CHECK, name="ck_lessons_status"),
         CheckConstraint(
             "jsonb_typeof(key_concepts_json) = 'array'",
             name="ck_lessons_key_concepts_array",

@@ -99,9 +99,9 @@ def publish_course(db: Session, course_id: int, *, instructor_id: int):
         lessons = lessons_repo.lock_by_course(db, course.id)
         if not sections or not lessons or any(not any(l.section_id == s.id for l in lessons) for s in sections):
             raise ConflictError("Every course section must contain a lesson.", code="COURSE_CONTENT_REQUIRED")
-        # Approval is explicit; uploading/processing/legacy PUBLISHED seed data
-        # cannot substitute for the instructor's REVIEW_REQUIRED -> APPROVED action.
-        if any(lesson.status != LessonStatus.APPROVED.value for lesson in lessons):
+        # Approving a review publishes the lesson directly. Do not use upload,
+        # processing, or legacy data as a substitute for explicit review approval.
+        if any(lesson.status != LessonStatus.PUBLISHED.value for lesson in lessons):
             raise ConflictError("Every lesson must be explicitly approved before publishing.", code="LESSON_APPROVAL_REQUIRED")
         for lesson in lessons:
             validate_review_content(lesson)

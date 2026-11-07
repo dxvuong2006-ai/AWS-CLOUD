@@ -264,7 +264,7 @@ def finalize_ai(db, run_id, execution_arn, proof):
         lesson = lessons_repo.get_by_id(db, completed.lesson_id)
         if (lesson is not None and lesson.retry_count == completed.attempt
                 and lesson.processed_video_key == completed.output_key
-                and lesson.status in {"REVIEW_REQUIRED", "APPROVED", "PUBLISHED"}):
+                and lesson.status in {"REVIEW_REQUIRED", "PUBLISHED"}):
             return {"status": "REVIEW_REQUIRED"}  # previous finalization committed; no mutation
     run, lesson, _ = _owned(db, run_id, execution_arn)
     if (run.state != "VIDEO_READY" or not isinstance(proof, dict)

@@ -1,4 +1,3 @@
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
@@ -35,22 +34,6 @@ def begin_retry(db: Session, lesson: Lesson) -> None:
     db.flush()
 
 
-def approval_schema_ready(db: Session) -> bool:
-    # Read-only deployment guard: schema.sql changes do not alter an existing DB.
-    return bool(db.execute(text("""
-        SELECT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conrelid = 'public.lessons'::regclass AND contype = 'c'
-              AND conname = 'ck_lessons_status' AND convalidated
-              AND pg_get_constraintdef(oid) LIKE :approved_literal
-        )
-    """), {"approved_literal": "%'APPROVED'%"}).scalar())
-
-
-def mark_approved(db: Session, lesson: Lesson) -> None:
-    lesson.status = LessonStatus.APPROVED.value
-    lesson.error_message = None
-    db.flush()
 
 # lấy danh sách lesson của 1 section
 def get_by_section(

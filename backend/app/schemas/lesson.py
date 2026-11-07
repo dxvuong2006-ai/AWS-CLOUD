@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from app.lesson_states import LessonStatus
@@ -35,10 +34,4 @@ class LessonProcessingStatusResponse(BaseModel):
     status: LessonStatus
     retry_count: int = Field(ge=0)
     error_message: str | None = None
-    updated_at: datetime
-
-
-class LessonApprovalResponse(BaseModel):
-    lesson_id: int
-    status: Literal["APPROVED"]
     updated_at: datetime

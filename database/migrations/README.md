@@ -20,11 +20,10 @@ nhắc trong tài liệu. Không coi `0003` là đã áp dụng hoặc tự tạ
 `V1__add_password_hash_to_users.sql` là script legacy riêng, không theo bộ chạy
 version bốn chữ số bên dưới.
 
-`0004_add_lesson_approved_status.sql` bổ sung APPROVED vào CHECK Lesson, đồng bộ
-chín trạng thái của contract/model. Script chưa được tự áp dụng; cần đọc
-[hướng dẫn review và preflight](../../docs/lesson-approval-migration.md) trước.
+`0004_remove_approved_lesson_status.sql` loại `APPROVED` khỏi CHECK Lesson và
+đổi dữ liệu `APPROVED` còn sót thành `PUBLISHED`. Script chưa được tự áp dụng.
 Migration này không phụ thuộc file `0003` bị thiếu; nó yêu cầu bảng Lesson và
-schema_migrations của bootstrap hiện tại đã tồn tại. File tiếp theo dùng số
+`schema_migrations` của bootstrap hiện tại đã tồn tại. File tiếp theo dùng số
 version chưa được dùng trong repository/database chung.
 Không tạo lại `0001`/`0002`, và không thêm script cố đánh dấu lại hai version đó
 sau khi đã chạy `schema.sql`.

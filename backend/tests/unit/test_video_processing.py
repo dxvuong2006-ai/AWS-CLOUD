@@ -89,7 +89,7 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.storage.assert_not_called()
 
     async def test_all_contract_statuses_are_returned_without_fake_advancement(self):
-        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "REVIEW_REQUIRED", "APPROVED", "PUBLISHED", "FAILED"):
+        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "REVIEW_REQUIRED", "PUBLISHED", "FAILED"):
             self.lesson.status = state
             response = await self.call("GET", "/lessons/8/processing-status")
             self.assertEqual(response.json()["status"], state)
@@ -140,7 +140,7 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.retry()).status_code, 404)
 
     async def test_retry_rejects_every_non_failed_state(self):
-        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "REVIEW_REQUIRED", "APPROVED", "PUBLISHED"):
+        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "REVIEW_REQUIRED", "PUBLISHED"):
             self.lesson.status = state
             response = await self.retry()
             self.assertEqual(response.status_code, 409)
@@ -227,12 +227,12 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.publish()).json()["code"], "COURSE_CONTENT_REQUIRED")
 
     async def test_publish_requires_processed_video_even_when_approved(self):
-        self.lesson.status = "APPROVED"
+        self.lesson.status = "PUBLISHED"
         self.assertEqual((await self.publish()).json()["code"], "PROCESSED_VIDEO_REQUIRED")
 
     async def test_publish_approved_fixture_and_idempotent_duplicate(self):
         # Unit fixture; existing PostgreSQL needs manually applied migration 0004.
-        self.lesson.status = "APPROVED"
+        self.lesson.status = "PUBLISHED"
         self.lesson.processed_video_key = "processed/video.mp4"
         first = await self.publish()
         self.assertEqual(first.status_code, 200, first.text)
