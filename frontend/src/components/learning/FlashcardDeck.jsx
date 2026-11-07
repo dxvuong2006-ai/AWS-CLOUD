@@ -33,12 +33,21 @@ export default function FlashcardDeck({ deck, courseId, sectionId, lessonId, ses
     </div> : <>
       <div className="flashcard-counter"><span>Thẻ {progress.index + 1} / {progress.queue.length}</span><span>{Math.round(progress.queue.filter(id => progress.ratings[id]).length / progress.queue.length * 100)}%</span></div>
       <progress max={progress.queue.length} value={progress.queue.filter(id => progress.ratings[id]).length} aria-label="Số thẻ đã ôn" />
-      <div className={`flashcard-face ${flipped ? "is-flipped" : ""}`} aria-live="polite">
-        <span className="flashcard-badge">{flipped ? "Đáp án" : "Khái niệm"}</span>
-        <h2>{flipped ? card.back : card.front}</h2>
-        {!flipped && <small>Hãy thử nhớ câu trả lời trước khi lật thẻ.</small>}
-        {flipped && card.sourceSeconds != null && <small>Nguồn <span className="time-chip">{Math.floor(card.sourceSeconds / 60)}:{String(Math.floor(card.sourceSeconds % 60)).padStart(2, "0")}</span></small>}
-        <button className={flipped ? "flashcard-return" : "btn-primary"} onClick={() => setFlipped(value => !value)}>{flipped ? "Xem mặt trước" : "↻ Lật thẻ"}</button>
+      <div className="flashcard-flip" data-flipped={flipped} key={card.id}>
+        <div className="flashcard-flip-rotor">
+          <div className="flashcard-face flashcard-side-front" aria-hidden={flipped} inert={flipped}>
+            <span className="flashcard-badge">Khái niệm</span>
+            <h2>{card.front}</h2>
+            <small>Hãy thử nhớ câu trả lời trước khi lật thẻ.</small>
+          </div>
+          <div className="flashcard-face is-flipped flashcard-side-back" aria-hidden={!flipped} inert={!flipped}>
+            <span className="flashcard-badge">Đáp án</span>
+            <h2>{card.back}</h2>
+            {card.sourceSeconds != null && <small>Nguồn <span className="time-chip">{Math.floor(card.sourceSeconds / 60)}:{String(Math.floor(card.sourceSeconds % 60)).padStart(2, "0")}</span></small>}
+          </div>
+        </div>
+        <button type="button" className={"flashcard-flip-toggle " + (flipped ? "flashcard-return" : "btn-primary")} aria-pressed={flipped} onClick={() => setFlipped(value => !value)}>{flipped ? "Xem mặt trước" : "↻ Lật thẻ"}</button>
+        <span className="flashcard-announcement" aria-live="polite" aria-atomic="true">{flipped ? "Đáp án: " + card.back : "Khái niệm: " + card.front}</span>
       </div>
       {!flipped && <div className="flashcard-actions"><button className="btn-secondary" disabled={progress.index === 0} onClick={() => update({ ...progress, index: progress.index - 1 })}>← Thẻ trước</button>
         <button className="btn-secondary" disabled={progress.index === progress.queue.length - 1} onClick={() => update({ ...progress, index: progress.index + 1 })}>Thẻ tiếp →</button></div>}
