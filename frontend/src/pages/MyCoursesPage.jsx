@@ -1,3 +1,4 @@
+import CourseArtwork from "../components/courses/CourseArtwork";
 import "../styles/student.css";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -16,9 +17,9 @@ export default function MyCoursesPage() {
       {!data.length && <p>Bạn chưa đăng ký khóa học. <Link to="/courses">Khám phá khóa học</Link></p>}
       {data.length > 0 && !data.some(row=>!filter || row.status===filter) && <p>Chưa có khóa học ở trạng thái này.</p>}
       <div className="my-course-list">{data.filter(row=>!filter || row.status===filter).map(row=><article className="card my-course-row" key={row.course.id}>
-        <div className="course-art" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="2.6"><path d="M13 36h23a9 9 0 0 0 1-18 13 13 0 0 0-25-1 10 10 0 0 0 1 19Z" /></svg></div>
+        <div className="course-art" aria-hidden="true"><CourseArtwork title={row.course.title} /></div>
         <div className="my-course-info"><h2><Link to={"/courses/" + row.course.id}>{row.course.title}</Link></h2>
-          <p>{STATUS_LABELS[row.status] || "Đã đăng ký"}</p>
+          <p>Giảng viên · {row.course.instructor_name || row.course.instructor?.name || "Chưa có thông tin"}<span className="my-course-status"> · {STATUS_LABELS[row.status] || "Đã đăng ký"}</span></p>
           <div className="my-course-progress"><span>Tiến độ</span><strong>{row.progress_percent ?? 0}%</strong></div>
           <progress max="100" value={row.progress_percent ?? 0} aria-label="Tiến độ khóa học" />
         </div>

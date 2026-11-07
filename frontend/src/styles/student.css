@@ -229,3 +229,35 @@
 @media (max-width: 768px) {
   .student-shell > .app-content > .page:not(.student-page) { padding: 24px 18px; }
 }
+/* Screens 07–10: scoped refinements, without changing the shared frame. */
+.student-CourseListPage .course-search-wrap { position: relative; }
+.student-CourseListPage .course-search-wrap > svg { position: absolute; left: 17px; top: 13px; color: #8c9ab5; pointer-events: none; }
+.student-CourseListPage .course-search { padding-left: 46px; }
+.student-CourseListPage .course-card__body { gap: 10px; }
+.student-CourseListPage .course-card__title { line-height: 1.4; }
+.student-CourseListPage .course-card__instructor { margin-top: 0; min-height: 26px; }
+.student-CourseListPage .course-card__description { margin-top: 3px; min-height: 48px; }
+.student-CourseListPage .course-card__footer { min-height: 42px; }
+.student-CourseDetailPage .course-objectives { margin: 12px 0 0; padding-left: 15px; color: #334766; line-height: 1.8; }
+.student-CourseDetailPage.course-preview .course-overview { min-height: 160px; }
+.student-CourseDetailPage .enrollment-dialog { padding: 30px 36px; }
+.student-CourseDetailPage .enrollment-library-link { display: inline-block; margin-top: 16px; font-size: 12px; color: #657b9e; }
+.student-MyCoursesPage .my-course-info h2 { font-size: 18px; line-height: 1.4; }
+.student-MyCoursesPage .my-course-actions { position: relative; }
+.student-MyCoursesPage .my-course-outline { color: #657b9e; font-size: 12px; }
+.student-MyCoursesPage .my-course-status { white-space: nowrap; }
+@media (min-width: 1151px) {
+  .student-MyCoursesPage .my-course-outline { position: absolute; top: calc(100% + 8px); white-space: nowrap; }
+}
+/* Screen 07: enrollment filters share a row with search. */
+.student-CourseListPage .course-discovery-toolbar { display: flex; align-items: center; gap: 24px; }
+.student-CourseListPage .course-search-wrap { flex: 1; min-width: 0; }
+.student-CourseListPage .course-enrollment-filters { flex: none; margin: 0; }
+.student-CourseListPage .course-enrollment-filters button:disabled { opacity: .5; cursor: not-allowed; }
+.student-CourseListPage .course-card__enrolled { position: absolute; top: 14px; left: 14px; padding: 4px 10px; border-radius: 999px; background: #e8f7ef; color: #157357; font-size: 12px; font-weight: 600; }
+.student-CourseListPage .course-card--enrolled .course-card__footer { color: #fff; background: #344fe3; border-color: #344fe3; }
+.student-CourseListPage .course-enrollment-error { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; color: #b3261e; }
+@media (max-width: 1000px) {
+  .student-CourseListPage .course-discovery-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
+  .student-CourseListPage .course-enrollment-filters { align-self: flex-start; }
+}
