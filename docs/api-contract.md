@@ -15,7 +15,7 @@ LearnCloud cho phép Instructor tạo Course/Section/Lesson, tải video từ tr
 - **Local authentication:** `X-Demo-User` đang dùng để thử nghiệm, chỉ cho local. **Mục tiêu triển khai:** Cognito/OIDC/JWT hoặc lựa chọn auth đã được nhóm chốt; không dùng header demo để public.
 - **Tên trường JSON:** `snake_case`; ID của Course/Section/Lesson dùng số nguyên theo DB hiện có.
 - **Lỗi:** JSON thống nhất khuyến nghị `{ "detail": "...", "code": "MACHINE_READABLE_CODE", "request_id": "..." }`; không trả AWS exception, credentials, query string Presigned URL hoặc stacktrace cho frontend.
-- **Mốc trạng thái:** `DRAFT`, `UPLOADED`, `PROCESSING`, `TRANSCRIBING`, `AI_PROCESSING`, `REVIEW_REQUIRED`, `APPROVED`, `PUBLISHED`, `FAILED`. Cần migration `0004` được áp dụng trên DB thực tế trước khi dùng `APPROVED`.
+- **Mốc trạng thái:** `DRAFT`, `UPLOADED`, `PROCESSING`, `TRANSCRIBING`, `AI_PROCESSING`, `REVIEW_REQUIRED`, `PUBLISHED`, `FAILED`. Migration `0004` loại giá trị legacy `APPROVED` và chuyển Lesson đã review sang `PUBLISHED`.
 - **Giới hạn upload hiện tại:** tối đa **500 MiB** khi xin URL (dựa trên client `file_size`). Chỉ `HeadObject.ContentLength` trong xác nhận mới kiểm tra kích thước object **thực tế**; `Content-Type` không chứng minh nội dung MP4 hợp lệ.
 - **Bảo mật:** S3 private, Block Public Access; ký SigV4, thời hạn tham khảo 900 giây; không log hoặc chia sẻ Presigned URL.
 
@@ -30,7 +30,7 @@ LearnCloud cho phép Instructor tạo Course/Section/Lesson, tải video từ tr
 | 3 | `POST /courses` | Instructor | Có |
 | 4 | `GET /courses/{id}` | Student/Instructor | Có |
 | 5 | `PATCH /courses/{id}` | Instructor | Có |
-| 6 | `POST /courses/{id}/publish` | Instructor | Đã có code và test; chờ xác minh migration APPROVED trên DB |
+| 6 | `POST /courses/{id}/publish` | Instructor | Đã có code; chờ xác minh migration 0004 và pipeline trên DB |
 | 7 | `POST /courses/{id}/sections` | Instructor | Có |
 | 8 | `POST /sections/{id}/lessons` | Instructor | Có |
 | 9 | `GET /lessons/{id}` | Student/Instructor | Có; response phải đối chiếu Swagger để khóa schema |
@@ -347,8 +347,8 @@ GET /lessons/6/video-url
 |---|---|---|
 | `GET /lessons/{id}/ai-content` | Lesson `REVIEW_REQUIRED` | Instructor xem bản nháp AI |
 | `PATCH /lessons/{id}/ai-content` | Instructor chỉnh sửa | Validate schema, lưu bản nháp, không tự publish |
-| `POST /lessons/{id}/approve` | Instructor bấm **Approve** | Kiểm tra nội dung/processed video; `REVIEW_REQUIRED → APPROVED` |
-| `POST /courses/{id}/publish` | Instructor bấm **Publish** | Chỉ khi toàn bộ lesson cần thiết `APPROVED` và nội dung đủ; chuyển course + lesson sang `PUBLISHED` |
+| `POST /lessons/{id}/approve` | Instructor bấm **Approve** | Kiểm tra nội dung/processed video; `REVIEW_REQUIRED → PUBLISHED` |
+| `POST /courses/{id}/publish` | Instructor bấm **Publish** | Chỉ khi toàn bộ lesson đã `PUBLISHED` và nội dung đủ; chuyển course sang `PUBLISHED` |
 
 **Quan trọng:** PDF tham khảo có phương án **Approve lesson → PUBLISHED ngay**, trong khi code/migration đang theo **Approve → APPROVED, sau đó Publish Course**. v5 **đề xuất** phương án hai bước để phù hợp code mới; đây là **quyết định cần A/C/D xác nhận**, sau đó chỉnh nhất quán báo cáo/ERD/contract.
 
@@ -391,8 +391,7 @@ Có **race condition**: S3 phát sự kiện ngay sau PUT, trong khi frontend c�
 | `PROCESSING` | Chuyển mã video thành công | `TRANSCRIBING` | Ghi `processed_video_key` |
 | `TRANSCRIBING` | Transcribe thành công | `AI_PROCESSING` | Transcript có timestamp |
 | `AI_PROCESSING` | AI output hợp lệ, lưu nháp | `REVIEW_REQUIRED` | C tạo summary/concepts/quiz/flashcard |
-| `REVIEW_REQUIRED` | Instructor approve | `APPROVED` | Không mở cho Student ngay |
-| `APPROVED` | Course publish đủ điều kiện | `PUBLISHED` | Course cũng `PUBLISHED` |
+| `REVIEW_REQUIRED` | Instructor approve | `PUBLISHED` | Lesson được mở cho Student ngay khi Course ở trạng thái PUBLISHED |
 | Các bước processing | Lỗi sau retry/catch | `FAILED` | Lưu lỗi an toàn, tham chiếu execution/job |
 | `FAILED` | Retry được dispatcher nhận | `PROCESSING` | `retry_count + 1` |
 

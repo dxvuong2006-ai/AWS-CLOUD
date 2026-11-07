@@ -81,12 +81,12 @@ DRAFT → UPLOADED → PROCESSING → TRANSCRIBING → AI_PROCESSING
 `FAILED` có thể phát sinh tại các bước xử lý; `error_message` và `retry_count`
 giúp theo dõi lỗi/retry. Bootstrap và SQLAlchemy model hiện hỗ trợ chín trạng
 thái trên. **Database hiện hữu cần migration `0004_add_lesson_approved_status.sql`
-được operator review và chạy thủ công để nhận APPROVED**; việc sửa file schema
+được operator review và chạy thủ công để loại `APPROVED` khỏi Lesson state**; việc sửa file schema
 không tự thay đổi DB đang chạy. Migration chưa được áp dụng tự động.
 Việc ép đúng chuyển trạng thái và quyền retry vẫn do service/API thực hiện.
 
 Approve tách khỏi publish: Instructor sở hữu course DRAFT thực hiện
-`REVIEW_REQUIRED → APPROVED`; Course publish chỉ nhận các Lesson đã APPROVED
+`REVIEW_REQUIRED → PUBLISHED`; Course publish chỉ nhận các Lesson đã `PUBLISHED`
 và chuyển chúng sang PUBLISHED cùng transaction. Không tự approve dữ liệu
 legacy/seed, không tự đổi trạng thái sau upload. Xem
 [hướng dẫn migration và kiểm thử](lesson-approval-migration.md).
