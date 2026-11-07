@@ -5,7 +5,7 @@ export default function QuizNavigator({ questions, answers, currentIndex, onGo }
   const answered = questions.filter((q) => answers[q.id]).length;
 
   return (
-    <div className="card">
+    <div className="card quiz-progress-panel">
       <h3 className="card-title">Tiến độ làm bài</h3>
       <div className="quiz-nav">
         {questions.map((q, i) => (
@@ -28,7 +28,7 @@ export default function QuizNavigator({ questions, answers, currentIndex, onGo }
       />
 
       <div className="quiz-threshold">
-        <span>Ngưỡng đạt</span>
+        <span>Điểm đạt</span>
         <strong>{PASS_THRESHOLD}%</strong>
       </div>
       <p className="quiz-note">Kết quả được lưu sau khi bạn nộp bài.</p>

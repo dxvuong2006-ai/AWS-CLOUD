@@ -226,7 +226,7 @@ export default function CheckpointPage() {
       <div className="page-head">
         <div>
           <h1>{result ? "Kết quả checkpoint" : "Checkpoint Section " + (sectionIdx + 1)}</h1>
-          <div className="breadcrumb">{subtitle}</div>
+          <div className="student-subtitle">{subtitle}{result && <> · Lần làm {result.attempt_number}</>}</div>
         </div>
         {result && (
           <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>
@@ -242,7 +242,7 @@ export default function CheckpointPage() {
       )}
       {draftError && <p role="alert" className="quiz-warn">Chưa lưu được nháp: {draftError.message} Các lựa chọn mới vẫn ở trang này. {draft.current && <button onClick={() => persistDraft(answers, index)}>Thử lưu lại</button>}</p>}
       {restored && !result && <p role="status">Đã khôi phục đáp án và vị trí câu hỏi của phiên đang làm.</p>}
-      {started && !result && !draftError && <p>Đáp án được lưu trong tab này ngay khi chọn. Không đóng tab nếu chưa nộp bài.</p>}
+      {started && !result && !draftError && <p className="checkpoint-save-note">Đáp án được lưu trong tab này ngay khi chọn. Không đóng tab nếu chưa nộp bài.</p>}
       {submissionPending && <p role="status">Đang chờ xác nhận lần nộp trước. Hãy nộp lại để lấy kết quả; câu trả lời được giữ nguyên.</p>}
 
       {result ? (
@@ -252,7 +252,7 @@ export default function CheckpointPage() {
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>
-                Về khóa học
+                Về lộ trình
               </Link>
             </p>
           )}

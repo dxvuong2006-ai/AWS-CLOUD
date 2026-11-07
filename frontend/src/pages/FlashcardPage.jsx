@@ -61,7 +61,7 @@ function FlashcardLesson({ courseId, sectionId, lessonId }) {
   }, [courseId, sectionId, lessonId, version]);
   const section = course.data?.sections.find(row => String(row.id) === String(sectionId));
   const lesson = section?.lessons.find(row => String(row.id) === String(lessonId));
-  return <div className="page student-page student-FlashcardPage"><div className="breadcrumb"><Link to={`/courses/${courseId}`}>{course.data?.title || "Lộ trình khóa học"}</Link> / {section?.title} / {lesson?.title}</div>
+  return <div className="page student-page student-FlashcardPage flashcard-lesson-page"><div className="breadcrumb"><Link to={`/courses/${courseId}`}>{course.data?.title || "Lộ trình khóa học"}</Link> / {section?.title} / {lesson?.title}</div>
     <h1>Ôn tập flashcard</h1><p className="student-subtitle">{course.data?.title} · {section?.title}</p><p><Link to={`/courses/${courseId}/lessons/${lessonId}${videoSearch}`}>← Về bài học</Link></p>
     {import.meta.env.VITE_USE_MOCK === "true" && <p role="note">Chế độ demo: thẻ mẫu từ khái niệm và tóm tắt bài học.</p>}
     {state.loading ? <p role="status">Đang tải flashcard...</p> : state.error ? <div role="alert"><p>{[404,405,501].includes(state.error.status) ? "Flashcard chưa có hoặc API chưa được kết nối." : state.error.message || "Không tải được flashcard."}</p><button onClick={() => setVersion(value => value + 1)}>Thử lại</button></div> : !state.deck.cards.length ? <p>Bài học chưa có flashcard được xuất bản.</p> :

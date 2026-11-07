@@ -261,3 +261,78 @@
   .student-CourseListPage .course-discovery-toolbar { align-items: stretch; flex-direction: column; gap: 12px; }
   .student-CourseListPage .course-enrollment-filters { align-self: flex-start; }
 }
+/* Screens 11–20: refine existing presentation without changing access rules. */
+.student-CourseDetailPage.course-enrolled .course-content-heading { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.student-CourseDetailPage.course-enrolled .outline-section { position: relative; padding: 8px 0 20px 46px; }
+.student-CourseDetailPage.course-enrolled .outline-section-title { min-height: 34px; padding-top: 4px; }
+.outline-section-marker { position: absolute; top: 8px; left: 2px; display: grid; place-items: center; width: 31px; height: 31px; border: 2px solid #3453ef; border-radius: 50%; color: #3453ef; font-size: 14px; }
+.is-locked .outline-section-marker { border: 0; background: #eef1f5; color: #8ca0bf; }
+.student-CourseDetailPage.course-enrolled .outline-lesson,
+.student-CourseDetailPage.course-enrolled .outline-section > .outline-checkpoint-row { margin-left: 0; }
+.outline-lesson-content { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.outline-lesson-content > a:first-child { flex: 1; min-width: 140px; }
+.outline-done { color: #157357; background: #e8f7ef; border-radius: 20px; padding: 3px 9px; font-size: 12px; }
+.outline-resume { padding: 8px 14px; border-radius: 10px; background: #344fe3; color: #fff; font-size: 14px; }
+.outline-flashcard-link { color: #657b9e; font-size: 12px; }
+.student-CourseDetailPage.course-enrolled .outline-lesson.is-current { background: #eef1ff; }
+.outline-checkpoint-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.outline-checkpoint-row > a { padding: 8px 14px; background: #fff; border: 1px solid #e2e6ee; border-radius: 9px; color: #293d60; font-weight: 600; }
+.student-CourseDetailPage.course-enrolled .course-enrollment { padding-block: 14px; }
+.student-LearningPage .learning-layout { align-items: stretch; }
+.student-LearningPage .lesson-transcript { min-width: 0; padding: 24px; }
+.student-LearningPage .lesson-transcript .transcript-list { max-height: 510px; scrollbar-width: thin; }
+.student-LearningPage .lesson-transcript .transcript-row { line-height: 1.5; }
+.student-LearningPage .lesson-summary { padding: 24px; color: #334766; }
+.student-LearningPage .lesson-summary .card-title { margin-bottom: 12px; color: #0f172a; }
+.student-LearningPage .video-box { aspect-ratio: 700 / 406; }
+.student-LearningPage .page-actions { align-self: end; margin-bottom: 2px; flex-wrap: wrap; }
+.student-section-gate > p { color: #657b9e; margin-top: 4px; }
+.section-gate-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
+.student-page .section-locked-card .section-gate-refresh { margin-top: 22px; }
+.student-page .flashcard-lesson-page { position: relative; }
+.student-page.flashcard-lesson-page > .breadcrumb { font-size: 12px; margin-bottom: 8px; }
+.student-page.flashcard-lesson-page > p:has(> a) { margin: 12px 0 0; font-size: 12px; }
+.student-page.flashcard-lesson-page .flashcard-study { margin-top: clamp(40px, 10vh, 100px); }
+.student-page.flashcard-lesson-page .flashcard-study:has(.flashcard-finish) { margin-top: clamp(45px, 13vh, 130px); }
+.student-CheckpointPage .checkpoint-save-note { color: #657b9e; font-size: 12px; margin: 0 0 14px; }
+.student-CheckpointPage .checkpoint-start .student-facts { margin: 16px 0 24px; }
+.student-CheckpointPage .checkpoint-rules { padding: 24px; }
+.student-CheckpointPage .checkpoint-start > div:last-child { align-items: center; }
+.student-CheckpointPage .checkpoint-start > div:last-child > .btn-primary { min-height: 48px; padding-inline: 24px; }
+.student-CheckpointPage .quiz-progress-panel { padding: 24px; }
+.student-CheckpointPage .quiz-progress-panel .quiz-note { font-size: 12px; line-height: 1.5; }
+.student-CheckpointPage .quiz-option:focus-visible { outline: 2px solid #3453ef; outline-offset: 3px; }
+.student-CheckpointPage .quiz-card { display: flex; flex-direction: column; }
+.student-CheckpointPage .quiz-card .quiz-actions { margin-top: auto; padding-top: 36px; }
+.student-CheckpointPage .quiz-layout { min-height: 526px; }
+.student-CheckpointPage .modal { color: #0f172a; }
+.student-CheckpointPage .modal .submit-warning-icon { color: #755f51; }
+.student-page .result-passed .result-grid > .card:first-child { min-height: 350px; }
+.student-page .result-passed .result-grid > .card:first-child .result-date { font-size: 12px; margin-top: 28px; }
+.student-page .result-passed .result-pass-note { display: none; }
+.student-page .result-passed .checkpoint-review { min-height: 350px; }
+.student-page .result-passed .result-question { padding: 15px 0; border: 0; border-top: 1px solid #edf0f5; border-radius: 0; margin: 0; }
+.result-question > summary { cursor: pointer; list-style: none; }
+.result-question > summary::-webkit-details-marker { display: none; }
+.result-question > summary h3 { margin: 0; }
+.result-question > summary:focus-visible, .result-concepts > summary:focus-visible { outline: 2px solid #3453ef; outline-offset: 4px; }
+.student-page .result-passed .result-question h3 { margin-bottom: 0; align-items: flex-start; line-height: 1.5; }
+.student-page .result-passed .result-question[open] h3 { margin-bottom: 8px; }
+.result-concepts > summary { cursor: pointer; }
+.student-page .result-passed .result-concepts { padding: 16px 24px; }
+.student-page .result-passed .result-concepts > summary { margin: 0; font-size: 14px; color: #657b9e; }
+.student-page .result-passed .result-concepts[open] > summary { margin-bottom: 16px; }
+@media (max-width: 850px) {
+  .student-CheckpointPage .quiz-layout { min-height: 0; }
+  .student-page .result-passed .result-grid > .card:first-child { min-height: 0; }
+  .student-CourseDetailPage.course-enrolled .outline-section { padding-left: 38px; }
+  .outline-checkpoint-row { flex-wrap: wrap; }
+  .student-LearningPage .lesson-transcript .transcript-list { max-height: 360px; }
+}
+@media (max-width: 600px) {
+  .student-LearningPage .page-actions { width: 100%; }
+  .student-page .section-locked-card { padding: 30px 22px; }
+  .section-gate-actions > a { width: 100%; }
+  .student-CheckpointPage .quiz-card { padding: 24px; }
+  .outline-count { float: none; display: block; margin-top: 4px; }
+}
