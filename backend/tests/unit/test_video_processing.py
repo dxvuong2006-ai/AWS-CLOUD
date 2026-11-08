@@ -218,7 +218,8 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
             self.lesson.status = state
             response = await self.publish()
             self.assertEqual(response.status_code, 409)
-            self.assertEqual(response.json()["code"], "LESSON_APPROVAL_REQUIRED")
+            expected = "PROCESSED_VIDEO_REQUIRED" if state == "PUBLISHED" else "LESSON_APPROVAL_REQUIRED"
+            self.assertEqual(response.json()["code"], expected)
         self.assertEqual(self.course.status, "DRAFT")
         self.db.commit.assert_not_called()
 

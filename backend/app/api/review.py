@@ -134,9 +134,13 @@ def approve_draft(
     Returns:
         Bản nháp đã chuyển PUBLISHED.
     """
+    review_service.approve_lesson(
+        db, lesson_id, instructor_id=instructor.id,
+        expected_revision=payload.expected_revision,
+    )
     return _call(
-        review_service.approve_draft, db=db, lesson_id=lesson_id,
-        instructor_id=instructor.id, payload=payload,
+        review_service.get_draft, db=db, lesson_id=lesson_id,
+        instructor_id=instructor.id,
     )
 
 
@@ -203,24 +207,16 @@ def patch_ai_content(
     )
 
 
-@router.post("/lessons/{lesson_id}/approve", response_model=ReviewResponse)
+@router.post("/lessons/{lesson_id}/approve")
 def approve_ai_content(
-    lesson_id: int, payload: DraftApproval,
+    lesson_id: int, payload: dict | None = None,
     db: Session = Depends(get_db),
     instructor: User = Depends(require_instructor),
-) -> ReviewResponse:
-    """Phê duyệt phiên bản nháp được xác nhận bởi giảng viên.
-
-    Args:
-        lesson_id: Mã bài học.
-        payload: Phiên bản cần duyệt.
-        db: Session hiện tại.
-        instructor: Giảng viên đã xác thực.
-
-    Returns:
-        Nội dung sau khi phê duyệt.
-    """
-    return _call(
-        review_service.approve_draft, db=db, lesson_id=lesson_id,
-        instructor_id=instructor.id, payload=payload,
+):
+    """Duyệt bài và kiểm tra phiên bản nếu giảng viên cung cấp."""
+    if payload is not None and set(payload) - {"expected_revision"}:
+        raise HTTPException(409, "Unsupported approval field.")
+    return review_service.approve_lesson(
+        db, lesson_id, instructor_id=instructor.id,
+        expected_revision=payload.get("expected_revision") if payload else None,
     )

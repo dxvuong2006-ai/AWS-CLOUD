@@ -7,6 +7,7 @@ import json
 from sqlalchemy.orm import Session
 
 from app.adapters.ai.base import BaseAIAdapter
+from app.adapters.storage.s3_storage import S3StorageAdapter
 from app.models.lesson import Lesson
 from app.models.quiz import Quiz
 from app.repositories import review_repo
@@ -248,3 +249,90 @@ def approve_draft(
         review_repo.approve(db, lesson, quiz)
         result = _response(db, lesson, quiz)
     return result
+
+
+def approve_lesson(db: Session, lesson_id: int, instructor_id: int,
+                   expected_revision=None, storage_adapter=None):
+    """Duyệt bài sau khi kiểm tra quyền, nội dung và video đã xử lý."""
+    from botocore.exceptions import BotoCoreError, ClientError
+    from sqlalchemy.exc import OperationalError
+    from app.repositories import lessons_repo, courses_repo
+    from app.utils.errors import NotFoundError, ForbiddenError, ExternalServiceError
+
+    try:
+        lesson = lessons_repo.get_by_id(db, lesson_id)
+        if lesson is None:
+            raise NotFoundError("Lesson not found.")
+        section = lessons_repo.get_section(db, lesson.section_id)
+        if section is None:
+            raise NotFoundError("Section not found.")
+        course = lessons_repo.get_course(db, section.course_id)
+        if course is None:
+            raise NotFoundError("Course not found.")
+        if course.instructor_id != instructor_id:
+            raise ForbiddenError("You do not own this course.")
+        course = courses_repo.lock_by_id(db, course.id)
+        if course is None:
+            raise NotFoundError("Course not found.")
+        if course.instructor_id != instructor_id:
+            raise ForbiddenError("You do not own this course.")
+        lesson = lessons_repo.lock_by_id(db, lesson_id)
+        if lesson is None or lesson.section_id != section.id:
+            raise NotFoundError("Lesson not found.")
+        def response():
+            """Tạo dấu phiên bản ổn định từ nội dung bài đã duyệt."""
+            revision = hashlib.sha256(json.dumps(
+                {"lesson_id": lesson.id, "transcript": lesson.transcript_json,
+                 "summary": lesson.summary, "key_concepts": lesson.key_concepts_json},
+                sort_keys=True, ensure_ascii=False, default=str,
+            ).encode("utf-8")).hexdigest()
+            return {"lesson_id": lesson.id, "status": lesson.status,
+                    "revision": revision}
+
+        if lesson.status == "PUBLISHED":
+            if expected_revision is not None and expected_revision != response()["revision"]:
+                quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+                if quiz is None or _response(db, lesson, quiz).revision != expected_revision:
+                    raise ConflictError("Draft changed.", code="REVIEW_CHANGED")
+            result = response()
+            db.commit()
+            return result
+        if course.status != "DRAFT":
+            raise ConflictError("Course is not a draft.", code="COURSE_NOT_DRAFT")
+        if lesson.status != "REVIEW_REQUIRED":
+            raise ConflictError("Lesson is not reviewable.", code="LESSON_NOT_REVIEWABLE")
+        if not lesson.processed_video_key:
+            raise ConflictError("Processed video is required.", code="PROCESSED_VIDEO_REQUIRED")
+        validate_review_content(lesson)
+        if expected_revision is not None:
+            quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+            current = _response(db, lesson, quiz)
+            if current.revision != expected_revision:
+                raise ConflictError("Draft changed.", code="REVIEW_CHANGED")
+        try:
+            storage = storage_adapter or S3StorageAdapter()
+            metadata = storage.head_video(lesson.processed_video_key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "NotFound", "404"}:
+                raise ConflictError("Processed video is missing.", code="PROCESSED_VIDEO_REQUIRED") from None
+            raise ExternalServiceError("Storage unavailable.", code="APPROVAL_STORAGE_UNAVAILABLE") from None
+        except BotoCoreError:
+            raise ExternalServiceError("Storage unavailable.", code="APPROVAL_STORAGE_UNAVAILABLE") from None
+        if metadata.get("ContentLength", 0) <= 0:
+            raise ConflictError("Processed video is empty.", code="INVALID_PROCESSED_VIDEO")
+        quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+        if quiz is not None:
+            review_repo.approve(db, lesson, quiz)
+        else:
+            lesson.status = "PUBLISHED"
+            db.flush()
+        db.commit()
+        return response()
+    except OperationalError as exc:
+        db.rollback()
+        if getattr(exc.orig, "pgcode", None) == "55P03":
+            raise ConflictError("Review is busy.", code="REVIEW_BUSY") from None
+        raise
+    except Exception:
+        db.rollback()
+        raise

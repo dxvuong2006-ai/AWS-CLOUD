@@ -372,10 +372,20 @@ def test_invalid_ai_data_never_silently_falls_back(mode):
     assert not ai.used_fallback
 
 
-def test_review_routes_enforce_role_and_ownership(db_session, review_context):
+def test_review_routes_enforce_role_and_ownership(db_session, review_context, monkeypatch):
     """API chỉ cho chủ khóa học lấy, sửa, duyệt và kiểm tra payload."""
     draft = make_draft(db_session, review_context)
     owner, outsider, student, lesson = review_context
+    from app.models.course import Course
+    from app.models.section import Section
+    from unittest.mock import Mock
+    section = db_session.get(Section, lesson.section_id)
+    db_session.get(Course, section.course_id).status = "DRAFT"
+    lesson.processed_video_key = "processed/reviewed.mp4"
+    db_session.commit()
+    storage = Mock()
+    storage.head_video.return_value = {"ContentLength": 1024}
+    monkeypatch.setattr(review_service, "S3StorageAdapter", lambda: storage)
     actor = {"user": student}
 
     def database_override():

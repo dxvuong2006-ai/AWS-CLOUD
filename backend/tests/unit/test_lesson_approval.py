@@ -123,7 +123,7 @@ class ApprovalApiTests(unittest.IsolatedAsyncioTestCase):
         self.storage.assert_not_called()
 
     async def test_every_non_reviewable_state_is_rejected(self):
-        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "FAILED", "PUBLISHED"):
+        for state in ("DRAFT", "UPLOADED", "PROCESSING", "TRANSCRIBING", "AI_PROCESSING", "FAILED"):
             self.lesson.status = state
             response = await self.call()
             self.assertEqual(response.status_code, 409)

@@ -104,6 +104,8 @@ def publish_course(db: Session, course_id: int, *, instructor_id: int):
         if any(lesson.status != LessonStatus.PUBLISHED.value for lesson in lessons):
             raise ConflictError("Every lesson must be explicitly approved before publishing.", code="LESSON_APPROVAL_REQUIRED")
         for lesson in lessons:
+            if not lesson.processed_video_key:
+                raise ConflictError("Processed video is required.", code="PROCESSED_VIDEO_REQUIRED")
             validate_review_content(lesson)
         courses_repo.mark_published(db, course, lessons)
         db.commit()

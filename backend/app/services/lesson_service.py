@@ -206,9 +206,8 @@ def get_lesson_for_user(
     _, course = _get_section_and_course(db, lesson.section_id)
     _check_lesson_access(db, course, user_id, user_role)
 
-    if user_role.upper() == "STUDENT" and lesson.status not in (
-        "PUBLISHED",
-    ):
+    lesson_status = getattr(lesson, "status", None)
+    if user_role.upper() == "STUDENT" and lesson_status is not None and lesson_status != "PUBLISHED":
         raise LessonAccessDeniedError("Lesson is awaiting instructor approval.")
     return lesson
 
