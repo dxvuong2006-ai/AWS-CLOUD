@@ -56,7 +56,6 @@ app.include_router(sections_router)
 app.include_router(lessons_router)
 app.include_router(enrollments_router)
 app.include_router(uploads_router)
-app.include_router(review_router)
 
 @app.get("/health", tags=["Health"])
 def health_check():

@@ -50,7 +50,7 @@ def test_fail_tutor_retry_and_unlock(db_session, quiz_course):
         payload=DraftApproval(expected_revision=draft.revision),
     )
     db_session.add(Lesson(section_id=sections[0].id, title="Second",
-                          position=2, status="APPROVED",
+                          position=2, status="PUBLISHED",
                           transcript_json={"segments": [
                               {"start": 40, "end": 50,
                                "text": "Lambda xử lý sự kiện."}]}))
