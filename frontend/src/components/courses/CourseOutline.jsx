@@ -6,6 +6,7 @@ export default function CourseOutline({
   currentLessonId,
   completedIds = new Set(),
   unlockedSectionIds = [],
+  returnTo = null,
 }) {
   if (!sections || sections.length === 0) {
     return <p>Khóa học chưa có nội dung.</p>;
@@ -43,14 +44,14 @@ export default function CourseOutline({
                   </span>
                   {courseId && unlockedSectionIds.includes(String(s.id)) ? (
                     <span className="outline-lesson-content"><Link
-                      to={`/courses/${courseId}/lessons/${l.id}`}
+                      to={`/courses/${courseId}/lessons/${l.id}${returnTo ? "?from=progress" : ""}`}
                       style={{
                         color: isCurrent ? "var(--accent)" : "inherit",
                         fontWeight: isCurrent ? 600 : 400,
                       }}
                     >
                       {label}
-                    </Link>{done && <span className="outline-done">● Đã học</span>}{isCurrent && <span className="outline-resume">Học tiếp</span>}<Link className="outline-flashcard-link" to={`/courses/${courseId}/sections/${s.id}/lessons/${l.id}/flashcards`}>Ôn flashcard</Link></span>
+                    </Link>{done && <span className="outline-done">● Đã học</span>}{isCurrent && <span className="outline-resume">Học tiếp</span>}<Link className="outline-flashcard-link" to={`/courses/${courseId}/sections/${s.id}/lessons/${l.id}/flashcards${returnTo ? "?from=progress" : ""}`}>Ôn flashcard</Link></span>
                   ) : (
                     <span>{label}</span>
                   )}
@@ -59,8 +60,8 @@ export default function CourseOutline({
             })}
           </ul>
           {courseId && <p className="outline-checkpoint-row"><span>{unlockedSectionIds.includes(String(s.id)) ? "Checkpoint Section " + (i + 1) : "Section đang khóa"}</span>{unlockedSectionIds.includes(String(s.id)) ?
-            <Link to={`/courses/${courseId}/sections/${s.id}/checkpoint`}>Làm checkpoint</Link> :
-            <Link to={`/courses/${courseId}/sections/${s.id}`}>Xem điều kiện mở section</Link>}</p>}
+            <Link to={`/courses/${courseId}/sections/${s.id}/checkpoint${returnTo ? "?from=progress" : ""}`}>Làm checkpoint</Link> :
+            <Link to={`/courses/${courseId}/sections/${s.id}${returnTo ? "?from=progress" : ""}`}>Xem điều kiện mở section</Link>}</p>}
         </div>
       ))}
     </div>

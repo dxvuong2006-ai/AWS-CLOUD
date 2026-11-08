@@ -7,6 +7,7 @@ from app.models.lesson import Lesson
 from app.models.enrollment import Enrollment
 from app.models.progress import LessonProgress
 from app.models.quiz import Quiz, QuizAttempt
+from app.models.user import User
 from app.services import analytics_service
 
 
@@ -52,6 +53,44 @@ def dashboard(db, instructor_id):
         "active_students": students, "pass_rate": round(100 * sum(m["passed_attempts"] for m in metrics) / total) if total else None,
         "courses": [{**c, "lesson_count": sum(len(s["lessons"]) for s in c["sections"])} for c in courses[:5]],
         "tasks": tasks[:6]}
+
+
+def instructor_students(db, instructor_id):
+    course_ids = [row[0] for row in db.query(Course.id).filter(
+        Course.instructor_id == instructor_id).all()]
+    if not course_ids:
+        return []
+    rows = db.query(User).join(Enrollment, Enrollment.student_id == User.id).filter(
+        Enrollment.course_id.in_(course_ids), User.role == "STUDENT").distinct().all()
+    result = []
+    for student in rows:
+        courses = db.query(Course).join(Enrollment, Enrollment.course_id == Course.id).filter(
+            Enrollment.student_id == student.id, Course.instructor_id == instructor_id).all()
+        values = [round(100 * detail["completed_lessons"] / detail["lesson_count"])
+                  if detail["lesson_count"] else 0
+                  for detail in (completion(db, student.id, course.id) for course in courses)]
+        progress = round(sum(values) / len(values)) if values else 0
+        result.append({"id": student.id, "name": student.name, "email": student.email,
+                       "progress": progress, "status": "COMPLETED" if progress == 100 else "ACTIVE"})
+    return result
+
+
+def instructor_student(db, instructor_id, student_id):
+    student = db.query(User).filter(User.id == student_id, User.role == "STUDENT").first()
+    if student is None:
+        raise HTTPException(404, "Không tìm thấy học viên.")
+    courses = db.query(Course).join(Enrollment, Enrollment.course_id == Course.id).filter(
+        Enrollment.student_id == student_id, Course.instructor_id == instructor_id).all()
+    if not courses:
+        raise HTTPException(404, "Học viên không thuộc khóa học của bạn.")
+    details = [completion(db, student_id, course.id) for course in courses]
+    return {"id": student.id, "name": student.name, "email": student.email,
+            "courses": [{"id": course.id, "title": course.title,
+                         "progress": detail["progress_percent"]}
+                        for course, detail in zip(courses, details)],
+            "attempt_count": db.query(QuizAttempt).filter(
+                QuizAttempt.student_id == student_id).count(),
+            "average_score": None, "tutor_sessions": 0, "weak_concepts": []}
 
 
 def student_course(db, student_id, course_id):

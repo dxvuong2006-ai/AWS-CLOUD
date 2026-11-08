@@ -1,6 +1,6 @@
 import "../styles/student.css";
 import { useEffect, useRef, useState } from "react";
-import { useParams, useLocation, Link } from "react-router-dom";
+import { useParams, useLocation, useSearchParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { fetchSectionQuiz, submitAttempt, readPendingAttempt, recoverPendingCheckpoint, knownCheckpointQuizId } from "../api/quizzes.api";
 import { createCheckpointDraft, restoreCheckpointDraft, saveCheckpointDraft } from "../utils/checkpointDraft";
@@ -33,6 +33,9 @@ function errorMessage(err) {
 export default function CheckpointPage() {
   const { courseId, sectionId } = useParams();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const fromProgress = searchParams.get("from") === "progress";
+  const progressSuffix = fromProgress ? "?from=progress" : "";
   const fromLessonId = location.state?.lessonId;
   const course = useCourse(courseId);
   const [quiz, setQuiz] = useState(null);
@@ -124,7 +127,7 @@ export default function CheckpointPage() {
       <div className="page student-page student-CheckpointPage">
         <p>{errorMessage(error)}</p>
         <button className="btn-secondary" onClick={() => setLoadVersion(v => v + 1)}>Thử lại</button>
-        <Link to={backTo}>{backLabel}</Link>
+        <Link className="student-route-button" to={backTo}>{backLabel}</Link>
         {historyQuizId && <CheckpointHistory quizId={historyQuizId} />}
       </div>
     );
@@ -248,7 +251,7 @@ export default function CheckpointPage() {
             <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>Làm lại checkpoint</button>
             {result.remediation_required && <span>Nút mở sau khi hoàn thành ôn tập bắt buộc.</span>}
           </div>
-          {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}`}>Mở lại kết quả lượt làm này</Link></p>}
+          {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}${progressSuffix}`}>Mở lại kết quả lượt làm này</Link></p>}
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>

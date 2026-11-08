@@ -38,6 +38,15 @@ def dashboard(db: Session = Depends(get_db), user=Depends(require_instructor)):
 def queue(db: Session = Depends(get_db), user=Depends(require_instructor)):
     return service.queue(db, user.id)
 
+@router.get("/instructor/students")
+def students(db: Session = Depends(get_db), user=Depends(require_instructor)):
+    return service.instructor_students(db, user.id)
+
+@router.get("/instructor/students/{student_id}")
+def student(student_id: int, db: Session = Depends(get_db),
+            user=Depends(require_instructor)):
+    return service.instructor_student(db, user.id, student_id)
+
 @router.get("/students/me/checkpoint-history")
 def history(offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100),
             db: Session = Depends(get_db), user=Depends(require_student)):

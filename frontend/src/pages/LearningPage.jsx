@@ -43,6 +43,7 @@ function LearningContent() {
   const { courseId, lessonId } = useParams();
   const [search] = useSearchParams();
   const sessionId = search.get("remediationSessionId");
+  const fromProgress = search.get("from") === "progress";
   const returnTo = remediationReturn(courseId, sessionId, search.get("returnTo"));
   const flashcardSearch = returnTo ? `?${new URLSearchParams({ remediationSessionId: sessionId, returnTo })}` : "";
   const course = useCourse(courseId);
@@ -208,7 +209,7 @@ useEffect(() => {
       </div>
       <nav aria-label="Điều hướng bài học" style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
         {returnTo && <Link to={returnTo}>← Quay lại phiên ôn tập AI</Link>}
-        <Link to={`/courses/${courseId}`}>← Lộ trình khóa học</Link>
+        <Link className="student-route-button" to={fromProgress ? "/progress" : `/courses/${courseId}`}>{fromProgress ? "← Tiến độ" : "← Lộ trình khóa học"}</Link>
         {next && <Link to={`/courses/${courseId}/lessons/${next.id}`}>Bài tiếp theo: {next.title} →</Link>}
       </nav>
     </div>

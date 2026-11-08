@@ -30,6 +30,8 @@ export default function TutorPage() {
   const base = "/courses/" + session.course_id;
   const checkpoint = base + "/sections/" + session.section_id + "/checkpoint";
   const resultVisible = result && showResult;
+  const empty = (step === 1 && !current) || (step === 2 && !card) || (step === 3 && !question && !resultVisible);
+  if (empty) return <div className="page student-page"><h1>Ôn tập với AI Tutor</h1><p role="alert">Bài này chưa có đủ nội dung ôn tập (lỗi, flashcard hoặc câu practice).</p><Link to={base}>Về lộ trình</Link></div>;
   return <div className="page student-page tutor-page">
     <h1>{resultVisible ? "Kết quả luyện tập" : "Ôn tập với AI Tutor"}</h1><p className="student-subtitle">{session.section_title}</p>
     <ol className="tutor-steps" aria-label="Các bước ôn tập">{["Giải thích lỗi", "Xem lại bài", "Luyện tập"].map((label, i) => <li key={label} className={(step === i + 1 ? "active " : "") + ((i === 0 && session.explanation_completed) || (i === 1 && session.review_completed) || (i === 2 && session.remediation_completed) ? "done" : "")}><span>{((i === 0 && session.explanation_completed) || (i === 1 && session.review_completed) || (i === 2 && session.remediation_completed)) ? "✓" : i + 1}</span>{label}</li>)}</ol>

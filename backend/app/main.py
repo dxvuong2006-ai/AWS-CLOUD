@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.api import quizzes, review, tutor, analytics, screen_workflows
+from app.api import quizzes, review, tutor, analytics, screen_workflows, admin
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
 from app.api.lessons import router as lessons_router
@@ -60,6 +60,7 @@ app.include_router(lessons_router)
 app.include_router(enrollments_router)
 app.include_router(uploads_router)
 app.include_router(review_router)
+app.include_router(admin.router)
 
 @app.get("/health", tags=["Health"])
 def health_check():

@@ -84,6 +84,7 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/users/new" element={<AdminUsersPage />} />
+        <Route path="/admin/users/success" element={<AdminUsersPage />} />
         <Route path="/admin/users/:userId/edit" element={<AdminUsersPage />} />
         <Route path="/admin/roles" element={<AdminUsersPage />} />
         <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />

@@ -28,7 +28,7 @@ function FlashcardLibrary() {
   const courseId = enrollments.data.some(row => row.course.id === selected) ? selected : enrollments.data[0]?.course.id;
   return <div className="page student-page student-FlashcardPage"><h1>Flashcard</h1><p>Chọn bài học để ôn lại những khái niệm đã học.</p>
     {enrollments.loading ? <p role="status">Đang tải khóa học...</p> : enrollments.error ? <div role="alert"><p>Không tải được khóa học đã đăng ký.</p><button onClick={enrollments.reload}>Thử lại</button></div> : !enrollments.data.length ? <p>Bạn chưa đăng ký khóa học. <Link to="/courses">Khám phá khóa học</Link></p> : <>
-      <label>Khóa học <select value={courseId} onChange={event => setSelected(event.target.value)}>{enrollments.data.map(row => <option key={row.course.id} value={row.course.id}>{row.course.title}</option>)}</select></label>
+      <div className="fc-course"><label htmlFor="fc-course-select">Khóa học</label><select id="fc-course-select" value={courseId} onChange={event => setSelected(event.target.value)}>{enrollments.data.map(row => <option key={row.course.id} value={row.course.id}>{row.course.title}</option>)}</select></div>
       <FlashcardPicker key={courseId} courseId={courseId} enrollment={enrollments.data.find(row => row.course.id === courseId)} />
     </>}
   </div>;
