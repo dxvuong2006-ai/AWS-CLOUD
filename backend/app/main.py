@@ -17,6 +17,9 @@ from app.api.sections import router as sections_router
 from app.api.enrollments import router as enrollments_router
 from app.api.uploads import router as uploads_router
 from app.api.auth import router as auth_router
+from app.api.admin import router as admin_router
+from app.api.progress import router as progress_router
+from app.api.flashcards import router as flashcards_router
 from app.api.quizzes import router as quizzes_router
 from app.api.review import router as review_router
 from app.utils.errors import register_exception_handlers
@@ -59,6 +62,9 @@ app.include_router(lessons_router)
 app.include_router(enrollments_router)
 app.include_router(uploads_router)
 app.include_router(review_router)
+app.include_router(admin_router)
+app.include_router(progress_router)
+app.include_router(flashcards_router)
 
 @app.get("/health", tags=["Health"])
 def health_check():

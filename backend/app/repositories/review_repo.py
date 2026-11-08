@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
+from app.models.flashcard import Flashcard
 from app.models.lesson import Lesson
 from app.models.quiz import Question, Quiz, QuizAttempt
 from app.models.section import Section
@@ -129,6 +130,13 @@ def get_questions(db: Session, quiz_id: int) -> list[Question]:
     ).order_by(Question.position).all()
 
 
+def get_flashcards(db: Session, lesson_id: int) -> list[Flashcard]:
+    """Trả thẻ của lesson theo thứ tự phục vụ bản nháp và revision."""
+    return db.query(Flashcard).filter(
+        Flashcard.lesson_id == lesson_id,
+    ).order_by(Flashcard.position, Flashcard.id).all()
+
+
 def has_attempts(db: Session, quiz_id: int) -> bool:
     """Kiểm tra đề đã được học viên sử dụng.
 
@@ -172,6 +180,19 @@ def replace_content(
         item.model_dump() for item in content.key_concepts
     ]
     lesson.status = "REVIEW_REQUIRED"
+    db.query(Flashcard).filter(
+        Flashcard.lesson_id == lesson.id,
+    ).delete(synchronize_session=False)
+    db.add_all([
+        Flashcard(
+            lesson_id=lesson.id,
+            front=item.front,
+            back=item.back,
+            position=item.position,
+            is_approved=False,
+        )
+        for item in content.flashcards
+    ])
     quiz.title = content.quiz_title
     quiz.is_approved = False
     db.add_all([
@@ -199,6 +220,9 @@ def approve(db: Session, lesson: Lesson, quiz: Quiz) -> None:
         None; thay đổi vẫn thuộc giao dịch của bên gọi.
     """
     lesson.status = "PUBLISHED"
+    db.query(Flashcard).filter(
+        Flashcard.lesson_id == lesson.id,
+    ).update({"is_approved": True}, synchronize_session=False)
     db.flush()
     pending = db.query(Lesson.id).filter(
         Lesson.section_id == lesson.section_id,
