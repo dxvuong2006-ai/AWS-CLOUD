@@ -68,6 +68,25 @@
 .management-notice { color: #157347; background: #e8f7ef; }
 .admin-edit-layout, .profile-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr); gap: 22px; }
 .admin-edit-page .management-form, .profile-card { max-width: none; }
+.admin-create-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .75fr); gap: 22px; }
+.admin-create-form { max-width: none; gap: 18px; }
+.admin-create-form input { width: 100%; }
+.password-generator { display: flex; align-items: center; gap: 10px; padding-right: 12px; border: 1px solid #dde3ed; border-radius: 10px; background: #fff; }
+.password-generator input { border: 0; outline: 0; }
+.password-generator button { flex: none; border: 0; background: transparent; color: #3453d9; font-weight: 700; cursor: pointer; }
+.role-selector { border: 0; padding: 0; margin: 0; }
+.role-selector legend { padding: 0; margin-bottom: 8px; color: #334155; font-weight: 650; }
+.role-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.role-option { display: flex !important; grid-template-columns: auto 1fr; align-items: flex-start; gap: 12px; min-height: 92px; padding: 16px; border: 1px solid #dde3ed; border-radius: 12px; cursor: pointer; }
+.role-option.selected { border-color: #3453d9; background: #eef2ff; box-shadow: inset 0 0 0 1px #3453d9; }
+.role-option input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: #3453d9; }
+.role-option strong { display: block; font-weight: 600; }
+.role-option small { display: block; }
+.role-option small { margin-top: 6px; color: #64748b; font-weight: 400; line-height: 1.35; }
+.create-notes { align-self: start; }
+.create-notes h2 { margin: 0 0 4px; font-size: 17px; }
+.create-notes p { padding: 14px 0; margin: 0; border-bottom: 1px solid #edf0f5; color: #334155; line-height: 1.45; }
+.create-notes p:last-child { border-bottom: 0; }
 .input-with-badge { position: relative; }
 .input-with-badge input { padding-right: 100px; }
 .input-with-badge span { position: absolute; right: 12px; top: 10px; border-radius: 999px; padding: 4px 10px; background: #eef1f5; color: #64748b; font-size: 12px; font-weight: 700; }
@@ -120,7 +139,7 @@
   .management-grid, .management-grid.three, .management-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-layout { grid-template-columns: 1fr; }
   .report-detail-grid { grid-template-columns: 1fr; }
-  .roles-layout, .monitoring-layout, .admin-edit-layout, .profile-layout { grid-template-columns: 1fr; }
+  .roles-layout, .monitoring-layout, .admin-edit-layout, .profile-layout, .admin-create-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .management-page { padding: 24px 18px; }
@@ -130,4 +149,7 @@
   .monitoring-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .permission-head, .permission-row { grid-template-columns: minmax(180px, 1fr) repeat(3, 55px); }
   .permission-table { padding: 14px 10px; overflow-x: auto; }
+  .role-options { grid-template-columns: 1fr; }
+  .password-generator { align-items: stretch; flex-direction: column; padding: 0; }
+  .password-generator button { padding: 0 12px 10px; text-align: left; }
 }
