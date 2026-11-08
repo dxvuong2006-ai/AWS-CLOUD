@@ -126,7 +126,7 @@ def _editable(db: Session, quiz: Quiz | None) -> None:
 
 def generate_draft(
     db: Session, *, lesson_id: int, instructor_id: int,
-    payload: DraftGeneration, ai: BaseAIAdapter,
+    payload: DraftGeneration, ai: BaseAIAdapter, transcript_data=None,
 ) -> ReviewResponse:
     """Sinh nội dung ngoài khóa DB rồi lưu nguyên tử ở trạng thái chờ.
 
@@ -157,7 +157,17 @@ def generate_draft(
         quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
         _editable(db, quiz)
         quiz = review_repo.replace_content(db, lesson, quiz, content)
-        lesson.transcript_json = {"text": payload.transcript}
+        from ai_pipeline.processors.normalize_transcript import normalize_transcript
+
+        previous = transcript_data if transcript_data is not None else lesson.transcript_json
+        normalized = normalize_transcript(payload.transcript)
+        if isinstance(previous, dict):
+            old = normalize_transcript(previous)
+            if old["full_text"].strip() == normalized["full_text"].strip():
+                normalized["segments"] = old["segments"]
+                normalized["language"] = old["language"]
+        normalized["text"] = normalized["full_text"]
+        lesson.transcript_json = normalized
         result = _response(db, lesson, quiz)
     return result
 

@@ -124,3 +124,13 @@ def question_failure_rates(db, course_id):
         .group_by(Question.id, Question.question, Question.topic)
         .all()
     )
+
+
+
+def get_approved_section_lessons(db, lesson_id):
+    """Lấy các bài đã duyệt trong cùng section với phiên Tutor."""
+    section_id = db.query(Lesson.section_id).filter(Lesson.id == lesson_id).scalar()
+    return (db.query(Lesson)
+            .filter(Lesson.section_id == section_id,
+                    Lesson.status.in_(("APPROVED", "PUBLISHED")))
+            .order_by(Lesson.position, Lesson.id).all())

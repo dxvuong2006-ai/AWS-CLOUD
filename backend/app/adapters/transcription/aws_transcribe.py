@@ -97,3 +97,43 @@ class AWSTranscribeAdapter:
         if "FailureReason" in job:
             result["failure_reason"] = job["FailureReason"]
         return result
+
+
+def process_video_pipeline(
+    video_s3_key_or_path, lesson_id, db, *, instructor_id,
+    transcriber=None, ai=None,
+):
+    """Khởi tạo phiên âm và lưu nháp khi transcript đã sẵn sàng.
+
+    Args:
+        video_s3_key_or_path: URI S3 hoặc đường dẫn cho transcriber giả lập.
+        lesson_id: Mã bài học.
+        db: Session hiện tại.
+        instructor_id: Giảng viên sở hữu khóa học.
+        transcriber: Adapter phiên âm tùy chọn.
+        ai: Adapter AI tùy chọn.
+
+    Returns:
+        Trạng thái job đang chạy hoặc bản nháp REVIEW_REQUIRED.
+    """
+    from ai_pipeline.processors.normalize_transcript import normalize_transcript
+    from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+    from app.schemas.review import DraftGeneration
+    from app.services import review_service
+
+    review_service._owned_lesson(db, lesson_id, instructor_id)
+    transcriber = transcriber or AWSTranscribeAdapter()
+    ai = ai or BedrockAIAdapter(allow_fallback=True)
+    raw = transcriber.transcribe(video_s3_key_or_path)
+    if "segments" not in raw and "full_text" not in raw:
+        return {"status": raw["status"], "job_id": raw["job_id"]}
+    transcript = normalize_transcript(raw)
+    if not transcript["full_text"].strip():
+        raise ValueError("Transcription returned no text.")
+    draft = review_service.generate_draft(
+        db, lesson_id=lesson_id, instructor_id=instructor_id,
+        payload=DraftGeneration(transcript=transcript["full_text"]),
+        ai=ai, transcript_data=transcript,
+    )
+    return {"status": "REVIEW_REQUIRED", "draft": draft}
+
