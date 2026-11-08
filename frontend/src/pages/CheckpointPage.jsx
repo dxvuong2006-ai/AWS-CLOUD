@@ -16,7 +16,7 @@ function errorMessage(err) {
     const detail = err.message;
     if (detail === "Mandatory AI review and practice must be completed before retrying." ||
         detail === "Bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại.") {
-      return "Lượt checkpoint gần nhất dưới 50% nên bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại: xem giải thích lỗi, ôn bài hoặc flashcard và đạt bài practice. Chỉ hoàn thành flashcard chưa đủ mở lại checkpoint. Luồng ôn AI hiện chưa được triển khai đầy đủ trong phiên bản này.";
+      return "Lượt checkpoint gần nhất dưới 50% nên bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại: xem giải thích lỗi, ôn bài hoặc flashcard và đạt bài practice. Chỉ hoàn thành flashcard chưa đủ mở lại checkpoint. Mở kết quả lượt làm gần nhất bên dưới để bắt đầu ôn tập AI.";
     }
     if (detail === "Complete the current lesson before this checkpoint.") {
       return "Bạn cần hoàn thành tiến độ xem bài học trước khi làm checkpoint. Hoàn thành flashcard không thay thế tiến độ xem bài học.";
@@ -228,11 +228,7 @@ export default function CheckpointPage() {
           <h1>{result ? "Kết quả checkpoint" : "Checkpoint Section " + (sectionIdx + 1)}</h1>
           <div className="student-subtitle">{subtitle}{result && <> · Lần làm {result.attempt_number}</>}</div>
         </div>
-        {result && (
-          <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>
-            Làm lại checkpoint
-          </button>
-        )}
+
       </div>
 
       {submitError && (
@@ -248,12 +244,17 @@ export default function CheckpointPage() {
       {result ? (
         <>
           <QuizResult result={result} />
+          <div className="result-existing-actions">
+            <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>Làm lại checkpoint</button>
+            {result.remediation_required && <span>Nút mở sau khi hoàn thành ôn tập bắt buộc.</span>}
+          </div>
           {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}`}>Mở lại kết quả lượt làm này</Link></p>}
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>
                 Về lộ trình
               </Link>
+              <Link className="btn-secondary" to={"/courses/" + courseId + "/completed"}>Xem tổng kết khóa học</Link>
             </p>
           )}
         </>

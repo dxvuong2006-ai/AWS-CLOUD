@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.api import quizzes, review, tutor, analytics
+from app.api import quizzes, review, tutor, analytics, screen_workflows
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
 from app.api.lessons import router as lessons_router
@@ -47,6 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(screen_workflows.router)
 app.include_router(auth_router)
 app.include_router(quizzes_router)
 app.include_router(courses_router)

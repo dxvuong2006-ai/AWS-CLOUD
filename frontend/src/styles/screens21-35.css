@@ -1,0 +1,115 @@
+/* Screens 21–35: presentation for existing data and workflows. */
+.student-page .result-review { display: grid; grid-template-columns: minmax(230px, .385fr) minmax(0, 1fr); gap: 22px; }
+.student-page .result-review .result-grid { display: contents; }
+.result-review-banner { grid-column: 1 / -1; display: flex; gap: 14px; align-items: center; border-radius: 14px; padding: 18px 20px; line-height: 1.5; }
+.result-review-banner.optional { background: #fff4df; color: #a65a05; }
+.result-review-banner.required { background: #fdeceb; color: #bd2419; }
+.student-page .result-review .result-grid > .card:first-child { grid-column: 1; grid-row: 2; margin: 0; }
+.student-page .result-review .result-label, .student-page .result-review .result-sub { color: #657b9e; font-size: 14px; }
+.student-page .result-review .result-score { font-size: 60px; letter-spacing: -2px; margin: 10px 0 14px; }
+.student-page .result-review .result-date { margin-top: 24px; color: #657b9e; font-size: 12px; line-height: 1.6; }
+.student-page .result-review .checkpoint-review { grid-column: 2; grid-row: 2; border: 1px solid #e2e6ee; border-radius: 16px; background: #fff; padding: 24px; }
+.student-page .result-review .checkpoint-review > h2, .student-page .result-requirements > h2 { margin: 0 0 18px; font-size: 16px; }
+.student-page .result-review .checkpoint-review .result-question { margin: 0; border: 0; border-top: 1px solid #edf0f5; border-radius: 0; padding: 15px 0; }
+.student-page .result-review .result-question h3 { display: flex; align-items: flex-start; gap: 12px; font-size: 15px; line-height: 1.5; }
+.student-page .result-review .result-question p { margin: 8px 0 0 34px; color: #657b9e; font-size: 13px; line-height: 1.6; }
+.student-page .result-review .result-question .badge { display: none; }
+.student-page .result-review .result-concepts { grid-column: 1 / -1; grid-row: 4; padding: 16px 24px; }
+.student-page .result-review .result-concepts > summary { margin: 0; color: #657b9e; font-size: 14px; }
+.student-page .result-review .result-concepts[open] > summary { margin-bottom: 16px; }
+.student-page .result-requirements { grid-column: 2; grid-row: 2; margin: 0; }
+.result-requirements ol { margin: 0; padding-left: 20px; }
+.result-requirements li { padding: 12px 0; border-bottom: 1px solid #edf0f5; font-size: 15px; line-height: 1.5; }
+.result-requirements li:last-child { border: 0; }
+.result-requirements small { display: block; color: #657b9e; font-size: 13px; }
+.student-page .result-remediation .checkpoint-review { grid-column: 1 / -1; grid-row: 5; }
+.result-tutor-action { grid-column: 1 / -1; grid-row: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.result-tutor-action .btn-primary:disabled { opacity: .55; }
+.result-tutor-note, .result-existing-actions > span { font-size: 13px; color: #657b9e; }
+.result-existing-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 22px; }
+.result-existing-actions > button:disabled { background: #edf0f5; border-color: #edf0f5; color: #8c9ab5; }
+/* Screen 29 */
+.progress-spec-page .progress-course-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.progress-spec-page .progress-course-card { padding: 24px; border-radius: 16px; min-width: 0; align-self: start; }
+.spec-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.spec-card-heading h2 { margin: 0; font-size: 16px; line-height: 1.5; }
+.spec-card-heading > a { flex-shrink: 0; font-size: 14px; }
+.progress-course-caption { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+.progress-course-caption > span { color: #657b9e; }
+.progress-spec-page progress { appearance: none; display: block; height: 8px; border: 0; border-radius: 999px; background: #edf0f5; overflow: hidden; accent-color: #344fe3; }
+.progress-spec-page progress::-webkit-progress-bar { background: #edf0f5; }
+.progress-spec-page progress::-webkit-progress-value { background: #344fe3; border-radius: 999px; }
+.progress-spec-page progress::-moz-progress-bar { background: #344fe3; border-radius: 999px; }
+.progress-lesson-details { margin-top: 18px; }
+.progress-lesson-details > summary { cursor: pointer; font-size: 13px; color: #657b9e; }
+.progress-lesson-details[open] > summary { margin-bottom: 14px; }
+.progress-lesson-details .management-table-wrap { border-radius: 10px; }
+.progress-lesson-details .management-table th, .progress-lesson-details .management-table td { padding: 12px; }
+/* Screens 30–33: scoped to avoid changing other management pages. */
+.management-page.instructor-spec-page { padding: 10px 21px 24px; font-size: 15px; }
+.instructor-spec-page .page-head { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+.instructor-spec-page .page-head h1 { font-size: 28px; letter-spacing: -.7px; line-height: 1.3; overflow-wrap: anywhere; }
+.instructor-spec-page .management-subtitle { color: #657b9e; line-height: 1.6; }
+.instructor-spec-page .page-head .management-subtitle { margin: 5px 0 0; }
+.instructor-spec-page .btn-primary, .instructor-spec-page .btn-secondary { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 42px; padding: 10px 18px; border-radius: 11px; font-size: 14px; font-weight: 600; line-height: 1.4; text-decoration: none; white-space: nowrap; }
+.instructor-spec-page .btn-primary { border: 1px solid #344fe3; background: #344fe3; color: #fff; }
+.instructor-spec-page .btn-secondary { border: 1px solid #e2e6ee; background: #fff; color: #293d60; }
+.instructor-spec-page .management-card { padding: 24px; border-radius: 16px; }
+.instructor-spec-page .status-chip { white-space: nowrap; padding: 4px 10px; font-size: 12px; }
+.instructor-spec-page .management-kpi-label { color: #657b9e; font-size: 14px; }
+.dashboard-spec-page .management-kpi-value { margin-top: 6px; font-size: 34px; line-height: 1.2; }
+.dashboard-spec-page .management-grid > .management-card { min-height: 126px; }
+.dashboard-detail-grid { display: grid; grid-template-columns: 1.22fr 1fr; gap: 22px; margin-top: 22px; }
+.dashboard-course-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 0; border-bottom: 1px solid #edf0f5; }
+.dashboard-course-row:last-child { border-bottom: 0; }
+.dashboard-course-row:first-child { padding-top: 0; }
+.dashboard-course-title { color: #0f172a; font-weight: 600; text-decoration: none; }
+.dashboard-course-row p { margin: 4px 0 0; font-size: 14px; color: #657b9e; }
+.dashboard-detail-grid > section > .management-link { display: inline-block; margin-top: 20px; }
+.courses-spec-page .management-toolbar { margin-bottom: 22px; }
+.instructor-course-search { position: relative; display: block; width: 100%; }
+.instructor-course-search > span { position: absolute; top: 8px; left: 16px; color: #8c9ab5; font-size: 24px; pointer-events: none; }
+.courses-spec-page .instructor-course-search input { width: 100%; height: 44px; padding-left: 44px; background: #fff; box-sizing: border-box; }
+.courses-spec-page .management-table-wrap { padding: 12px 26px; border-radius: 16px; }
+.courses-spec-page .management-table th { padding: 14px 0; color: #8c9ab5; font-size: 13px; font-weight: 500; }
+.courses-spec-page .management-table td { padding: 18px 0; vertical-align: middle; }
+.courses-spec-page .management-table th:not(:last-child), .courses-spec-page .management-table td:not(:last-child) { padding-right: 22px; }
+.courses-spec-page .management-table td:nth-child(2) { color: #657b9e; white-space: nowrap; }
+.courses-spec-page .management-table th:last-child, .courses-spec-page .management-table td:last-child { text-align: right; }
+.courses-spec-page .management-table td:first-child { min-width: 220px; }
+.courses-spec-page .management-table .management-kpi-label { margin-top: 5px; font-size: 12px; }
+.courses-spec-page .management-table .spec-empty { text-align: center; padding: 32px; color: #657b9e; }
+.editor-spec-page .breadcrumb { margin-bottom: 7px; font-size: 13px; color: #8c9ab5; }
+.editor-spec-page .breadcrumb a { color: inherit; text-decoration: none; }
+.editor-spec-page .course-editor-form { max-width: none; gap: 22px; }
+.editor-spec-page .course-editor-form.new-course { grid-template-columns: minmax(0, 1.66fr) minmax(260px, 1fr); }
+.editor-spec-page .course-basic-fields { display: grid; gap: 20px; align-content: start; }
+.editor-spec-page .course-basic-fields input { height: 46px; width: 100%; }
+.editor-spec-page .course-basic-fields textarea { min-height: 100px; width: 100%; }
+.editor-spec-page .course-basic-fields input, .editor-spec-page .course-basic-fields textarea { box-sizing: border-box; font: inherit; font-weight: 400; color: #0f172a; background: #fff; border-color: #e2e6ee; }
+.editor-spec-page .course-basic-fields label { font-size: 14px; }
+.course-draft-note h2 { font-size: 16px; margin: 18px 0 10px; }
+.course-draft-note p { color: #657b9e; line-height: 1.6; }
+.course-draft-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: #eef1ff; color: #344fe3; font-size: 26px; }
+.editor-spec-page .has-course .course-structure { grid-row: 1; }
+.course-structure-section { margin-top: 16px; padding: 18px; border: 1px solid #e2e6ee; border-radius: 13px; }
+.course-structure-section h3 { font-size: 15px; margin: 0 0 20px; }
+.course-structure-lesson { margin-top: 8px; padding: 14px 16px; border-radius: 10px; background: #edf0f5; font-size: 14px; }
+.instructor-spec-page :is(a, button, input, textarea):focus-visible, .progress-spec-page summary:focus-visible { outline: 2px solid #3453df; outline-offset: 3px; }
+@media (max-width: 1000px) {
+  .dashboard-detail-grid, .editor-spec-page .course-editor-form.new-course { grid-template-columns: 1fr; }
+  .instructor-spec-page .page-head { flex-wrap: wrap; }
+}
+@media (max-width: 850px) {
+  .student-page .result-review, .progress-spec-page .progress-course-grid { grid-template-columns: 1fr; }
+  .student-page .result-review .result-grid { display: grid; grid-template-columns: 1fr; }
+  .student-page .result-review > *, .student-page .result-review .result-grid > .card { grid-column: auto; grid-row: auto; }
+  .result-tutor-action { order: 1; }
+}
+@media (max-width: 700px) {
+  .management-page.instructor-spec-page { padding: 18px 2px; }
+  .instructor-spec-page .management-card, .progress-spec-page .progress-course-card { padding: 20px; }
+  .spec-card-heading { align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+  .dashboard-course-row { align-items: flex-start; flex-wrap: wrap; }
+  .instructor-spec-page .page-head h1 { font-size: 24px; }
+}

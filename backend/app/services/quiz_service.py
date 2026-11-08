@@ -98,7 +98,7 @@ def _latest(db: Session, student_id: int, quiz_id: int) -> QuizAttempt | None:
 
 
 def can_retry(db: Session, attempt: QuizAttempt | None) -> bool:
-    if attempt is None:
+    if attempt is None or attempt.score >= REMEDIATION_SCORE:
         return True
 
     review = db.get(CheckpointRemediation, attempt.id)

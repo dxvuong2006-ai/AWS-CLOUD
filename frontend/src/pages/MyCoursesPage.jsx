@@ -23,7 +23,7 @@ export default function MyCoursesPage() {
           <div className="my-course-progress"><span>Tiến độ</span><strong>{row.progress_percent ?? 0}%</strong></div>
           <progress max="100" value={row.progress_percent ?? 0} aria-label="Tiến độ khóa học" />
         </div>
-        <div className="my-course-actions">{row.resume_lesson_id && <Link className="btn-primary" to={"/courses/" + row.course.id + "/lessons/" + row.resume_lesson_id}>
+        <div className="my-course-actions">{row.status === "COMPLETED" && <Link className="btn-primary" to={"/courses/" + row.course.id + "/completed"}>Xem kết quả hoàn thành</Link>}{row.status !== "COMPLETED" && row.resume_lesson_id && <Link className="btn-primary" to={"/courses/" + row.course.id + "/lessons/" + row.resume_lesson_id}>
           → {row.status === "NOT_STARTED" ? "Bắt đầu học" : "Tiếp tục học"}</Link>}
           <Link className="my-course-outline" to={"/courses/" + row.course.id}>Xem lộ trình</Link>
         </div>

@@ -1,4 +1,7 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
+import TutorPage from "../pages/TutorPage";
+import CourseCompletePage from "../pages/CourseCompletePage";
+import VideoUploadPage from "../pages/VideoUploadPage";
 import MyCoursesPage from "../pages/MyCoursesPage";
 import CourseListPage from "../pages/CourseListPage";
 import CourseDetailPage from "../pages/CourseDetailPage";
@@ -63,11 +66,14 @@ export default function AppRoutes() {
         <Route path="/flashcards" element={<FlashcardPage />} />
         <Route path="/courses/:courseId/sections/:sectionId/lessons/:lessonId/flashcards" element={<FlashcardPage />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/tutor/attempts/:attemptId" element={<TutorPage />} />
+        <Route path="/courses/:courseId/completed" element={<CourseCompletePage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["INSTRUCTOR"]} />}>
         <Route path="/instructor/dashboard" element={<InstructorDashboardPage />} />
         <Route path="/instructor/courses" element={<InstructorCoursesPage />} />
         <Route path="/instructor/courses/new" element={<CourseEditorPage />} />
+        <Route path="/instructor/courses/:courseId/lessons/:lessonId/upload" element={<VideoUploadPage />} />
         <Route path="/instructor/courses/:courseId/edit" element={<CourseEditorPage />} />
         <Route path="/instructor/review-queue" element={<ReviewQueuePage />} />
         <Route path="/instructor/review/:lessonId" element={<LessonReviewPage />} />

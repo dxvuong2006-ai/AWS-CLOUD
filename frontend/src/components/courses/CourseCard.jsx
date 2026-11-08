@@ -16,7 +16,7 @@ export default function CourseCard({
     "LearnCloud";
   const description =
     course?.description || "Khám phá nội dung và bắt đầu hành trình học tập.";
-  const image = course?.thumbnail_url || course?.thumbnail || course?.image;
+  const image = course?.cover_image || course?.thumbnail_url || course?.thumbnail || course?.image;
   const courseProgress = Math.min(100, Math.max(0, Number(progress) || 0));
 
   return (
