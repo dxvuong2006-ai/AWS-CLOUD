@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { fetchCourses, fetchCourseById } from "../api/courses.api";
+import { fetchCourses, fetchCourseById, fetchCourseOutline } from "../api/courses.api";
 
 export function useCourses() {
   const [data, setData] = useState([]);
@@ -16,19 +16,38 @@ export function useCourses() {
   return { data, loading, error };
 }
 
-export function useCourse(courseId) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+function useCourseResource(courseId, fetchResource) {
+  const [state, setState] = useState({
+    courseId,
+    data: null,
+    loading: true,
+    error: null,
+  });
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    fetchCourseById(courseId)
-      .then(setData)
-      .catch(setError)
-      .finally(() => setLoading(false));
-  }, [courseId]);
+    let cancelled = false;
+    setState({ courseId, data: null, loading: true, error: null });
+    fetchResource(courseId)
+      .then((data) => {
+        if (!cancelled) setState({ courseId, data, loading: false, error: null });
+      })
+      .catch((error) => {
+        if (!cancelled) setState({ courseId, data: null, loading: false, error });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, fetchResource]);
 
-  return { data, loading, error };
+  return state.courseId === courseId
+    ? state
+    : { data: null, loading: true, error: null };
+}
+
+export function useCourse(courseId) {
+  return useCourseResource(courseId, fetchCourseById);
+}
+
+export function useCourseOutline(courseId) {
+  return useCourseResource(courseId, fetchCourseOutline);
 }

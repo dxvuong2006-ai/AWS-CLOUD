@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS lessons (
     raw_video_key TEXT,
     processed_video_key TEXT,
     status VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
-        CHECK (status IN (
+        CONSTRAINT ck_lessons_status CHECK (status IN (
             'DRAFT', 'UPLOADED', 'PROCESSING', 'TRANSCRIBING',
             'AI_PROCESSING', 'REVIEW_REQUIRED',
             'PUBLISHED', 'FAILED'

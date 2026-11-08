@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 
 from app.models.course import Course
+from app.models.section import Section
+from app.lesson_states import LessonStatus
 
 # Tạo khóa học mới
 def create_course(
@@ -18,6 +20,27 @@ def create_course(
 # lấy danh sách theo id khóa học
 def get_course_by_id(db: Session, course_id: int) -> Course | None:
     return db.query(Course).filter(Course.id == course_id).first()
+
+
+def lock_by_id(db: Session, course_id: int) -> Course | None:
+    return (
+        db.query(Course).filter(Course.id == course_id).populate_existing()
+        .with_for_update(nowait=True).first()
+    )
+
+
+def lock_sections(db: Session, course_id: int) -> list[Section]:
+    return (
+        db.query(Section).filter(Section.course_id == course_id).order_by(Section.id)
+        .populate_existing().with_for_update(nowait=True).all()
+    )
+
+
+def mark_published(db: Session, course: Course, lessons) -> None:
+    for lesson in lessons:
+        lesson.status = LessonStatus.PUBLISHED.value
+    course.status = "PUBLISHED"
+    db.flush()
 
 # Lấy danh sách khóa học đã publish
 def get_published_courses(db: Session) -> list[Course]:

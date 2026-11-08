@@ -7,6 +7,21 @@ from app.services import course_service
 
 router = APIRouter(prefix="/courses", tags=["Courses"])
 
+
+@router.post(
+    "/{course_id}/publish", response_model=CourseResponse,
+    responses={
+        401: {"description": "Invalid user identity."}, 403: {"description": "Owning instructor required."},
+        404: {"description": "Course not found."}, 409: {"description": "Content not approved or concurrent operation."},
+    },
+)
+def publish_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_instructor),
+):
+    return course_service.publish_course(db, course_id, instructor_id=current_user.id)
+
 # POST /courses: Giảng viên tạo khóa học
 @router.post(
     "",

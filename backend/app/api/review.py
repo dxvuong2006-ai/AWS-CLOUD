@@ -132,7 +132,7 @@ def approve_draft(
         instructor: Giảng viên đã xác thực.
 
     Returns:
-        Bản nháp đã chuyển APPROVED.
+        Bản nháp đã chuyển PUBLISHED.
     """
     return _call(
         review_service.approve_draft, db=db, lesson_id=lesson_id,

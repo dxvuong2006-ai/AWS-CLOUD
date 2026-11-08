@@ -4,10 +4,36 @@ from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.lesson import Lesson
 from app.models.section import Section
+from app.lesson_states import LessonStatus
 
 # lấy lesson theo id
 def get_by_id(db: Session, lesson_id: int) -> Lesson | None:
     return db.query(Lesson).filter(Lesson.id == lesson_id).first()
+
+
+def lock_by_id(db: Session, lesson_id: int) -> Lesson | None:
+    return (
+        db.query(Lesson).filter(Lesson.id == lesson_id).populate_existing()
+        .with_for_update(nowait=True).first()
+    )
+
+
+def lock_by_course(db: Session, course_id: int) -> list[Lesson]:
+    return (
+        db.query(Lesson).join(Section, Lesson.section_id == Section.id)
+        .filter(Section.course_id == course_id).order_by(Lesson.id)
+        .populate_existing().with_for_update(nowait=True, of=Lesson).all()
+    )
+
+
+def begin_retry(db: Session, lesson: Lesson) -> None:
+    # Caller owns the row lock and the transaction; never commit in this helper.
+    lesson.status = LessonStatus.PROCESSING.value
+    lesson.retry_count += 1
+    lesson.error_message = None
+    db.flush()
+
+
 
 # lấy danh sách lesson của 1 section
 def get_by_section(

@@ -121,7 +121,7 @@ function NavIcon({ name }) {
   );
 }
 
-export default function Navbar({ user, role, onLogout }) {
+export default function Navbar({ user, role, onLogout, collapsed, onToggle }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
@@ -136,15 +136,31 @@ export default function Navbar({ user, role, onLogout }) {
   const heading = ROLE_HEADINGS[rawRole] || "HỌC VIÊN";
 
   return (
-    <aside className="navbar">
-      <Link
-        to="/"
-        className="navbar__brand"
-        aria-label="LearnCloud - Trang chủ"
-      >
-        <img className="navbar__logo" src={logo} alt="LearnCloud" />
-        <span className="navbar__brand-name">LearnCloud</span>
-      </Link>
+    <aside className={`navbar ${collapsed ? "navbar--collapsed" : ""}`}>
+      <div className="navbar__header">
+        <Link
+          to="/"
+          className="navbar__brand"
+          aria-label="LearnCloud - Trang chủ"
+        >
+          <img className="navbar__logo" src={logo} alt="LearnCloud" />
+          <span className="navbar__brand-name">LearnCloud</span>
+        </Link>
+        <button
+          type="button"
+          className="navbar__collapse-toggle"
+          onClick={onToggle}
+          aria-label={
+            collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"
+          }
+          aria-expanded={!collapsed}
+          title={collapsed ? "Mở rộng" : "Thu gọn"}
+        >
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="m12 4-6 6 6 6" />
+          </svg>
+        </button>
+      </div>
 
       <div className="navbar__section-title">{heading}</div>
 

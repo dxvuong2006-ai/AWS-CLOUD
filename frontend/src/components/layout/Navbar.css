@@ -11,16 +11,92 @@
   border-right: 1px solid #e8edf5;
   font-family: Inter, "Segoe UI", sans-serif;
   color: #334155;
+  transition: width 260ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.navbar__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  margin-bottom: 25px;
 }
 
 .navbar__brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 30px;
-  margin: 0 4px 25px;
+  min-height: 44px;
+  min-width: 0;
+  margin: 0 4px;
   color: #172554;
   text-decoration: none;
+}
+
+.navbar__collapse-toggle {
+  position: absolute;
+  top: 11px;
+  right: -24px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #e1e7f5;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #fff 15%, #f1f5ff 100%);
+  color: #5265bd;
+  box-shadow: 0 3px 10px rgb(31 50 100 / 12%);
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.navbar__collapse-toggle::before {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgb(72 102 210 / 0%);
+  border-radius: 13px;
+  content: "";
+  transition: border-color 180ms ease, transform 220ms ease;
+}
+
+.navbar__collapse-toggle svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 260ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.navbar__collapse-toggle:hover {
+  transform: translateX(2px);
+  border-color: #cbd5fb;
+  background: #eef2ff;
+  color: #3453d9;
+  box-shadow: 0 5px 14px rgb(49 76 165 / 19%);
+}
+
+.navbar__collapse-toggle:hover::before {
+  border-color: rgb(72 102 210 / 18%);
+  transform: scale(1.06);
+}
+
+.navbar__collapse-toggle:active {
+  transform: translateX(1px) scale(0.91);
+  box-shadow: 0 1px 4px rgb(31 50 100 / 16%);
+}
+
+.navbar__collapse-toggle:focus-visible {
+  outline: 3px solid rgb(52 83 217 / 30%);
+  outline-offset: 3px;
 }
 
 .navbar__logo {
@@ -41,7 +117,7 @@
 .navbar__section-title {
   margin: 0 4px 9px;
   color: #94a3b8;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 750;
   letter-spacing: 0.55px;
 }
@@ -166,6 +242,15 @@
     margin: 0 auto 0 0;
   }
 
+  .navbar__header {
+    min-height: 38px;
+    margin: 0 auto 0 0;
+  }
+
+  .navbar__collapse-toggle {
+    display: none;
+  }
+
   .navbar__section-title {
     display: none;
   }
@@ -281,5 +366,90 @@
     left: auto;
     top: calc(100% + 10px);
     width: 160px;
+  }
+}
+
+.navbar--collapsed {
+  width: 72px;
+}
+
+.navbar--collapsed .navbar__collapse-toggle svg {
+  transform: rotate(180deg);
+}
+
+.navbar--collapsed .navbar__brand-name,
+.navbar--collapsed .navbar__section-title,
+.navbar--collapsed .navbar__link span,
+.navbar--collapsed .navbar__user-info,
+.navbar--collapsed .navbar__account-chevron {
+  display: none;
+}
+
+.navbar--collapsed .navbar__link,
+.navbar--collapsed .navbar__account-trigger {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.navbar--collapsed .navbar__header {
+  justify-content: center;
+}
+
+.navbar--collapsed .navbar__brand {
+  justify-content: center;
+  margin: 0;
+}
+
+.navbar--collapsed .navbar__logo {
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 768px) {
+  .navbar--collapsed {
+    width: 100%;
+  }
+
+  .navbar--collapsed .navbar__brand-name,
+  .navbar--collapsed .navbar__account-chevron {
+    display: initial;
+  }
+
+  .navbar--collapsed .navbar__link span {
+    display: initial;
+  }
+
+  .navbar--collapsed .navbar__user-info {
+    display: none;
+  }
+
+  .navbar--collapsed .navbar__brand {
+    justify-content: flex-start;
+    margin: 0 auto 0 0;
+  }
+
+  .navbar--collapsed .navbar__link {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+
+  .navbar--collapsed .navbar__account-trigger {
+    justify-content: flex-start;
+    padding: 0;
+  }
+
+  .navbar--collapsed .navbar__logo {
+    width: 50px;
+    height: 50px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar,
+  .navbar__collapse-toggle,
+  .navbar__collapse-toggle::before,
+  .navbar__collapse-toggle svg {
+    transition-duration: 0.01ms;
   }
 }

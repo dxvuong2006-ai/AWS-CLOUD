@@ -9,3 +9,8 @@ __pycache__/
 
 node_modules/
 dist/
+.local-video-jobs/
+build/
+
+
+learncloud-rds-probe.zip

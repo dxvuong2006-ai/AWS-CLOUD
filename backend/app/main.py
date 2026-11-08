@@ -1,4 +1,14 @@
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
+
+# app.main may be launched from the backend directory with --app-dir backend.
+# Add the repository root before API modules import the sibling ai_pipeline package.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from app.api import quizzes, review, tutor, analytics
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
@@ -7,6 +17,7 @@ from app.api.sections import router as sections_router
 from app.api.enrollments import router as enrollments_router
 from app.api.uploads import router as uploads_router
 from app.api.auth import router as auth_router
+from app.api.review import router as review_router
 from app.utils.errors import register_exception_handlers
 from app.utils.logging import setup_logging, RequestLoggingMiddleware
 
@@ -45,6 +56,7 @@ app.include_router(sections_router)
 app.include_router(lessons_router)
 app.include_router(enrollments_router)
 app.include_router(uploads_router)
+app.include_router(review_router)
 
 @app.get("/health", tags=["Health"])
 def health_check():

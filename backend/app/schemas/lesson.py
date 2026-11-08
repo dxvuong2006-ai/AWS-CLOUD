@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
+from app.lesson_states import LessonStatus
 
 
 class LessonCreateRequest(BaseModel):
@@ -17,3 +20,18 @@ class LessonResponse(BaseModel):
     title: str
     position: int
     model_config = ConfigDict(from_attributes=True)
+
+
+class LessonVideoUrlResponse(BaseModel):
+    lesson_id: int
+    video_url: str
+    expires_in: int
+    content_type: str
+
+
+class LessonProcessingStatusResponse(BaseModel):
+    lesson_id: int
+    status: LessonStatus
+    retry_count: int = Field(ge=0)
+    error_message: str | None = None
+    updated_at: datetime

@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:ap-southeast-1:${ACCOUNT_ID}:log-group:/aws/lambda/learncloud-video-relay:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "events:PutEvents",
+      "Resource": "arn:aws:events:ap-southeast-1:${ACCOUNT_ID}:event-bus/default",
+      "Condition": {
+        "ForAllValues:StringEquals": {
+          "events:source": "learncloud.video",
+          "events:detail-type": "Video Retry Requested"
+        },
+        "Null": {
+          "events:source": "false",
+          "events:detail-type": "false"
+        }
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_current_user, require_instructor
@@ -7,10 +7,56 @@ from app.schemas.lesson import (
     LessonCreateRequest,
     LessonResponse,
     LessonUpdateRequest,
+    LessonVideoUrlResponse,
+    LessonProcessingStatusResponse,
 )
-from app.services import lesson_service
+from app.services import lesson_service, processing_service
 
 router = APIRouter(tags=["Lessons"])
+
+
+@router.get(
+    "/lessons/{lesson_id}/processing-status", response_model=LessonProcessingStatusResponse,
+    responses={401: {"description": "Invalid user identity."}, 403: {"description": "Owning instructor required."}, 404: {"description": "Lesson not found."}},
+)
+def get_processing_status(
+    lesson_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return processing_service.get_processing_status(db, lesson_id, user_id=user.id, user_role=user.role)
+    except (
+        lesson_service.LessonNotFoundError, lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError, lesson_service.CourseOwnershipError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
+
+
+@router.post(
+    "/lessons/{lesson_id}/retry", response_model=LessonProcessingStatusResponse, status_code=202,
+    responses={
+        401: {"description": "Invalid user identity."}, 403: {"description": "Owner or admin required."},
+        404: {"description": "Lesson or input video not found."}, 409: {"description": "Invalid state or concurrent operation."},
+        502: {"description": "Input storage unavailable."}, 503: {"description": "Workflow disabled or dispatch failed."},
+    },
+)
+def retry_lesson(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return processing_service.retry_lesson(db, lesson_id, user_id=user.id, user_role=user.role)
+    except (
+        lesson_service.LessonNotFoundError, lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError, lesson_service.CourseOwnershipError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
 
 
 def _raise_service_error(exc: Exception) -> None:
@@ -81,6 +127,40 @@ def get_lesson(
         lesson_service.LessonAccessDeniedError,
     ) as exc:
         _raise_service_error(exc)
+
+# API: GET /lessons/{lesson_id}/video-url
+@router.get(
+    "/lessons/{lesson_id}/video-url",
+    response_model=LessonVideoUrlResponse,
+    responses={
+        401: {"description": "User identity could not be resolved."},
+        403: {"description": "The current user cannot access this lesson."},
+        404: {"description": "Lesson, attached video, or S3 object not found."},
+        409: {"description": "The selected video is not an MP4 file."},
+        502: {"description": "S3 denied access or video storage is unavailable."},
+    },
+)
+def get_lesson_video_url(
+    lesson_id: int,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return lesson_service.get_video_url_for_user(
+            db, lesson_id, user_id=user.id, user_role=user.role
+        )
+    except (
+        lesson_service.LessonNotFoundError,
+        lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError,
+        lesson_service.CourseOwnershipError,
+        lesson_service.PublishedCourseRequiredError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
+
 
 # API: GET /sections/{section_id}/lessons
 @router.get(

@@ -90,10 +90,10 @@ def create_session(db, student_id, attempt_id, ai_client=None):
     if attempt.passed:
         raise TutorError(409, "Attempt already passed.")
     if lesson is None:
-        raise TutorError(409, "Approved lesson transcript is unavailable.")
+        raise TutorError(409, "Published lesson transcript is unavailable.")
     lessons = tutor_repo.get_approved_section_lessons(db, lesson.id)
     if not any(_transcript(item).strip() for item in lessons):
-        raise TutorError(409, "Approved lesson transcript is unavailable.")
+        raise TutorError(409, "Published lesson transcript is unavailable.")
     incorrect = [
         {"question": question.question, "options": question.options_json,
          "correct_answer": question.correct_answer,
@@ -136,7 +136,7 @@ def send_message(db, student_id, session_id, message):
     if session is None:
         raise TutorError(404, "Tutor session not found.")
     lesson = tutor_repo.get_lesson(db, session.lesson_id)
-    if lesson is None or lesson.status not in ("APPROVED", "PUBLISHED"):
+    if lesson is None or lesson.status != "PUBLISHED":
         raise TutorError(403, "Lesson is unavailable.")
     lessons = tutor_repo.get_approved_section_lessons(db, lesson.id)
     transcript = " ".join(_transcript(item) for item in lessons)

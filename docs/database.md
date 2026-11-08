@@ -44,6 +44,14 @@ tham chiếu tới một `quiz_attempt` để tạo remediation từ bài làm c
 | `tutor_sessions`    | Phiên remediation của student.                                  | Trigger xác minh student/section khớp quiz attempt nếu có.                                        |
 | `tutor_messages`    | Hội thoại thuộc một Tutor session.                              | role chỉ `USER` hoặc `ASSISTANT`; content không rỗng.                                             |
 | `schema_migrations` | Các version schema đã được áp dụng.                             | `version` là khóa chính.                                                                          |
+| `video_uploads` (0005, optional) | Intent cho presigned upload, chưa phải biên nhận xác nhận. | Source key duy nhất; UNIQUE `(id, lesson_id)` cho FK ghép. |
+| `video_pipeline_runs` (0005, optional) | Ledger claim/job/output và outbox retry. | UNIQUE `(upload_id, attempt)`; FK `(upload_id, lesson_id)` tới đúng cặp của video_uploads. |
+
+Hai bảng video chỉ có sau khi operator review/apply migration 0005; không nằm trong
+bootstrap và không tự tạo khi backend chạy. Gate xác nhận là S3 HEAD tại claim,
+không thêm confirmed_at/confirm-upload. Course/Lesson row locks và generation/owner/
+raw identity checks trong service ngăn callback cũ ghi đè output mới. Xem
+[review 0005, preflight và backup/apply/verify](video-pipeline-migration-0005.md).
 
 ## 4. Quy tắc nghiệp vụ được database bảo vệ
 
@@ -67,12 +75,25 @@ owner, enrollment, publish/review và unlock trước khi đọc/ghi dữ liệu
 
 ```text
 DRAFT → UPLOADED → PROCESSING → TRANSCRIBING → AI_PROCESSING
-      → REVIEW_REQUIRED → APPROVED → PUBLISHED
+      → REVIEW_REQUIRED → PUBLISHED
 ```
 
 `FAILED` có thể phát sinh tại các bước xử lý; `error_message` và `retry_count`
-giúp theo dõi lỗi/retry. Database chấp nhận các trạng thái trên, nhưng việc ép
-đúng chuyển trạng thái và quyền retry vẫn phải do service/API thực hiện.
+giúp theo dõi lỗi/retry. Bootstrap và SQLAlchemy model hiện hỗ trợ chín trạng
+thái trên. **Database hiện hữu cần migration `0004_add_lesson_approved_status.sql`
+được operator review và chạy thủ công để loại `APPROVED` khỏi Lesson state**; việc sửa file schema
+không tự thay đổi DB đang chạy. Migration chưa được áp dụng tự động.
+Việc ép đúng chuyển trạng thái và quyền retry vẫn do service/API thực hiện.
+
+Approve tách khỏi publish: Instructor sở hữu course DRAFT thực hiện
+`REVIEW_REQUIRED → PUBLISHED`; Course publish chỉ nhận các Lesson đã `PUBLISHED`
+và chuyển chúng sang PUBLISHED cùng transaction. Không tự approve dữ liệu
+legacy/seed, không tự đổi trạng thái sau upload. Xem
+[hướng dẫn migration và kiểm thử](lesson-approval-migration.md).
+
+`approved_by`/`approved_at` là đề xuất audit hữu ích, không phải trường bắt buộc
+trong API Contract Draft hiện tại; migration 0004 không thêm hai cột này và
+không suy diễn người/thời gian approve cho dữ liệu cũ.
 
 `transcript_json`, `key_concepts_json`, `learning_objectives` và
 `options_json` dùng JSONB để lưu cấu trúc linh hoạt. Code gọi API cần validate

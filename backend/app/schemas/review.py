@@ -107,6 +107,6 @@ class ReviewResponse(DraftContent):
     lesson_id: int
     section_id: int
     quiz_id: int
-    status: Literal["REVIEW_REQUIRED", "APPROVED"]
+    status: Literal["REVIEW_REQUIRED", "PUBLISHED"]
     quiz_approved: bool
     revision: Revision
