@@ -36,8 +36,8 @@ function Pending({ title }) {
 
 function Forbidden() {
   const { user } = useAuth();
-  return <div className="page"><h1>Không có quyền truy cập</h1>
-    <Link to={homeForRole(user.role)}>Về trang chính</Link></div>;
+  return <div className="page forbidden-page"><section className="forbidden-card"><div className="forbidden-icon">♙</div><h1>Bạn không có quyền truy cập</h1><p>Trang này dành cho vai trò khác. Hãy quay lại trang chính của bạn.</p>
+    <Link className="btn-primary" to={homeForRole(user.role)}>⌂ &nbsp;Về trang chính</Link></section></div>;
 }
 
 export default function AppRoutes() {
