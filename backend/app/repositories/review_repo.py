@@ -226,3 +226,20 @@ def list_visible_lessons(
         Lesson.section_id == section_id,
         Lesson.status == "PUBLISHED",
     ).order_by(Lesson.position, Lesson.id).offset(skip).limit(limit).all()
+
+
+
+def replace_flashcards(db, lesson_id, cards):
+    """Thay flashcard của bài học trong giao dịch đang mở."""
+    from app.models.flashcard import Flashcard
+
+    db.query(Flashcard).filter(Flashcard.lesson_id == lesson_id).delete(
+        synchronize_session=False,
+    )
+    db.add_all([
+        Flashcard(lesson_id=lesson_id, position=index, front=card["term"],
+                  back=card["definition"] + "\n" + card["key_takeaway"],
+                  is_approved=False)
+        for index, card in enumerate(cards, 1)
+    ])
+    db.flush()

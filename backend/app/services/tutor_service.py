@@ -196,3 +196,59 @@ def submit_practice(db, student_id, session_id, answers):
         tutor_repo.complete(db, session)
     return {"correct": correct, "total": len(questions),
             "remediation_completed": session.remediation_completed}
+
+
+
+def remediate_question(db, student_id, payload, ai_client=None):
+    """Giải thích một câu đã nộp sai và tạo một bài luyện tập."""
+    owner = tutor_repo.get_attempt_owner(db, payload.attempt_id)
+    if owner is not None and owner != student_id:
+        raise TutorError(403, "Attempt belongs to another student.")
+    row = tutor_repo.attempt_context(db, payload.attempt_id, student_id)
+    if row is None:
+        raise TutorError(404, "Attempt not found.")
+    attempt, lesson, answers = row
+    if lesson is None:
+        raise TutorError(409, "Published lesson is unavailable.")
+    lessons = tutor_repo.get_approved_section_lessons(db, lesson.id)
+    target = next((item for item in lessons if item.id == payload.lesson_id), None)
+    if target is None:
+        raise TutorError(404, "Lesson not found in this section.")
+    selected = next(((question, answer) for question, answer in answers
+                     if question.id == payload.question_id), None)
+    if selected is None:
+        raise TutorError(404, "Question not found in this attempt.")
+    question, answer = selected
+    if answer is None or answer.is_correct or answer.selected_answer != payload.selected_option:
+        raise TutorError(409, "A submitted incorrect answer is required.")
+    context = _grounded_transcript(target)
+    if not context.strip():
+        raise TutorError(409, "Lesson transcript is unavailable.")
+    if ai_client is None:
+        from ai_pipeline.processors._common import AIClientError
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES, BedrockAIAdapter
+        adapter = BedrockAIAdapter()
+
+        def ai_client(prompt):
+            """Gọi Nova và chuyển lỗi mạng sang cơ chế dự phòng."""
+            try:
+                return adapter._invoke(prompt)
+            except AWS_FAILURES as exc:
+                raise AIClientError("Bedrock unavailable.") from exc
+
+    incorrect = [{"question": question.question, "options": question.options_json,
+                  "selected_answer": payload.selected_option,
+                  "correct_answer": question.correct_answer,
+                  "explanation": question.explanation or "Hãy xem lại bài giảng."}]
+    result = build_tutor_context(context, incorrect, ai_client, allow_fallback=True)
+    if result["explanation"] == "Hãy xem lại nội dung bài giảng và thử lại các câu sai.":
+        result["explanation"] = (
+            f"Lựa chọn {payload.selected_option!r} chưa đúng. "
+            + (question.explanation or "Hãy xem lại nội dung bài giảng.")
+        )
+    practice = result["practice_questions"][0]
+    return {
+        "explanation": result["explanation"],
+        "practice_question": {"question": practice["question"],
+                              "options": practice["options"]},
+    }

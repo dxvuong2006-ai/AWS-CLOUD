@@ -5,6 +5,7 @@ import json
 from unittest.mock import Mock
 
 from aws_deploy.lambda_ai_processor import handler
+from app.models.flashcard import Flashcard
 
 
 def fake_ai():
@@ -58,3 +59,60 @@ def test_handler_s3_transcribe_and_closes_stream(monkeypatch):
                                      "s3_transcript_uri": "s3://bucket/a.json"}, None)
     assert stream.closed
     assert result["transcript"]["segments"][0]["start"] == 1.0
+
+
+def test_persist_draft_stores_review_and_flashcards(db_session, quiz_course, monkeypatch):
+    """Lưu summary, quiz và flashcard trong transaction SQLite."""
+    from app import database
+    from app.models.flashcard import Flashcard
+    from app.models.lesson import Lesson
+    from app.models.quiz import Question, Quiz
+    from app.models.user import User
+
+    _, course, sections = quiz_course
+    instructor = User(name="Teacher", email="lambda-db@example.test",
+                      role="INSTRUCTOR")
+    db_session.add(instructor)
+    db_session.flush()
+    course.instructor_id = instructor.id
+    lesson = Lesson(section_id=sections[0].id, title="Original",
+                    position=1, status="DRAFT")
+    db_session.add(lesson)
+    db_session.commit()
+    lesson_id = lesson.id
+    instructor_id = instructor.id
+    payload = {
+        "lesson_id": lesson_id,
+        "review_content": {
+            "title": "Cloud", "summary": "Cloud summary",
+            "quiz_title": "Cloud quiz",
+            "key_concepts": [{"term": "Cloud", "definition": "Dịch vụ"}],
+            "questions": [{"question": "Q?", "options": ["A", "B"],
+                           "correct_answer": "A", "explanation": "A đúng"}],
+        },
+        "transcript": {"full_text": "Cloud", "segments": [], "language": "vi"},
+        "flashcards": [{"term": "Cloud", "definition": "Dịch vụ",
+                        "key_takeaway": "Dùng linh hoạt"}],
+    }
+    monkeypatch.setattr(database, "SessionLocal", lambda: db_session)
+    handler.persist_draft(payload, instructor_id)
+    assert db_session.get(Lesson, lesson_id).status == "REVIEW_REQUIRED"
+    quiz = db_session.query(Quiz).one()
+    assert not quiz.is_approved
+    assert db_session.query(Question).count() == 1
+    card = db_session.query(Flashcard).one()
+    assert not card.is_approved and "Dùng linh hoạt" in card.back
+
+
+def test_handler_optional_db_write(monkeypatch):
+    """Chỉ ghi DB khi bật cờ và có instructor_id."""
+    ai = fake_ai()
+    monkeypatch.setattr(handler, "BedrockAIAdapter", lambda **kwargs: ai)
+    monkeypatch.setenv("AI_PROCESSOR_WRITE_DB", "true")
+    save = Mock()
+    monkeypatch.setattr(handler, "persist_draft", save)
+    result = handler.lambda_handler({
+        "lesson_id": 1, "transcript_text": "Cloud", "instructor_id": 5,
+    }, None)
+    assert result["persisted"] is True
+    save.assert_called_once()

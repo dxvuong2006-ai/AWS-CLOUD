@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from urllib.parse import urlparse
 
 import boto3
@@ -94,7 +95,7 @@ def lambda_handler(event, context):
     summary = ai.generate_summary(text)
     concepts = ai.extract_key_concepts(text)
     quiz = ai.generate_quiz(text)
-    return {
+    result = {
         "lesson_id": event["lesson_id"], "status": "REVIEW_REQUIRED",
         "transcript": transcript,
         "review_content": {
@@ -104,3 +105,36 @@ def lambda_handler(event, context):
         },
         "flashcards": build_flashcards(concepts, text, ai),
     }
+    if os.getenv("AI_PROCESSOR_WRITE_DB", "").lower() == "true":
+        if not isinstance(event.get("instructor_id"), int):
+            raise ValueError("instructor_id is required when DB writes are enabled.")
+        persist_draft(result, event["instructor_id"])
+        result["persisted"] = True
+    else:
+        result["persisted"] = False
+    return result
+
+
+
+def persist_draft(payload, instructor_id):
+    """Lưu nội dung đã kiểm tra và flashcard trong cùng transaction."""
+    from app.database import SessionLocal
+    from app.repositories import review_repo
+    from app.schemas.review import DraftContent
+    from app.services import review_service
+
+    content = DraftContent.model_validate(payload["review_content"])
+    db = SessionLocal()
+    try:
+        with review_repo.transaction(db):
+            review_repo.lock_section(db, payload["lesson_id"])
+            lesson = review_service._owned_lesson(
+                db, payload["lesson_id"], instructor_id,
+            )
+            quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+            review_service._editable(db, quiz)
+            review_repo.replace_content(db, lesson, quiz, content)
+            lesson.transcript_json = payload["transcript"]
+            review_repo.replace_flashcards(db, lesson.id, payload["flashcards"])
+    finally:
+        db.close()

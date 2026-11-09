@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, require_student
 from app.schemas.tutor import (
     PracticeSubmission, TutorMessageCreateRequest, TutorSessionCreateRequest,
+    QuestionRemediationRequest,
 )
 from app.services import tutor_service
 
@@ -44,3 +45,13 @@ def submit_practice(session_id: int, payload: PracticeSubmission,
     """Chấm các câu hỏi củng cố."""
     return _call(tutor_service.submit_practice, db=db, student_id=student.id,
                  session_id=session_id, answers=payload.answers)
+
+
+
+@router.post("/tutor/remediations")
+def remediate_question(payload: QuestionRemediationRequest,
+                       db: Session = Depends(get_db),
+                       student=Depends(require_student)):
+    """Ôn tập một câu học viên đã nộp sai."""
+    return _call(tutor_service.remediate_question, db=db,
+                 student_id=student.id, payload=payload)

@@ -225,3 +225,56 @@ def test_weak_concepts_rate_and_topic(db_session, learning_data):
     assert weak["incorrect_count"] == 1
     assert weak["answer_count"] == 2
     assert weak["failure_rate"] == 50.0
+
+
+def test_remediate_question_offline_and_check_owner(db_session, learning_data, monkeypatch):
+    """Tutor xử lý câu sai offline và không lộ đáp án luyện tập."""
+    from botocore.exceptions import NoCredentialsError
+    from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+    from app.schemas.tutor import QuestionRemediationRequest
+
+    student, _, attempt = learning_data
+    lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+    question = db_session.query(Question).one()
+    payload = QuestionRemediationRequest(
+        attempt_id=attempt.id, lesson_id=lesson.id,
+        question_id=question.id, selected_option="bánh",
+    )
+    def offline(*args, **kwargs):
+        """Giả lập lỗi credentials AWS."""
+        raise NoCredentialsError()
+    monkeypatch.setattr(BedrockAIAdapter, "_invoke", offline)
+    result = tutor_service.remediate_question(db_session, student.id, payload)
+    assert "bánh" in result["explanation"]
+    assert "correct_answer" not in result["practice_question"]
+    with pytest.raises(tutor_service.TutorError) as exc:
+        tutor_service.remediate_question(db_session, 99999, payload)
+    assert exc.value.code == 403
+
+
+
+def test_remediate_question_ai_success(db_session, learning_data):
+    """Lời giải AI và bài luyện tập vẫn ẩn đáp án."""
+    import json
+    from app.schemas.tutor import QuestionRemediationRequest
+
+    student, _, attempt = learning_data
+    lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+    question = db_session.query(Question).one()
+    payload = QuestionRemediationRequest(
+        attempt_id=attempt.id, lesson_id=lesson.id,
+        question_id=question.id, selected_option="bánh",
+    )
+    answer = json.dumps({
+        "explanation": "Bánh không phải dịch vụ tính toán.",
+        "practice_questions": [{"question": "Dịch vụ nào?",
+                                "options": ["Cloud", "Bánh"],
+                                "correct_answer": "Cloud",
+                                "explanation": "Cloud cung cấp tài nguyên."}],
+    })
+    result = tutor_service.remediate_question(
+        db_session, student.id, payload, ai_client=lambda prompt: answer,
+    )
+    assert result["explanation"] == "Bánh không phải dịch vụ tính toán."
+    assert result["practice_question"]["options"] == ["Cloud", "Bánh"]
+    assert "correct_answer" not in result["practice_question"]
