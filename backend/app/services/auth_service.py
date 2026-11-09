@@ -9,6 +9,7 @@ from app.config import settings
 from app.repositories import auth_repo
 from app.schemas.auth import RegisterRequest
 from app.utils.logging import get_logger
+import json
 
 
 logger = get_logger(__name__)
@@ -67,14 +68,40 @@ def _raise_cognito_error(exc):
     raise CognitoAuthError(message, code=code, status_code=status_code) from exc
 
 
+
+
 def _role_from_groups(claims: dict) -> str:
-    groups = set(claims.get("cognito:groups", []) or [])
+    raw = claims.get("cognito:groups") or []
+
+    if isinstance(raw, str):
+        raw = raw.strip()
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = raw.strip("[]").split(",")
+
+        raw = parsed
+
+    if isinstance(raw, str):
+        raw = [raw]
+
+    if not isinstance(raw, (list, tuple, set)):
+        raw = []
+
+    groups = {
+        group.strip().strip('"\'').upper()
+        for group in raw
+        if isinstance(group, str)
+    }
+
     if "ADMIN" in groups:
         return "ADMIN"
+
     if "INSTRUCTOR" in groups:
         return "INSTRUCTOR"
-    return "STUDENT"
 
+    return "STUDENT"
 
 def _attributes_from_cognito(response: dict, fallback_email: str | None = None) -> dict:
     attributes = {}
@@ -92,7 +119,9 @@ def sync_cognito_user(db: Session, claims: dict) -> object:
     sub = claims.get("sub")
     email = claims.get("email")
     name = claims.get("name") or claims.get("cognito:username") or email
-    if not isinstance(sub, str) or not sub or not isinstance(email, str) or not email:
+    if not isinstance(sub, str) or not sub:
+        raise InvalidToken()
+    if not isinstance(email, str) or not email:
         raise InvalidToken()
 
     user = auth_repo.get_by_cognito_sub(db, sub)
@@ -114,7 +143,89 @@ def sync_cognito_user(db: Session, claims: dict) -> object:
         if email:
             user.email = email.lower()
         user.password_hash = None
-        user.role = _role_from_groups(claims) if claims.get("cognito:groups") else user.role
+        if "cognito:groups" in claims:
+            user.role = _role_from_groups(claims)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+def authorizer_claims_from_event(event: object) -> dict | None:
+    if not isinstance(event, dict):
+        return None
+    request_context = event.get("requestContext")
+    if not isinstance(request_context, dict):
+        return None
+    authorizer = request_context.get("authorizer")
+    if not isinstance(authorizer, dict):
+        return None
+    jwt_context = authorizer.get("jwt")
+    if isinstance(jwt_context, dict):
+        claims = jwt_context.get("claims")
+    else:
+        claims = authorizer.get("claims")
+    return claims if isinstance(claims, dict) else None
+
+
+def sync_authorizer_claims(db: Session, claims: dict) -> object:
+    sub = claims.get("sub")
+    if not isinstance(sub, str) or not sub:
+        raise InvalidToken()
+
+    if claims.get("token_use") != "access":
+        raise InvalidToken()
+    if settings.COGNITO_APP_CLIENT_ID and claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
+        raise InvalidToken()
+
+    expected_issuer = (
+        f"https://cognito-idp.{settings.COGNITO_REGION or settings.AWS_REGION}.amazonaws.com/"
+        f"{settings.COGNITO_USER_POOL_ID}"
+    )
+    if claims.get("iss") != expected_issuer or not settings.COGNITO_USER_POOL_ID:
+        raise InvalidToken()
+
+    email_claim = claims.get("email")
+    email = (
+        email_claim.strip().lower()
+        if isinstance(email_claim, str) and email_claim.strip()
+        else None
+    )
+    name_claim = claims.get("name")
+    name = (
+        name_claim.strip()
+        if isinstance(name_claim, str) and name_claim.strip()
+        else None
+    )
+
+    user = auth_repo.get_by_cognito_sub(db, sub)
+    if user is None and email:
+        user = auth_repo.get_by_email(db, email)
+
+    if user is None:
+        if not email:
+            logger.warning("Cognito authorizer user not found reason=missing_email_claim sub_present=true")
+            raise InvalidToken()
+        user = auth_repo.create_cognito_user(
+            db,
+            cognito_sub=sub,
+            name=name or email,
+            email=email,
+            role=_role_from_groups(claims) if "cognito:groups" in claims else "STUDENT",
+        )
+    else:
+        if user.cognito_sub != sub:
+            user.cognito_sub = sub
+        if email:
+            user.email = email
+        if name:
+            user.name = name
+        user.password_hash = None
+        logger.info(
+        "Cognito groups diagnostic: type=%s, raw=%r",
+        type(claims.get("cognito:groups")).__name__,
+        claims.get("cognito:groups"),)
+        if "cognito:groups" in claims:
+            user.role = _role_from_groups(claims)
         db.commit()
         db.refresh(user)
     return user

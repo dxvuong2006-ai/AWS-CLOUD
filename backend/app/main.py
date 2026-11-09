@@ -8,7 +8,7 @@ from fastapi import FastAPI
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
+from mangum import Mangum
 from app.api import quizzes, review, tutor, analytics
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
@@ -53,8 +53,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(quizzes_router)
 app.include_router(courses_router)
-app.include_router(quizzes.router)
-app.include_router(review.router)
 app.include_router(tutor.router)
 app.include_router(analytics.router)
 app.include_router(sections_router)
@@ -69,3 +67,8 @@ app.include_router(flashcards_router)
 @app.get("/health", tags=["Health"])
 def health_check():
     return {"status": "ok"}
+
+lambda_handler = Mangum(
+    app,
+    api_gateway_base_path="/default"
+)
