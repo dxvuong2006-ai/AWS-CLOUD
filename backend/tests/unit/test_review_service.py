@@ -302,7 +302,7 @@ def test_bedrock_validates_converse_output(method, monkeypatch):
     ai = BedrockAIAdapter(client=client)
     assert getattr(ai, method)("Transcript") == expected
     request = client.converse.call_args.kwargs
-    assert request["modelId"] == "amazon.nova-micro-v1:0"
+    assert request["modelId"] == "apac.amazon.nova-micro-v1:0"
     assert request["messages"][0]["role"] == "user"
     assert request["messages"][0]["content"][0]["text"]
     assert not ai.used_fallback

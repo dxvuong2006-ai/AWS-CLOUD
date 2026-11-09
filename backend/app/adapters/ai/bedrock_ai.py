@@ -50,7 +50,7 @@ class BedrockAIAdapter(BaseAIAdapter):
         self.allow_fallback = allow_fallback
         self.model_id = model_id or os.getenv(
             "BEDROCK_MODEL_ID",
-            "amazon.nova-micro-v1:0",
+            "apac.amazon.nova-micro-v1:0",
         )
         self.region_name = (
             region_name or os.getenv("AWS_REGION")

@@ -9,7 +9,7 @@ import boto3
 def main():
     """Gọi Nova một lần và in thời gian phản hồi."""
     region = os.getenv("AWS_DEFAULT_REGION", "ap-southeast-1")
-    model = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
+    model = os.getenv("BEDROCK_MODEL_ID", "apac.amazon.nova-micro-v1:0")
     client = boto3.client("bedrock-runtime", region_name=region)
     started = time.perf_counter()
     result = client.converse(
