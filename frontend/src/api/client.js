@@ -1,7 +1,10 @@
 import { readSession, clearSession } from "./session";
+import { currentCognitoAccessToken } from "./cognito";
 
 const BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:8000"
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8000"
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
@@ -14,25 +17,35 @@ export class ApiError extends Error {
 
 export async function request(
   path,
-  {
-    method = "GET",
-    body,
-    auth = true,
-    timeoutMs = 0,
-    keepalive = false,
-  } = {},
+  { method = "GET", body, auth = true, timeoutMs = 0, keepalive = false } = {},
 ) {
-  const token = auth ? readSession()?.token : null;
+  const storedSession = auth ? readSession() : null;
+  let token = null;
+  try {
+    token = auth
+      ? storedSession?.token.startsWith("mock:")
+        ? storedSession.token
+        : await currentCognitoAccessToken()
+      : null;
+  } catch (error) {
+    clearSession();
+    window.dispatchEvent(new Event("learncloud:unauthorized"));
+    throw error;
+  }
+  if (auth && !token) {
+    clearSession();
+    window.dispatchEvent(new Event("learncloud:unauthorized"));
+    throw new ApiError(401, "Authentication required.");
+  }
   if (token?.startsWith("mock:")) {
-    throw new ApiError(
-      401,
-      "Tài khoản mô phỏng không thể gọi API thật.",
-    );
+    throw new ApiError(401, "Tài khoản mô phỏng không thể gọi API thật.");
   }
 
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const controller = timeoutMs > 0 ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const timer = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
   let res;
   try {
     res = await fetch(`${BASE_URL}${normalizedPath}`, {
@@ -57,12 +70,9 @@ export async function request(
       if (typeof data.detail === "string") {
         detail = data.detail;
       } else if (data.detail && typeof data.detail === "object") {
-        detail = typeof data.detail.message === "string"
-          ? data.detail.message
-          : "";
-        code = typeof data.detail.code === "string"
-          ? data.detail.code
-          : "";
+        detail =
+          typeof data.detail.message === "string" ? data.detail.message : "";
+        code = typeof data.detail.code === "string" ? data.detail.code : "";
       }
       if (!code && typeof data.code === "string") code = data.code;
     } catch {

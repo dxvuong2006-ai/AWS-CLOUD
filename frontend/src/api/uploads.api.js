@@ -12,7 +12,6 @@ export async function uploadVideo(lessonId, file, { signal, onProgress }) {
     method: "POST", body: { filename: file.name, content_type: contentType, file_size: file.size },
   });
   if (signal.aborted) throw new DOMException("Upload cancelled", "AbortError");
-  if (!intent.upload_id) throw new Error("Pipeline xử lý video chưa được bật trên server. Chưa tải file lên.");
   if (intent.method !== "PUT" || !/^https?:\/\//.test(intent.upload_url)) throw new Error("URL tải video không hợp lệ.");
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();

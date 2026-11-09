@@ -30,7 +30,7 @@ export default function VideoUploadPage() {
     catch (e) { if (mounted.current) setError(e.name === "AbortError" ? "Đã hủy tải lên." : e.message); }
     finally { guard.current = false; if (mounted.current) setBusy(false); }
   }
-  const draft = status?.status === "DRAFT" && !sent;
+  const draft = status?.status === "DRAFT";
   const failed = status?.status === "FAILED";
   const review = status?.status === "REVIEW_REQUIRED";
   const labels = {
@@ -48,11 +48,11 @@ export default function VideoUploadPage() {
     {failed && <div className="workflow-error processing-alert">⚠ Bước xử lý không thành công. Kiểm tra tệp video rồi chạy lại.</div>}
     {!course || !status ? <p role="status">Đang tải thông tin...</p> : !lesson ? <p role="alert">Lesson không thuộc khóa học này.</p> :
     draft ? <div className="workflow-two-columns"><section className="management-card"><h2>Tệp video</h2>
-      {draft && <label className="cover-upload"><strong>Chọn video bài giảng</strong><small>MP4, WebM hoặc MOV · tối đa 500 MB</small><input type="file" accept=".mp4,.webm,.mov" disabled={busy} onChange={e => { try { const selected = e.target.files?.[0]; if (selected) { videoType(selected); setFile(selected); setError(""); } } catch (failure) { setFile(null); setError(failure.message); } }} /></label>}
+      {draft && !sent && <label className="cover-upload"><strong>Chọn video bài giảng</strong><small>MP4, WebM hoặc MOV · tối đa 500 MB</small><input type="file" accept=".mp4,.webm,.mov" disabled={busy} onChange={e => { try { const selected = e.target.files?.[0]; if (selected) { videoType(selected); setFile(selected); setError(""); } } catch (failure) { setFile(null); setError(failure.message); } }} /></label>}
       {file && <div className="upload-file"><strong>{file.name}</strong><p>{(file.size / 1024 / 1024).toFixed(1)} MB</p><div className="progress-course-caption"><span>{sent ? "Đã tải xong" : busy ? "Đang tải lên" : "Sẵn sàng tải"}</span><strong>{progress}%</strong></div><progress max="100" value={progress} /></div>}
-      {draft && !busy && <button className="btn-primary" disabled={!file} onClick={upload}>↑ Tải video</button>}
+      {draft && !busy && !sent && <button className="btn-primary" disabled={!file} onClick={upload}>↑ Tải video</button>}
       {busy && <button className="btn-secondary" onClick={() => controller.current?.abort()}>Hủy tải lên</button>}
-      {sent && <p role="status">Đã tải xong. Đang chờ hệ thống cập nhật trạng thái xử lý.</p>}
+      {sent && <p role="status">Đã tải video lên S3. Trạng thái xử lý sẽ được cập nhật khi pipeline video được bật.</p>}
       {!draft && <p role="status">Trạng thái: {status.status}</p>}
       {status.error_message && <p role="alert">{status.error_message}</p>}
       {status.status === "FAILED" && <button className="btn-primary" disabled={busy} onClick={async () => { if (guard.current) return; guard.current = true; setBusy(true); setError(""); try { setStatus(await retryProcessing(lessonId)); } catch (e) { setError(e.message); } finally { setBusy(false); guard.current = false; } }}>Thử xử lý lại</button>}

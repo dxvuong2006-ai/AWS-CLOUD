@@ -7,7 +7,7 @@ os.environ["COGNITO_APP_CLIENT_ID"] = "test-client"
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import httpx
 from fastapi import Depends, FastAPI
 
@@ -61,37 +61,14 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.token_user.start()
 
-        self.authenticate = patch.object(
-            auth_service,
-            "authenticate",
-            side_effect=lambda db, email, password: {
-                "access_token": "cognito-token-1",
-                "expires_in": 3600,
-            },
-        )
-        self.authenticate.start()
-
-        self.sync_login = patch.object(
-            auth_service,
-            "sync_authenticated_user",
-            side_effect=lambda db, token, email: self.users[1],
-        )
-        self.sync_login.start()
-
     async def asyncTearDown(self):
         await self.client.aclose()
-        self.sync_login.stop()
-        self.authenticate.stop()
         self.token_user.stop()
 
     async def token(self, uid):
-        email = self.users[uid].email
-        response = await self.client.post("/auth/login", json={"email": email, "password": "Password123!"})
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("password_hash", response.json()["user"])
         return f"cognito-token-{uid}"
 
-    async def test_login_me_and_role_matrix(self):
+    async def test_access_token_me_and_role_matrix(self):
         role_paths = {
             1: "student",
             2: "instructor",
@@ -106,6 +83,13 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
             for path in ["student", "instructor", "admin"]:
                 result = await self.client.get("/" + path, headers=headers)
                 self.assertEqual(result.status_code, 200 if path == role_path else 403)
+
+    async def test_backend_login_proxy_is_removed(self):
+        response = await self.client.post(
+            "/auth/login",
+            json={"email": "student@example.com", "password": "Password123!"},
+        )
+        self.assertEqual(response.status_code, 404)
 
     async def test_missing_and_invalid_tokens_rejected(self):
         for headers in [
@@ -127,6 +111,47 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CognitoTokenVerificationLoggingTests(unittest.TestCase):
+    def test_access_token_sync_uses_verified_claims_without_cognito_api_calls(self):
+        signing_key = SimpleNamespace(key="test-key")
+        claims = {
+            "token_use": "access",
+            "client_id": "test-client",
+            "iss": "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_testpool",
+            "sub": "cognito-1",
+        }
+        user = SimpleNamespace(
+            id=1,
+            cognito_sub="cognito-1",
+            name="Student",
+            email="student@example.com",
+            role="STUDENT",
+            password_hash=None,
+        )
+        db = Mock()
+        with patch.object(
+            auth_service.jwt,
+            "PyJWKClient",
+            return_value=SimpleNamespace(
+                get_signing_key_from_jwt=lambda _: signing_key
+            ),
+        ), patch.object(
+            auth_service.jwt,
+            "decode",
+            return_value=claims,
+        ), patch.object(
+            auth_service.auth_repo,
+            "get_by_cognito_sub",
+            return_value=user,
+        ), patch.object(
+            auth_service,
+            "cognito_client",
+        ) as cognito_client:
+            result = auth_service.user_from_access_token(db, "valid.access.token")
+
+        self.assertIs(result, user)
+        cognito_client.assert_not_called()
+        db.commit.assert_called_once()
+
     def test_signature_error_is_logged_without_token(self):
         token = "sensitive.jwt.token"
         jwk_client = patch.object(

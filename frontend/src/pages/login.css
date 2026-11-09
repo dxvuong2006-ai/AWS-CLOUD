@@ -454,29 +454,3 @@
 .login-form-content .account-sr-only { margin: 0; }
 .login-form-content .login-notice { text-align: left; }
 .login-form-content .login-notice-success { border: 1px solid #c7e8d7; }
-  .login-screen {
-    grid-template-columns: 1fr;
-  }
-  .login-brand-panel {
-    padding: 90px 28px 32px;
-  }
-  .login-brand {
-    top: 24px;
-    left: 28px;
-  }
-  .login-brand-copy {
-    transform: none;
-  }
-  .login-brand-copy h2 {
-    font-size: 28px;
-  }
-  .login-form-panel {
-    padding: 40px 24px 48px;
-  }
-  .login-form-content h1 {
-    font-size: 27px;
-  }
-  .account-code-slots {
-    gap: 8px;
-  }
-}

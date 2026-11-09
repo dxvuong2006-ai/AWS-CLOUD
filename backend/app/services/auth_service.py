@@ -19,10 +19,6 @@ class AuthError(Exception):
     pass
 
 
-class InvalidCredentials(AuthError):
-    pass
-
-
 class InvalidToken(AuthError):
     pass
 
@@ -115,41 +111,6 @@ def _attributes_from_cognito(response: dict, fallback_email: str | None = None) 
     return {"sub": sub, "email": email.lower(), "name": name}
 
 
-def sync_cognito_user(db: Session, claims: dict) -> object:
-    sub = claims.get("sub")
-    email = claims.get("email")
-    name = claims.get("name") or claims.get("cognito:username") or email
-    if not isinstance(sub, str) or not sub:
-        raise InvalidToken()
-    if not isinstance(email, str) or not email:
-        raise InvalidToken()
-
-    user = auth_repo.get_by_cognito_sub(db, sub)
-    if user is None:
-        user = auth_repo.get_by_email(db, email.lower())
-    if user is None:
-        user = auth_repo.create_cognito_user(
-            db,
-            cognito_sub=sub,
-            name=name,
-            email=email.lower(),
-            role=_role_from_groups(claims),
-        )
-    else:
-        if user.cognito_sub != sub:
-            user.cognito_sub = sub
-        if name:
-            user.name = name
-        if email:
-            user.email = email.lower()
-        user.password_hash = None
-        if "cognito:groups" in claims:
-            user.role = _role_from_groups(claims)
-        db.commit()
-        db.refresh(user)
-    return user
-
-
 def authorizer_claims_from_event(event: object) -> dict | None:
     if not isinstance(event, dict):
         return None
@@ -174,7 +135,10 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
 
     if claims.get("token_use") != "access":
         raise InvalidToken()
-    if settings.COGNITO_APP_CLIENT_ID and claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
+    if (
+        not settings.COGNITO_APP_CLIENT_ID
+        or claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID
+    ):
         raise InvalidToken()
 
     expected_issuer = (
@@ -249,28 +213,14 @@ def user_from_access_token(db: Session, token: str):
             issuer=f"https://cognito-idp.{settings.COGNITO_REGION or settings.AWS_REGION}.amazonaws.com/{settings.COGNITO_USER_POOL_ID}",
             options={"verify_aud": False, "verify_exp": True},
         )
-        if claims.get("token_use") == "access":
-            if claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
-                logger.warning("Cognito access token rejected reason=client_id_mismatch")
-                raise InvalidToken()
-        elif claims.get("token_use") == "id":
-            if claims.get("aud") != settings.COGNITO_APP_CLIENT_ID:
-                logger.warning("Cognito ID token rejected reason=aud_mismatch")
-                raise InvalidToken()
-        else:
+        if claims.get("token_use") != "access":
             logger.warning("Cognito token rejected reason=token_use_missing_or_invalid")
             raise InvalidToken()
+        if claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
+            logger.warning("Cognito access token rejected reason=client_id_mismatch")
+            raise InvalidToken()
 
-        if claims.get("token_use") == "access":
-            user = sync_authenticated_user(
-                db,
-                token,
-                fallback_email=claims.get("username")
-                if isinstance(claims.get("username"), str)
-                else "",
-            )
-        else:
-            user = sync_cognito_user(db, claims)
+        user = sync_authorizer_claims(db, claims)
         if not user:
             raise InvalidToken()
         return user
@@ -302,47 +252,6 @@ def register_student(db: Session, data: RegisterRequest):
             "message": "Mã xác minh đã được gửi.",
             "retry_after": 60,
         }
-    except (BotoCoreError, ClientError) as exc:
-        _raise_cognito_error(exc)
-
-
-def authenticate(db: Session, *, email: str, password: str):
-    del db
-    try:
-        response = cognito_client().initiate_auth(
-            ClientId=settings.COGNITO_APP_CLIENT_ID,
-            AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters={"USERNAME": email.lower(), "PASSWORD": password},
-        )
-        result = response.get("AuthenticationResult") or {}
-        if not result.get("AccessToken"):
-            raise InvalidCredentials()
-        return {
-            "access_token": result["AccessToken"],
-            "expires_in": result.get("ExpiresIn", 3600),
-        }
-    except (BotoCoreError, ClientError) as exc:
-        _raise_cognito_error(exc)
-
-
-def sync_authenticated_user(db: Session, access_token: str, fallback_email: str) -> object:
-    try:
-        client = cognito_client()
-        response = client.get_user(AccessToken=access_token)
-        identity = _attributes_from_cognito(response, fallback_email=fallback_email)
-        group_response = client.admin_list_groups_for_user(
-            UserPoolId=settings.COGNITO_USER_POOL_ID,
-            Username=response.get("Username") or fallback_email,
-        )
-        claims = {
-            "sub": identity["sub"],
-            "email": identity["email"],
-            "name": identity["name"],
-            "cognito:groups": [
-                item["GroupName"] for item in group_response.get("Groups", [])
-            ],
-        }
-        return sync_cognito_user(db, claims)
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)
 

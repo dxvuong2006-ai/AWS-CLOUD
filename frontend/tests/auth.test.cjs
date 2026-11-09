@@ -2,7 +2,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const root=path.join(__dirname,'../src');
-function setup() {
+function setup(env = {apiUrl:'http://api.test/'}) {
   const storage=new Map(), calls=[], events=[];
   const ctx=vm.createContext({
     sessionStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
@@ -11,12 +11,25 @@ function setup() {
   });
   const source=fs.readFileSync(path.join(root,'api/session.js'),'utf8').replace(/export /g,'');
   vm.runInContext(source,ctx);
+  ctx.currentCognitoAccessToken=async()=>vm.runInContext('readSession()?.token ?? null',ctx);
   const client=fs.readFileSync(path.join(root,'api/client.js'),'utf8')
     .split(String.fromCharCode(10)).filter(l=>!l.startsWith('import ')).join(String.fromCharCode(10))
-    .replace(/export /g,'').replace(/import.meta.env.VITE_API_URL/g,'"http://api.test/"');
+    .replace(/export /g,'')
+    .replace(/import.meta.env.VITE_API_BASE_URL/g,
+      env.apiBaseUrl === undefined ? 'undefined' : JSON.stringify(env.apiBaseUrl))
+    .replace(/import.meta.env.VITE_API_URL/g,
+      env.apiUrl === undefined ? 'undefined' : JSON.stringify(env.apiUrl));
   vm.runInContext(client,ctx);
   return {ctx,calls,events,api:vm.runInContext('({readSession,writeSession,clearSession,mockStorageKey,request})',ctx)};
 }
+test('API base URL accepts the documented name and normalizes its trailing slash',async()=>{
+ const {api,calls}=setup({
+  apiBaseUrl:'https://api.example.test/default/',
+  apiUrl:'http://localhost:8000',
+ });
+ await api.request('/health',{auth:false});
+ assert.equal(calls[0].url,'https://api.example.test/default/health');
+});
 test('bearer requests, public login and logout',async()=>{
  const {api,calls}=setup();
  api.writeSession({token:'test-token',expiresAt:Date.now()+60000,user:{id:1}});
@@ -46,6 +59,7 @@ test('late 401 cannot clear a newer login',async()=>{
  let resolve;
  ctx.fetch=()=>new Promise(r=>{resolve=r;});
  const pending=api.request('/auth/me');
+ await new Promise(r=>setImmediate(r));
  api.writeSession({token:'new',expiresAt:Date.now()+60000,user:{id:2}});
  resolve({ok:false,status:401,json:async()=>({})});
  await assert.rejects(()=>pending,e=>e.status===401);

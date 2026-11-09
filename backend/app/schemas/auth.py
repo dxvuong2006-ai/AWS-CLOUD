@@ -20,13 +20,6 @@ class RegisterRequest(BaseModel):
         return value
 
 
-class LoginRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    password: str
-
-
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -35,13 +28,6 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: Literal["STUDENT", "INSTRUCTOR", "ADMIN"]
     created_at: datetime | None = None
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
-    expires_in: int
-    user: UserResponse
 
 
 class AdminUserCreateRequest(BaseModel):

@@ -7,11 +7,9 @@ from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
-    LoginRequest,
     RegisterRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
-    TokenResponse,
     UpdateProfileRequest,
     UserResponse,
     VerifyEmailRequest,
@@ -33,28 +31,6 @@ def cognito_http_error(exc: auth_service.CognitoAuthError):
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     try:
         return auth_service.register_student(db, payload)
-    except auth_service.CognitoAuthError as exc:
-        cognito_http_error(exc)
-
-
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    try:
-        result = auth_service.authenticate(
-            db,
-            email=str(payload.email).lower(),
-            password=payload.password,
-        )
-        user = auth_service.sync_authenticated_user(
-            db,
-            result["access_token"],
-            str(payload.email).lower(),
-        )
-        return TokenResponse(
-            access_token=result["access_token"],
-            expires_in=result["expires_in"],
-            user=user,
-        )
     except auth_service.CognitoAuthError as exc:
         cognito_http_error(exc)
 

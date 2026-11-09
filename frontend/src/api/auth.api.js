@@ -1,5 +1,6 @@
 import { request, ApiError } from "./client";
 import { accountMock } from "../mocks/account.mock";
+import { signInWithCognito } from "./cognito";
 
 export const AUTH_MOCK = import.meta.env.VITE_USE_AUTH_MOCK === "true";
 function call(action, path, body, method = "POST", auth = false) {
@@ -10,8 +11,11 @@ function call(action, path, body, method = "POST", auth = false) {
   }
   return request(path, { method, body, auth });
 }
-export const loginUser = (email, password) =>
-  call("login", "/auth/login", { email: email.trim(), password });
+export const loginUser = (email, password) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (AUTH_MOCK) return call("login", "", { email: normalizedEmail, password });
+  return signInWithCognito(normalizedEmail, password);
+};
 export const fetchCurrentUser = () => call("me", "/auth/me", undefined, "GET", true);
 // Explicit payload prevents role escalation even if a form gains unexpected fields.
 export const registerStudent = ({ name, email, password }) =>

@@ -30,13 +30,21 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err.status === 401
-        ? "Email hoặc mật khẩu không đúng."
-        : err.status === 403
-          ? "Email chưa được xác minh. Vui lòng xác minh trước khi đăng nhập."
-        : err.status === 422
-          ? "Vui lòng kiểm tra email và mật khẩu."
-          : "Không đăng nhập được. Vui lòng thử lại.");
+      setError(err.code === "UserNotConfirmedException"
+        ? "Email chưa được xác minh. Vui lòng xác minh trước khi đăng nhập."
+        : err.code === "ResourceNotFoundException"
+          ? "App Client ID không tồn tại trong User Pool. Hãy kiểm tra cấu hình Cognito của frontend."
+          : err.code === "InvalidParameterException"
+            ? "Cấu hình đăng nhập Cognito không hợp lệ. Hãy kiểm tra App Client và auth flow."
+        : err.status === 401
+          ? "Email hoặc mật khẩu không đúng."
+          : err.status === 409
+            ? err.message
+            : err.status === 503
+              ? "Không kết nối được Cognito. Vui lòng kiểm tra cấu hình và thử lại."
+              : err.status === 422
+                ? "Vui lòng kiểm tra email và mật khẩu."
+                : "Không đăng nhập được. Vui lòng thử lại.");
     } finally {
       setSubmitting(false);
     }
