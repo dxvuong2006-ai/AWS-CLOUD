@@ -1,6 +1,7 @@
 #Định nghĩa hợp đồng dữ liệu (Data Transfer Objects - DTO) cho luồng làm bài thi và kiểm tra mở khóa bài học.
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import (
     AliasChoices, BaseModel, ConfigDict, Field, model_validator,
@@ -168,6 +169,19 @@ class QuestionCreateRequest(BaseModel):
         return self
 
 
+class QuestionResponse(BaseModel):
+    """Public question DTO. Review-only fields are excluded."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    quiz_id: int
+    question: str
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
+    position: int
 
 class QuizResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -181,9 +195,23 @@ class QuizResponse(BaseModel):
     updated_at: datetime
 
 
+class QuizDetailResponse(QuizResponse):
+    questions: list[QuestionResponse]
+    attempt_count: int = 0
+    previous_score: Decimal | None = None
+    can_retry: bool = True
+
+
+class QuizAnswerSubmit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: int = Field(gt=0)
+    selected_answer: str | None = None
 
 class QuizAttemptSubmitRequest(BaseModel):
-    answers: list[QuizAnswerSubmit] = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    lesson_id: int | None = Field(default=None, gt=0)
+    answers: list[QuizAnswerSubmit] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_unique_questions(self) -> "QuizAttemptSubmitRequest":
@@ -203,6 +231,8 @@ class QuizAnswerResult(BaseModel):
 
 class QuizAttemptResultResponse(QuizAttemptResponse):
     answers: list[QuizAnswerResult]
+    can_retry: bool
+    remediation_required: bool
 
 
 
@@ -218,10 +248,7 @@ class QuizAnswerResponse(BaseModel):
 
 
 class QuestionReviewResponse(BaseModel):
-    """Biểu diễn đầy đủ câu hỏi cho bước duyệt của giảng viên.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
+    """Full question DTO for instructor review."""
 
     model_config = ConfigDict(from_attributes=True)
 

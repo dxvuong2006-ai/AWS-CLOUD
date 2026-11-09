@@ -7,6 +7,8 @@
   border-radius: 10px;
   padding: 10px 16px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
 }
 .btn-primary:disabled,
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }

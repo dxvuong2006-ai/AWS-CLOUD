@@ -42,6 +42,15 @@ def mark_published(db: Session, course: Course, lessons) -> None:
     course.status = "PUBLISHED"
     db.flush()
 
+
+def get_courses_by_instructor(db: Session, instructor_id: int) -> list[Course]:
+    return (
+        db.query(Course)
+        .filter(Course.instructor_id == instructor_id)
+        .order_by(Course.updated_at.desc(), Course.id.desc())
+        .all()
+    )
+
 # Lấy danh sách khóa học đã publish
 def get_published_courses(db: Session) -> list[Course]:
     return (

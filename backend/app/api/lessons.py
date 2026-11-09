@@ -11,6 +11,8 @@ from app.schemas.lesson import (
     LessonProcessingStatusResponse,
 )
 from app.services import lesson_service, processing_service
+from app.models.course import Course
+from app.models.section import Section
 
 router = APIRouter(tags=["Lessons"])
 
@@ -123,6 +125,41 @@ def get_lesson(
         lesson_service.SectionNotFoundError,
         lesson_service.CourseNotFoundError,
         lesson_service.CourseOwnershipError,
+        lesson_service.PublishedCourseRequiredError,
+        lesson_service.LessonAccessDeniedError,
+    ) as exc:
+        _raise_service_error(exc)
+
+
+@router.get("/lessons/{lesson_id}/content")
+def get_lesson_content(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        lesson = lesson_service.get_lesson_for_user(
+            db, lesson_id, user_id=user.id, user_role=user.role
+        )
+        section = db.get(Section, lesson.section_id)
+        course = db.get(Course, section.course_id) if section else None
+        transcript = lesson.transcript_json if isinstance(lesson.transcript_json, list) else []
+        key_concepts = lesson.key_concepts_json if isinstance(lesson.key_concepts_json, list) else []
+        return {
+            "id": lesson.id,
+            "section_id": lesson.section_id,
+            "course_id": course.id if course else None,
+            "title": lesson.title,
+            "summary": lesson.summary or "",
+            "key_concepts": key_concepts,
+            "transcript": transcript,
+            "publication_status": "PUBLISHED" if lesson.status == "PUBLISHED" else "DRAFT",
+            "processing_status": "READY" if lesson.status == "PUBLISHED" else lesson.status,
+        }
+    except (
+        lesson_service.LessonNotFoundError,
+        lesson_service.SectionNotFoundError,
+        lesson_service.CourseNotFoundError,
         lesson_service.PublishedCourseRequiredError,
         lesson_service.LessonAccessDeniedError,
     ) as exc:

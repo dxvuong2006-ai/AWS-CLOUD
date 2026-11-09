@@ -7,7 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
 
     # cấu hình S3
     S3_BUCKET: str = "learncloud-videos-mentorcloud"
@@ -23,8 +23,11 @@ class Settings(BaseSettings):
     VIDEO_EVENT_BUS: str = "default"
     VIDEO_AI_ENABLED: bool = False
 
-    JWT_SECRET_KEY: SecretStr = Field(min_length=32)
+    JWT_SECRET_KEY: SecretStr | None = None
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, ge=1, le=1440)
+    COGNITO_REGION: str = ""
+    COGNITO_USER_POOL_ID: str = ""
+    COGNITO_APP_CLIENT_ID: str = ""
 
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",

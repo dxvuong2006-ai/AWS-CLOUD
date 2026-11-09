@@ -1,5 +1,3 @@
-import uuid
-
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -20,14 +18,24 @@ def get_by_id(db: Session, user_id: int) -> User | None:
     return db.query(User).filter(User.id == user_id).first()
 
 
-def create_student(db: Session, *, name: str, email: str, password_hash: str) -> User:
-    # Preserve legacy NOT NULL cognito_sub without pretending to be Cognito.
+def get_by_cognito_sub(db: Session, cognito_sub: str) -> User | None:
+    return db.query(User).filter(User.cognito_sub == cognito_sub).first()
+
+
+def create_cognito_user(
+    db: Session,
+    *,
+    cognito_sub: str,
+    name: str,
+    email: str,
+    role: str = "STUDENT",
+) -> User:
     user = User(
-        cognito_sub=f"local:{uuid.uuid4()}",
+        cognito_sub=cognito_sub,
         name=name,
         email=email.lower(),
-        password_hash=password_hash,
-        role="STUDENT",
+        password_hash=None,
+        role=role,
     )
     db.add(user)
     try:

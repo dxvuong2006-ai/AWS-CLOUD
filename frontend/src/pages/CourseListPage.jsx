@@ -1,24 +1,26 @@
+import "../styles/student.css";
 import { useState } from "react";
 import { useCourses } from "../hooks/useCourses";
-import { useCoursesProgress } from "../hooks/useCoursesProgress";
+
 import CourseCard from "../components/courses/CourseCard";
 
 export default function CourseListPage() {
   const { data, loading, error } = useCourses();
-  const percents = useCoursesProgress(data);
+
   const [query, setQuery] = useState("");
 
-  if (loading) return <div className="page">Đang tải...</div>;
-  if (error) return <div className="page">Không tải được danh sách khóa học.</div>;
+  if (loading) return <div className="page student-page student-CourseListPage">Đang tải...</div>;
+  if (error) return <div className="page student-page student-CourseListPage">Không tải được danh sách khóa học.</div>;
 
   const filtered = data.filter((c) =>
     c.title.toLowerCase().includes(query.toLowerCase())
   );
 
   return (
-    <div className="page">
-      <h1>Khóa học</h1>
-      <input
+    <div className="page student-page student-CourseListPage">
+      <h1>Khám phá khóa học</h1><p className="student-subtitle">Chọn khóa học đã publish, xem chi tiết rồi đăng ký.</p>
+      <input className="course-search"
+        aria-label="Tìm khóa học"
         placeholder="Tìm khóa học..."
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -31,8 +33,7 @@ export default function CourseListPage() {
             <CourseCard
               key={c.id}
               course={c}
-              showProgress={percents[c.id] !== undefined}
-              progress={percents[c.id] ?? 0}
+              showProgress={false}
             />
           ))}
         </div>

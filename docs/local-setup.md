@@ -174,3 +174,34 @@ docker compose down
 
 Lệnh này giữ volume dữ liệu. Dừng server FastAPI/Vite bằng `Ctrl+C` trong từng
 terminal.
+
+
+## Đăng nhập JWT và kiểm tra mục 1–3 (04/11/2026)
+
+1. Chuẩn bị PostgreSQL, migration password_hash và seed theo phần hướng dẫn trên.
+2. Cài backend/requirements.txt. Đặt DATABASE_URL và JWT_SECRET_KEY (ít nhất 32 ký tự bí mật)
+   trong file .env ở gốc repository. Không commit giá trị bí mật.
+3. Từ thư mục backend, đặt mật khẩu cho tài khoản seed qua:
+   python scripts/set_user_password.py --email EMAIL_SEED
+   Script hỏi mật khẩu tương tác; không có mật khẩu mặc định trong source.
+4. Chạy uvicorn app.main:app --reload. Frontend cần VITE_API_URL=http://localhost:8000.
+5. VITE_USE_MOCK=true vẫn yêu cầu đăng nhập backend, nhưng nội dung/tiến độ/quiz dùng mock.
+   VITE_USE_MOCK=false chưa có đầy đủ video/quiz/progress runtime, xem api-contract.md.
+6. Mở /login, thử từng vai trò. Không dùng X-Demo-User; API bảo vệ không nhận header đó.
+
+Frontend: npm test và npm run build.
+Backend (thư mục backend): python -m unittest discover -s tests/unit -p test_auth_integration.py -v
+Bộ test auth dùng repository giả và HTTP ASGI trong bộ nhớ, không sửa database thật.
+
+Reset mock: về trang danh sách, F12 Console rồi chạy:
+```js
+const session = JSON.parse(sessionStorage.getItem("learncloud.auth.session"));
+const userId = session?.user?.id;
+if (userId != null) {
+  localStorage.removeItem("learncloud.mock.progress.v2:user:" + userId);
+  localStorage.removeItem("learncloud.mock.attempts:user:" + userId);
+  location.reload();
+}
+```
+Dữ liệu cũ chưa gắn user không được chuyển tự động sang tài khoản mới.
+Ngưỡng video mock hiện giữ 10% phục vụ test; giá trị dự kiến chính thức là 95%.

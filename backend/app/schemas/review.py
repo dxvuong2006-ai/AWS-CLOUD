@@ -31,6 +31,14 @@ class KeyConcept(ReviewDTO):
     definition: Text
 
 
+class FlashcardDraft(ReviewDTO):
+    """Thẻ mặt trước/mặt sau trong bản nháp AI."""
+
+    front: Text
+    back: Text
+    position: int = Field(gt=0)
+
+
 class ReviewQuestion(ReviewDTO):
     """Biểu diễn câu hỏi dành cho giảng viên, bao gồm đáp án.
 
@@ -65,6 +73,7 @@ class DraftContent(ReviewDTO):
     title: Title
     summary: Text
     key_concepts: list[KeyConcept] = Field(min_length=1)
+    flashcards: list[FlashcardDraft] = Field(default_factory=list)
     quiz_title: Title
     questions: list[ReviewQuestion] = Field(min_length=1)
 
