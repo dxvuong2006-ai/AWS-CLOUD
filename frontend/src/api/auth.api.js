@@ -16,11 +16,32 @@ export const fetchCurrentUser = () => call("me", "/auth/me", undefined, "GET", t
 // Explicit payload prevents role escalation even if a form gains unexpected fields.
 export const registerStudent = ({ name, email, password }) =>
   call("register", "/auth/register", { name: name.trim(), email: email.trim(), password });
-export const verifyEmail = (email, code) => call("verify", "/auth/verify-email", { email, code });
-export const resendVerification = (email) => call("resend", "/auth/resend-verification", { email });
-export const forgotPassword = (email) => call("forgot", "/auth/forgot-password", { email });
-export const resetPassword = (email, code, password) =>
-  call("reset", "/auth/reset-password", { email, code, password });
+const normalizeVerificationCode = (code) => String(code ?? "").replace(/\D/g, "");
+export const verifyEmail = (email, code) => {
+  const normalizedCode = normalizeVerificationCode(code);
+  if (!/^\d{6}$/.test(normalizedCode))
+    return Promise.reject(new ApiError(422, "Mã xác thực phải gồm đúng 6 chữ số."));
+  return call("verify", "/auth/verify-email", {
+    email: email.trim().toLowerCase(),
+    code: normalizedCode,
+  });
+};
+export const resendVerification = (email) => call("resend", "/auth/resend-verification", {
+  email: email.trim().toLowerCase(),
+});
+export const forgotPassword = (email) => call("forgot", "/auth/forgot-password", {
+  email: email.trim().toLowerCase(),
+});
+export const resetPassword = (email, code, password) => {
+  const normalizedCode = normalizeVerificationCode(code);
+  if (!/^\d{6}$/.test(normalizedCode))
+    return Promise.reject(new ApiError(422, "Mã xác thực phải gồm đúng 6 chữ số."));
+  return call("reset", "/auth/reset-password", {
+    email: email.trim().toLowerCase(),
+    code: normalizedCode,
+    password,
+  });
+};
 export const updateProfile = (name) => call("profile", "/auth/me", { name: name.trim() }, "PATCH", true);
 export const changePassword = (current_password, new_password) =>
   call("password", "/auth/change-password", { current_password, new_password }, "POST", true);

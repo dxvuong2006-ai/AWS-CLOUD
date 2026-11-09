@@ -5,15 +5,31 @@ const BASE_URL = (
 ).replace(/\/+$/, "");
 
 export class ApiError extends Error {
-  constructor(status, detail) {
+  constructor(status, detail, code = "") {
     super(detail || `HTTP ${status}`);
     this.status = status;
+    this.code = code;
   }
 }
 
-export async function request(path, { method = "GET", body, auth = true, timeoutMs = 0, keepalive = false } = {}) {
+export async function request(
+  path,
+  {
+    method = "GET",
+    body,
+    auth = true,
+    timeoutMs = 0,
+    keepalive = false,
+  } = {},
+) {
   const token = auth ? readSession()?.token : null;
-  if (token?.startsWith("mock:")) throw new ApiError(401, "Tài khoản mô phỏng không thể gọi API thật.");
+  if (token?.startsWith("mock:")) {
+    throw new ApiError(
+      401,
+      "Tài khoản mô phỏng không thể gọi API thật.",
+    );
+  }
+
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const controller = timeoutMs > 0 ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -32,19 +48,31 @@ export async function request(path, { method = "GET", body, auth = true, timeout
   } finally {
     if (timer) clearTimeout(timer);
   }
+
   if (!res.ok) {
     let detail = "";
+    let code = "";
     try {
       const data = await res.json();
-      detail = typeof data.detail === "string" ? data.detail : "";
+      if (typeof data.detail === "string") {
+        detail = data.detail;
+      } else if (data.detail && typeof data.detail === "object") {
+        detail = typeof data.detail.message === "string"
+          ? data.detail.message
+          : "";
+        code = typeof data.detail.code === "string"
+          ? data.detail.code
+          : "";
+      }
+      if (!code && typeof data.code === "string") code = data.code;
     } catch {
-      // Non-JSON errors retain their HTTP status.
+      // Non-JSON responses retain their HTTP status.
     }
     if (res.status === 401 && token && readSession()?.token === token) {
       clearSession();
       window.dispatchEvent(new Event("learncloud:unauthorized"));
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, code);
   }
   return res.status === 204 ? null : res.json();
 }

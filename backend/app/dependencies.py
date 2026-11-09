@@ -1,5 +1,6 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -19,9 +20,24 @@ def get_db():
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> User:
+    event = request.scope.get("aws.event")
+    if event is None:
+        extensions = request.scope.get("extensions")
+        if isinstance(extensions, dict):
+            event = extensions.get("aws.event")
+
+    claims = auth_service.authorizer_claims_from_event(event)
+    if claims is not None:
+        try:
+            return auth_service.sync_authorizer_claims(db, claims)
+        except auth_service.InvalidToken as exc:
+            raise HTTPException(status_code=401, detail="Authentication required",
+                                headers={"WWW-Authenticate": "Bearer"}) from exc
+
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Authentication required",
                             headers={"WWW-Authenticate": "Bearer"})
@@ -30,6 +46,8 @@ def get_current_user(
     except auth_service.InvalidToken as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"}) from exc
+    except auth_service.CognitoAuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 def require_student(user: User = Depends(get_current_user)) -> User:

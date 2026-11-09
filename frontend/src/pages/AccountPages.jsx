@@ -47,6 +47,17 @@ function Field({ label, id, hint, ...props }) {
 function ErrorText({ error }) { return error ? <p role="alert" className="login-error">{error}</p> : null; }
 function checkPasswords(password, confirm) {
   if (password !== confirm) throw { status: 400, message: "Hai mật khẩu chưa khớp." };
+  if (password.length < 8 || password.length > 128)
+    throw { status: 422, message: "Mật khẩu phải có từ 8 đến 128 ký tự." };
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password))
+    throw { status: 422, message: "Mật khẩu phải gồm ít nhất một chữ và một chữ số." };
+}
+function verificationCodeInput(value) {
+  return String(value ?? "").replace(/\D/g, "").slice(0, 6);
+}
+function checkVerificationCode(code) {
+  if (!/^\d{6}$/.test(verificationCodeInput(code)))
+    throw { status: 422, message: "Mã xác thực phải gồm đúng 6 chữ số." };
 }
 
 export function RegisterPage() {
@@ -84,12 +95,13 @@ export function VerifyEmailPage() {
   const { busy, error, run } = useAction(); const cooldown = useCooldown(email, "verify");
   return <AccountLayout variant="account-verify" icon="mail" title="Xác minh email" subtitle={<>Mã gồm 6 chữ số đã được gửi tới<br /><strong>{email || "email của bạn"}</strong></>}>
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
-      await verifyEmail(email.trim(), code); navigate("/register-success", { replace: true });
+      checkVerificationCode(code);
+      await verifyEmail(email.trim(), verificationCodeInput(code)); navigate("/register-success", { replace: true });
     }); }}>
       <details className="account-email-edit" open={!params.get("email")}><summary>Thay đổi email</summary><Field id="verify-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></details>
       <div className="account-code">
         <label className="account-sr-only" htmlFor="verify-code">Mã xác minh</label>
-        <input id="verify-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+        <input id="verify-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(verificationCodeInput(e.target.value))} />
         <div className="account-code-slots" aria-hidden="true">{Array.from({ length: 6 }, (_, index) => <span key={index} className={index === code.length ? "is-current" : ""}>{code[index]}</span>)}</div>
       </div>
       <ErrorText error={error} /><button className="login-submit" disabled={busy}>Xác minh</button>
@@ -131,11 +143,13 @@ export function ResetPasswordPage() {
   const { busy, error, run } = useAction(); const cooldown = useCooldown(email, "reset");
   return <AccountLayout variant="account-reset" title="Đặt lại mật khẩu" subtitle="Nhập mã đã gửi tới email và mật khẩu mới.">
     <form onSubmit={(e) => { e.preventDefault(); run(async () => {
-      checkPasswords(password, confirm); await resetPassword(email.trim(), code, password);
+      checkVerificationCode(code);
+      checkPasswords(password, confirm);
+      await resetPassword(email.trim(), verificationCodeInput(code), password);
       navigate("/login", { replace: true, state: { message: "Đã đặt lại mật khẩu. Vui lòng đăng nhập." } });
     }); }}>
       <details className="account-email-edit" open={!params.get("email")}><summary>Thay đổi email</summary><Field id="reset-email" label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></details>
-      <Field id="reset-code" label="Mã xác minh" placeholder="Nhập mã 6 chữ số" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} />
+      <Field id="reset-code" label="Mã xác minh" placeholder="Nhập mã 6 chữ số" required pattern="[0-9]{6}" maxLength={6} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(verificationCodeInput(e.target.value))} />
       <Field id="reset-password" label="Mật khẩu mới" hint="Ít nhất 8 ký tự, gồm chữ và số." placeholder="••••••••••" type="password" required minLength={8} maxLength={128} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       <Field id="reset-confirm" label="Xác nhận mật khẩu mới" placeholder="••••••••••" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       <ErrorText error={error} /><button className="login-submit" disabled={busy}>Đặt lại mật khẩu</button>

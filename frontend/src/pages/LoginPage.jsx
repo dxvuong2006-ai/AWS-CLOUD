@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { homeForRole } from "../utils/roles";
 import "./login.css";
 import { AUTH_MOCK } from "../api/auth.api";
+import logo from "../public/logo.png";
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -44,7 +45,7 @@ export default function LoginPage() {
   return (
     <main className="login-screen">
       <aside className="login-brand-panel">
-        <div className="login-brand"><span aria-hidden="true">L</span>LearnCloud</div>
+        <div className="login-brand"><img className="login-brand-logo" src={logo} alt="" />LearnCloud</div>
         <div className="login-brand-copy">
           <h2>Học qua video,<br />ôn đúng chỗ cần ôn.</h2>
           <p>Mỗi bài giảng có transcript, tóm tắt, flashcard và checkpoint — tất cả trong một nơi.</p>

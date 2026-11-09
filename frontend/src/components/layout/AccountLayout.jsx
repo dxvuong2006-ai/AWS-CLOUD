@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { AUTH_MOCK } from "../../api/auth.api";
 import "../../pages/login.css";
+import logo from "../../public/logo.png";
 
 export default function AccountLayout({ title, subtitle, children, variant = "", icon }) {
   return <main className="login-screen">
     <aside className="login-brand-panel">
       <Link className="login-brand" to="/login">
-        <span aria-hidden="true">L</span>LearnCloud
+        <img className="login-brand-logo" src={logo} alt="" />LearnCloud
       </Link>
       <div className="login-brand-copy">
         <h2>Học qua video,<br />ôn đúng chỗ cần ôn.</h2>
