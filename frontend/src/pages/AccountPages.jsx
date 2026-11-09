@@ -35,10 +35,11 @@ function useCooldown(email, purpose) {
   };
 }
 function Field({ label, id, hint, ...props }) {
+  const [visible, setVisible] = useState(false);
   return <div className="account-field"><label htmlFor={id}>{label}</label>
     <div className={props.type === "password" ? "account-password" : undefined}>
-      <input id={id} {...props} />
-      {props.type === "password" && <svg className="account-password-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>}
+      <input id={id} {...props} type={props.type === "password" && visible ? "text" : props.type} />
+      {props.type === "password" && <button type="button" className="account-password-toggle" aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={visible} onClick={() => setVisible(value => !value)}><svg className="account-password-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{visible && <path d="m3 3 18 18" />}</svg></button>}
     </div>
     {hint && <p className="account-hint">{hint}</p>}
   </div>;
@@ -107,7 +108,7 @@ export function VerifyEmailPage() {
     </form>
     <button className="account-resend" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
       const result = await resendVerification(email.trim()); cooldown.start(result.retry_after ?? 60); setMessage(result.message);
-    })}>{cooldown.seconds ? `Gửi lại sau ${cooldown.seconds}s` : "Gửi lại mã"}</button>
+    })}><span>Gửi lại mã</span>{cooldown.seconds > 0 && <span className="account-countdown"> ({String(Math.floor(cooldown.seconds / 60)).padStart(2, "0")}:{String(cooldown.seconds % 60).padStart(2, "0")})</span>}</button>
     {message && <p role="status">{message}</p>}
     <Link className="account-back" to="/register">← Quay lại đăng ký</Link>
   </AccountLayout>;
@@ -155,7 +156,7 @@ export function ResetPasswordPage() {
     </form>
     <button className="account-resend" disabled={busy || cooldown.seconds > 0 || !email.trim()} onClick={() => run(async () => {
       const result = await forgotPassword(email.trim()); cooldown.start(result.retry_after ?? 60);
-    })}>{cooldown.seconds ? `Gửi lại sau ${cooldown.seconds}s` : "Gửi lại mã"}</button>
+    })}><span>Gửi lại mã</span>{cooldown.seconds > 0 && <span className="account-countdown"> ({String(Math.floor(cooldown.seconds / 60)).padStart(2, "0")}:{String(cooldown.seconds % 60).padStart(2, "0")})</span>}</button>
     <Link className="account-back" to="/login">← Quay lại đăng nhập</Link>
   </AccountLayout>;
 }
@@ -165,15 +166,18 @@ export function ProfilePage() {
   const [name, setName] = useState(user.name);
   const [current, setCurrent] = useState(""); const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState(""); const { busy, error, run } = useAction();
-  return <div className="page account-profile"><h1>Hồ sơ và mật khẩu</h1>
-    <p>{user.email} · {user.role}</p>
-    <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => {
+  const roleLabels = { STUDENT: "Học viên", INSTRUCTOR: "Giảng viên", TEACHER: "Giảng viên", ADMIN: "Quản trị viên" };
+  const initials = (user.name || user.email || "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  return <div className="page account-profile management-page">
+    <div className="page-head"><div><h1>Hồ sơ cá nhân</h1><p className="management-subtitle">Quản lý thông tin và mật khẩu.</p></div><button className="btn-danger-outline" onClick={() => { logout(); navigate("/login", { replace: true }); }}>↪ &nbsp;Đăng xuất</button></div>
+    <div className="profile-layout"><form className="card profile-card" onSubmit={(e) => { e.preventDefault(); run(async () => {
       await updateProfile(name); await refreshUser(); setMessage("Đã lưu hồ sơ.");
     }); }}>
-      <Field id="profile-name" label="Họ tên" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="profile-heading"><div className="profile-avatar">{initials}</div><div><h2>{user.name}</h2><span className="role-pill student">• &nbsp;{roleLabels[user.role] || user.role}</span></div></div>
+      <Field id="profile-name" label="Họ và tên" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+      <label className="account-field">Email<div className="input-with-badge"><input type="email" value={user.email} readOnly /><span>Không đổi</span></div></label>
       <button className="btn-primary" disabled={busy}>Lưu thay đổi</button>
-    </form>
-    <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => {
+    </form><form className="card profile-card" onSubmit={(e) => { e.preventDefault(); run(async () => {
       checkPasswords(password, confirm); await changePassword(current, password); logout();
       navigate("/login", { replace: true, state: { message: "Đã đổi mật khẩu. Vui lòng đăng nhập lại." } });
     }); }}>
@@ -182,8 +186,7 @@ export function ProfilePage() {
       <Field id="profile-password" label="Mật khẩu mới" type="password" autoComplete="new-password" required minLength={8} maxLength={128} value={password} onChange={(e) => setPassword(e.target.value)} />
       <Field id="profile-confirm" label="Nhập lại mật khẩu mới" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       <button className="btn-primary" disabled={busy}>Đổi mật khẩu</button>
-    </form>
-    <ErrorText error={error} />{message && <p role="status">{message}</p>}
-    <button className="btn-secondary" onClick={() => { logout(); navigate("/login", { replace: true }); }}>Đăng xuất</button>
+    </form></div>
+    <ErrorText error={error} />{message && <p role="status" className="management-notice">{message}</p>}
   </div>;
 }

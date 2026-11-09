@@ -8,6 +8,8 @@ from fastapi import FastAPI
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.api import quizzes, review, tutor, analytics, screen_workflows, admin
 from mangum import Mangum
 from app.api import quizzes, review, tutor, analytics
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,6 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(screen_workflows.router)
 app.include_router(auth_router)
 app.include_router(quizzes_router)
 app.include_router(courses_router)

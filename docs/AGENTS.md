@@ -1,1 +1,1 @@
-“Spec giao diện ở docs/ui-doc/ui-spec. Trước khi sửa màn NN, mở docs/ui-spec/screens/NN.png và mục NN trong SPEC.md. Làm đúng theo ảnh. Không chạy kiểm thử trình duyệt trừ khi được yêu cầu.”
+“Spec giao diện ở docs/ui-doc/ui-spec. Trước khi sửa màn NN, mở docs/ui-doc/ui-spec/screens/NN.png và mục NN trong SPEC.md. Làm đúng theo ảnh. Không chạy kiểm thử trình duyệt trừ khi được yêu cầu.”

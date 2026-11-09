@@ -1,4 +1,7 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
+import TutorPage from "../pages/TutorPage";
+import CourseCompletePage from "../pages/CourseCompletePage";
+import VideoUploadPage from "../pages/VideoUploadPage";
 import MyCoursesPage from "../pages/MyCoursesPage";
 import CourseListPage from "../pages/CourseListPage";
 import CourseDetailPage from "../pages/CourseDetailPage";
@@ -33,8 +36,8 @@ function Pending({ title }) {
 
 function Forbidden() {
   const { user } = useAuth();
-  return <div className="page"><h1>Không có quyền truy cập</h1>
-    <Link to={homeForRole(user.role)}>Về trang chính</Link></div>;
+  return <div className="page forbidden-page"><section className="forbidden-card"><div className="forbidden-icon">♙</div><h1>Bạn không có quyền truy cập</h1><p>Trang này dành cho vai trò khác. Hãy quay lại trang chính của bạn.</p>
+    <Link className="btn-primary" to={homeForRole(user.role)}>⌂ &nbsp;Về trang chính</Link></section></div>;
 }
 
 export default function AppRoutes() {
@@ -63,11 +66,14 @@ export default function AppRoutes() {
         <Route path="/flashcards" element={<FlashcardPage />} />
         <Route path="/courses/:courseId/sections/:sectionId/lessons/:lessonId/flashcards" element={<FlashcardPage />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/tutor/attempts/:attemptId" element={<TutorPage />} />
+        <Route path="/courses/:courseId/completed" element={<CourseCompletePage />} />
       </Route>
       <Route element={<ProtectedRoute roles={["INSTRUCTOR"]} />}>
         <Route path="/instructor/dashboard" element={<InstructorDashboardPage />} />
         <Route path="/instructor/courses" element={<InstructorCoursesPage />} />
         <Route path="/instructor/courses/new" element={<CourseEditorPage />} />
+        <Route path="/instructor/courses/:courseId/lessons/:lessonId/upload" element={<VideoUploadPage />} />
         <Route path="/instructor/courses/:courseId/edit" element={<CourseEditorPage />} />
         <Route path="/instructor/review-queue" element={<ReviewQueuePage />} />
         <Route path="/instructor/review/:lessonId" element={<LessonReviewPage />} />
@@ -78,6 +84,7 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute roles={["ADMIN"]} />}>
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/users/new" element={<AdminUsersPage />} />
+        <Route path="/admin/users/success" element={<AdminUsersPage />} />
         <Route path="/admin/users/:userId/edit" element={<AdminUsersPage />} />
         <Route path="/admin/roles" element={<AdminUsersPage />} />
         <Route path="/admin/monitoring" element={<AdminMonitoringPage />} />

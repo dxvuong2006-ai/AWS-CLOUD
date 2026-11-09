@@ -6,6 +6,7 @@ export default function CourseOutline({
   currentLessonId,
   completedIds = new Set(),
   unlockedSectionIds = [],
+  returnTo = null,
 }) {
   if (!sections || sections.length === 0) {
     return <p>Khóa học chưa có nội dung.</p>;
@@ -15,8 +16,8 @@ export default function CourseOutline({
     <div className={courseId ? "course-outline is-enrolled" : "course-outline"}>
       {sections.map((s, i) => (
         <div key={s.id} className={"card outline-section " + (courseId && !unlockedSectionIds.includes(String(s.id)) ? "is-locked" : "")}>
-          <h3 style={{ fontSize: 15, margin: "0 0 12px" }}>
-            Section {i + 1} · {s.title}<span className="outline-count">{s.lessons?.length ?? 0} lesson</span>
+          <h3 className="outline-section-title" style={{ fontSize: 15, margin: "0 0 12px" }}>
+            {courseId && <span className="outline-section-marker" aria-hidden="true">{unlockedSectionIds.includes(String(s.id)) ? "●" : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V6a4 4 0 0 1 8 0v4" /></svg>}</span>}Section {i + 1} · {s.title}<span className="outline-count">{s.lessons?.length ?? 0} lesson</span>
             {courseId && !unlockedSectionIds.includes(String(s.id)) && " · Đang khóa"}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
@@ -42,15 +43,15 @@ export default function CourseOutline({
                     {done ? "✓" : courseId && unlockedSectionIds.includes(String(s.id)) ? "○" : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V6a4 4 0 0 1 8 0v4" /></svg>}
                   </span>
                   {courseId && unlockedSectionIds.includes(String(s.id)) ? (
-                    <span><Link
-                      to={`/courses/${courseId}/lessons/${l.id}`}
+                    <span className="outline-lesson-content"><Link
+                      to={`/courses/${courseId}/lessons/${l.id}${returnTo ? "?from=progress" : ""}`}
                       style={{
                         color: isCurrent ? "var(--accent)" : "inherit",
                         fontWeight: isCurrent ? 600 : 400,
                       }}
                     >
                       {label}
-                    </Link> · <Link to={`/courses/${courseId}/sections/${s.id}/lessons/${l.id}/flashcards`}>Ôn flashcard</Link></span>
+                    </Link>{done && <span className="outline-done">● Đã học</span>}{isCurrent && <span className="outline-resume">Học tiếp</span>}<Link className="outline-flashcard-link" to={`/courses/${courseId}/sections/${s.id}/lessons/${l.id}/flashcards${returnTo ? "?from=progress" : ""}`}>Ôn flashcard</Link></span>
                   ) : (
                     <span>{label}</span>
                   )}
@@ -58,9 +59,9 @@ export default function CourseOutline({
               );
             })}
           </ul>
-          {courseId && <p>{unlockedSectionIds.includes(String(s.id)) ?
-            <Link to={`/courses/${courseId}/sections/${s.id}/checkpoint`}>Làm checkpoint</Link> :
-            <Link to={`/courses/${courseId}/sections/${s.id}`}>Xem điều kiện mở section</Link>}</p>}
+          {courseId && <p className="outline-checkpoint-row"><span>{unlockedSectionIds.includes(String(s.id)) ? "Checkpoint Section " + (i + 1) : "Section đang khóa"}</span>{unlockedSectionIds.includes(String(s.id)) ?
+            <Link to={`/courses/${courseId}/sections/${s.id}/checkpoint${returnTo ? "?from=progress" : ""}`}>Làm checkpoint</Link> :
+            <Link to={`/courses/${courseId}/sections/${s.id}${returnTo ? "?from=progress" : ""}`}>Xem điều kiện mở section</Link>}</p>}
         </div>
       ))}
     </div>

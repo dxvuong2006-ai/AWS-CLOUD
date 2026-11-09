@@ -1,6 +1,6 @@
 import "../styles/student.css";
 import { useEffect, useRef, useState } from "react";
-import { useParams, useLocation, Link } from "react-router-dom";
+import { useParams, useLocation, useSearchParams, Link } from "react-router-dom";
 import { useCourse } from "../hooks/useCourses";
 import { fetchSectionQuiz, submitAttempt, readPendingAttempt, recoverPendingCheckpoint, knownCheckpointQuizId } from "../api/quizzes.api";
 import { createCheckpointDraft, restoreCheckpointDraft, saveCheckpointDraft } from "../utils/checkpointDraft";
@@ -16,7 +16,7 @@ function errorMessage(err) {
     const detail = err.message;
     if (detail === "Mandatory AI review and practice must be completed before retrying." ||
         detail === "Bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại.") {
-      return "Lượt checkpoint gần nhất dưới 50% nên bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại: xem giải thích lỗi, ôn bài hoặc flashcard và đạt bài practice. Chỉ hoàn thành flashcard chưa đủ mở lại checkpoint. Luồng ôn AI hiện chưa được triển khai đầy đủ trong phiên bản này.";
+      return "Lượt checkpoint gần nhất dưới 50% nên bạn cần hoàn thành ôn tập AI bắt buộc trước khi làm lại: xem giải thích lỗi, ôn bài hoặc flashcard và đạt bài practice. Chỉ hoàn thành flashcard chưa đủ mở lại checkpoint. Mở kết quả lượt làm gần nhất bên dưới để bắt đầu ôn tập AI.";
     }
     if (detail === "Complete the current lesson before this checkpoint.") {
       return "Bạn cần hoàn thành tiến độ xem bài học trước khi làm checkpoint. Hoàn thành flashcard không thay thế tiến độ xem bài học.";
@@ -33,6 +33,9 @@ function errorMessage(err) {
 export default function CheckpointPage() {
   const { courseId, sectionId } = useParams();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const fromProgress = searchParams.get("from") === "progress";
+  const progressSuffix = fromProgress ? "?from=progress" : "";
   const fromLessonId = location.state?.lessonId;
   const course = useCourse(courseId);
   const [quiz, setQuiz] = useState(null);
@@ -124,7 +127,7 @@ export default function CheckpointPage() {
       <div className="page student-page student-CheckpointPage">
         <p>{errorMessage(error)}</p>
         <button className="btn-secondary" onClick={() => setLoadVersion(v => v + 1)}>Thử lại</button>
-        <Link to={backTo}>{backLabel}</Link>
+        <Link className="student-route-button" to={backTo}>{backLabel}</Link>
         {historyQuizId && <CheckpointHistory quizId={historyQuizId} />}
       </div>
     );
@@ -226,13 +229,9 @@ export default function CheckpointPage() {
       <div className="page-head">
         <div>
           <h1>{result ? "Kết quả checkpoint" : "Checkpoint Section " + (sectionIdx + 1)}</h1>
-          <div className="breadcrumb">{subtitle}</div>
+          <div className="student-subtitle">{subtitle}{result && <> · Lần làm {result.attempt_number}</>}</div>
         </div>
-        {result && (
-          <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>
-            Làm lại checkpoint
-          </button>
-        )}
+
       </div>
 
       {submitError && (
@@ -242,18 +241,23 @@ export default function CheckpointPage() {
       )}
       {draftError && <p role="alert" className="quiz-warn">Chưa lưu được nháp: {draftError.message} Các lựa chọn mới vẫn ở trang này. {draft.current && <button onClick={() => persistDraft(answers, index)}>Thử lưu lại</button>}</p>}
       {restored && !result && <p role="status">Đã khôi phục đáp án và vị trí câu hỏi của phiên đang làm.</p>}
-      {started && !result && !draftError && <p>Đáp án được lưu trong tab này ngay khi chọn. Không đóng tab nếu chưa nộp bài.</p>}
+      {started && !result && !draftError && <p className="checkpoint-save-note">Đáp án được lưu trong tab này ngay khi chọn. Không đóng tab nếu chưa nộp bài.</p>}
       {submissionPending && <p role="status">Đang chờ xác nhận lần nộp trước. Hãy nộp lại để lấy kết quả; câu trả lời được giữ nguyên.</p>}
 
       {result ? (
         <>
           <QuizResult result={result} />
-          {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}`}>Mở lại kết quả lượt làm này</Link></p>}
+          <div className="result-existing-actions">
+            <button className="btn-secondary" disabled={result.can_retry !== true} onClick={handleRetry} title={result.can_retry !== true ? "Chưa được phép làm lại checkpoint" : undefined}>Làm lại checkpoint</button>
+            {result.remediation_required && <span>Nút mở sau khi hoàn thành ôn tập bắt buộc.</span>}
+          </div>
+          {result.id && <p><Link to={`/checkpoint-results/${encodeURIComponent(quiz.id)}/${encodeURIComponent(result.id)}${progressSuffix}`}>Mở lại kết quả lượt làm này</Link></p>}
           {result.passed && (
             <p style={{ marginTop: 20 }}>
               <Link className="btn-primary" to={`/courses/${courseId}`}>
-                Về khóa học
+                Về lộ trình
               </Link>
+              <Link className="btn-secondary" to={"/courses/" + courseId + "/completed"}>Xem tổng kết khóa học</Link>
             </p>
           )}
         </>

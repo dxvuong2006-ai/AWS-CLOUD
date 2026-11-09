@@ -41,6 +41,7 @@ class Course(Base):
     )
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    cover_image = Column(Text, nullable=True)
     learning_objectives = Column(
         JSON().with_variant(JSONB(), "postgresql"),
         nullable=False,
