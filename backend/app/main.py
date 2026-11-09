@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.api import quizzes, review, tutor, analytics, screen_workflows, admin
 from mangum import Mangum
+from app.config import settings
 from app.api import quizzes, review, tutor, analytics
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
@@ -44,8 +45,9 @@ register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
+        origin.strip()
+        for origin in settings.CORS_ALLOWED_ORIGINS.split(",")
+        if origin.strip()
     ],
     allow_credentials=False,
     allow_methods=["*"],

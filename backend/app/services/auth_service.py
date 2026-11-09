@@ -258,15 +258,28 @@ def register_student(db: Session, data: RegisterRequest):
 
 def verify_email(db: Session, email: str, code: str):
     try:
-        cognito_client().confirm_sign_up(
-            ClientId=settings.COGNITO_APP_CLIENT_ID,
-            Username=email.lower(),
-            ConfirmationCode=code,
-        )
-        response = cognito_client().admin_get_user(
-            UserPoolId=settings.COGNITO_USER_POOL_ID,
-            Username=email.lower(),
-        )
+        client = cognito_client()
+        try:
+            client.confirm_sign_up(
+                ClientId=settings.COGNITO_APP_CLIENT_ID,
+                Username=email.lower(),
+                ConfirmationCode=code,
+            )
+        except ClientError as exc:
+            error = exc.response.get("Error", {})
+            if error.get("Code") != "NotAuthorizedException":
+                raise
+            response = client.admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=email.lower(),
+            )
+            if response.get("UserStatus") != "CONFIRMED":
+                raise exc
+        else:
+            response = client.admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=email.lower(),
+            )
         identity = _attributes_from_cognito(response, fallback_email=email)
         existing = auth_repo.get_by_cognito_sub(db, identity["sub"])
         if existing is None:

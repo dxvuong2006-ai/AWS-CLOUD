@@ -8,6 +8,7 @@ os.environ["COGNITO_APP_CLIENT_ID"] = "test-client"
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
+from botocore.exceptions import ClientError
 import httpx
 from fastapi import Depends, FastAPI
 
@@ -202,6 +203,83 @@ class CognitoTokenVerificationLoggingTests(unittest.TestCase):
         log_output = "\n".join(captured.output)
         self.assertIn("reason=client_id_mismatch", log_output)
         self.assertNotIn("sensitive.jwt.token", log_output)
+
+
+class CognitoEmailVerificationTests(unittest.TestCase):
+    def test_confirmed_cognito_user_can_finish_local_sync_after_retry(self):
+        email = "student@example.com"
+        cognito = Mock()
+        cognito.confirm_sign_up.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "NotAuthorizedException",
+                    "Message": "User cannot be confirmed. Current status is CONFIRMED.",
+                }
+            },
+            "ConfirmSignUp",
+        )
+        cognito.admin_get_user.return_value = {
+            "UserStatus": "CONFIRMED",
+            "UserAttributes": [
+                {"Name": "sub", "Value": "cognito-student"},
+                {"Name": "email", "Value": email},
+                {"Name": "name", "Value": "Student"},
+            ],
+        }
+        db = Mock()
+        created_user = SimpleNamespace(
+            cognito_sub="cognito-student",
+            email=email,
+            name="Student",
+            password_hash=None,
+        )
+
+        with patch.object(auth_service, "cognito_client", return_value=cognito), patch.object(
+            auth_service.auth_repo,
+            "get_by_cognito_sub",
+            return_value=None,
+        ), patch.object(
+            auth_service.auth_repo,
+            "get_by_email",
+            return_value=None,
+        ), patch.object(
+            auth_service.auth_repo,
+            "create_cognito_user",
+            return_value=created_user,
+        ) as create_user:
+            result = auth_service.verify_email(db, email, "123456")
+
+        self.assertEqual(result, {"message": "Đã xác minh email."})
+        cognito.admin_get_user.assert_called_once_with(
+            UserPoolId="ap-southeast-1_testpool",
+            Username=email,
+        )
+        create_user.assert_called_once_with(
+            db,
+            cognito_sub="cognito-student",
+            name="Student",
+            email=email,
+            role="STUDENT",
+        )
+
+    def test_confirmation_errors_other_than_already_confirmed_are_not_ignored(self):
+        cognito = Mock()
+        cognito.confirm_sign_up.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "CodeMismatchException",
+                    "Message": "Invalid confirmation code.",
+                }
+            },
+            "ConfirmSignUp",
+        )
+
+        with patch.object(auth_service, "cognito_client", return_value=cognito):
+            with self.assertRaises(auth_service.CognitoAuthError) as raised:
+                auth_service.verify_email(Mock(), "student@example.com", "000000")
+
+        self.assertEqual(raised.exception.code, "CodeMismatchException")
+        cognito.admin_get_user.assert_not_called()
 
 
 if __name__ == "__main__":

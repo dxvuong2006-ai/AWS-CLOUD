@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     # cấu hình S3
     S3_BUCKET: str = "learncloud-videos-mentorcloud"
     AWS_REGION: str = "ap-southeast-1"
+    CORS_ALLOWED_ORIGINS: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "https://d1my2q1fj0jxmb.cloudfront.net"
+    )
     APP_ENV: str = "production"
     ALLOW_RAW_VIDEO_PLAYBACK: bool = False
     VIDEO_URL_EXPIRES_IN: int = Field(default=900, ge=60, le=3600)

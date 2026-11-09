@@ -55,8 +55,9 @@ POST /lessons/{lesson_id}/upload-url
 
 HTTP API phải xử lý preflight từ trình duyệt trước khi request tới Lambda:
 
-- Allowed origins: `http://localhost:5173`, `http://127.0.0.1:5173` và origin
-  chính xác của frontend production nếu có.
+- Allowed origins: `http://localhost:5173`, `http://127.0.0.1:5173` và
+  `https://d1my2q1fj0jxmb.cloudfront.net`. Nếu đổi domain frontend, cập nhật
+  origin production chính xác tại đây và trong `CORS_ALLOWED_ORIGINS` của Lambda.
 - Allowed methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`.
 - Allowed headers: `authorization`, `content-type`.
 - Không bật credential cookies; frontend gửi Cognito Access Token trong
