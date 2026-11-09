@@ -1,0 +1,102 @@
+{
+  "Comment": "Template: substitute Lambda ARNs; functions must implement the input/output contract. No AWS resources are created by this file.",
+  "StartAt": "MediaConvertJob",
+  "TimeoutSeconds": 7200,
+  "States": {
+    "MediaConvertJob": {
+      "Type": "Task",
+      "Resource": "${MediaConvertLambdaArn}",
+      "TimeoutSeconds": 3600,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PipelineFailed"
+        }
+      ],
+      "Next": "TranscribeAudio"
+    },
+    "TranscribeAudio": {
+      "Type": "Task",
+      "Resource": "${TranscribeLambdaArn}",
+      "TimeoutSeconds": 3600,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PipelineFailed"
+        }
+      ],
+      "Next": "LambdaAIProcessor"
+    },
+    "LambdaAIProcessor": {
+      "Type": "Task",
+      "Resource": "${AIProcessorLambdaArn}",
+      "TimeoutSeconds": 300,
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "States.TaskFailed"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PipelineFailed"
+        }
+      ],
+      "Next": "UpdateLessonReviewRequired"
+    },
+    "UpdateLessonReviewRequired": {
+      "Type": "Task",
+      "Resource": "${ReviewWriterLambdaArn}",
+      "TimeoutSeconds": 60,
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.error",
+          "Next": "PipelineFailed"
+        }
+      ],
+      "End": true
+    },
+    "PipelineFailed": {
+      "Type": "Fail",
+      "Error": "PipelineFailed",
+      "Cause": "Pipeline execution failed; inspect execution history."
+    }
+  }
+}

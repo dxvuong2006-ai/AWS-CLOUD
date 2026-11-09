@@ -1,5 +1,5 @@
 #Adapter AI thật trên đám mây AWS
-"""Kết nối Claude 3 Haiku với pipeline kiểm tra dữ liệu hiện có."""
+"""Kết nối Amazon Nova với pipeline kiểm tra dữ liệu hiện có."""
 
 import json
 import logging
@@ -45,16 +45,16 @@ class BedrockAIAdapter(BaseAIAdapter):
             allow_fallback: Cho phép dữ liệu Mock khi AWS không khả dụng.
             client: Client được tiêm để kiểm thử, không cần gọi AWS thật.
             model_id: Mã mô hình; mặc định lấy BEDROCK_MODEL_ID.
-            region_name: Vùng AWS; mặc định lấy AWS_REGION hoặc us-east-1.
+            region_name: Vùng AWS; mặc định lấy AWS_REGION hoặc ap-southeast-1.
         """
         self.allow_fallback = allow_fallback
         self.model_id = model_id or os.getenv(
             "BEDROCK_MODEL_ID",
-            "anthropic.claude-3-haiku-20240307-v1:0",
+            "amazon.nova-micro-v1:0",
         )
         self.region_name = (
             region_name or os.getenv("AWS_REGION")
-            or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+            or os.getenv("AWS_DEFAULT_REGION") or "ap-southeast-1"
         )
         self._client = client
         self.used_fallback = False
@@ -66,7 +66,7 @@ class BedrockAIAdapter(BaseAIAdapter):
             prompt: Chỉ dẫn đã ghép transcript.
 
         Returns:
-            Văn bản do Claude sinh; stream luôn được đóng.
+            Văn bản do mô hình Bedrock sinh.
         """
         if self._client is None:
             self._client = boto3.client(
@@ -76,40 +76,24 @@ class BedrockAIAdapter(BaseAIAdapter):
                     retries={"max_attempts": 2, "mode": "standard"},
                 ),
             )
-        response = self._client.invoke_model(
-            modelId=self.model_id, contentType="application/json",
-            accept="application/json",
-            body=json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,
-                "temperature": 0,
-                "messages": [{"role": "user", "content": prompt}],
-            }),
+        response = self._client.converse(
+            modelId=self.model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 4096, "temperature": 0},
         )
-        stream = response["body"]
-        try:
-            result = json.loads(stream.read())
-        finally:
-            stream.close()
-        if not isinstance(result, dict):
-            raise ValueError("Claude returned an invalid response envelope.")
-        if result.get("stop_reason") == "max_tokens":
-            raise ValueError("Claude response exceeded the token limit.")
-        blocks = result.get("content")
+        if response.get("stopReason") == "max_tokens":
+            raise ValueError("Bedrock response exceeded the token limit.")
+        output = response.get("output", {})
+        blocks = output.get("message", {}).get("content")
         if not isinstance(blocks, list) or any(
-            not isinstance(block, dict)
-            or (
-                block.get("type") == "text"
-                and not isinstance(block.get("text"), str)
-            )
+            not isinstance(block, dict) or
+            ("text" in block and not isinstance(block["text"], str))
             for block in blocks
         ):
-            raise ValueError("Claude returned an invalid content envelope.")
-        text = "".join(
-            block["text"] for block in blocks if block.get("type") == "text"
-        )
+            raise ValueError("Bedrock returned an invalid content envelope.")
+        text = "".join(block.get("text", "") for block in blocks)
         if not text.strip():
-            raise ValueError("Claude returned no text.")
+            raise ValueError("Bedrock returned no text.")
         return text
 
     def _run(self, operation: Callable[[], T], fallback: Callable[[], T]) -> T:

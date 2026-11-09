@@ -281,38 +281,30 @@ def test_ai_failure_saves_nothing(db_session, review_context):
 
 
 def mock_response(value, *, stop_reason="end_turn"):
-    """Tạo stream phản hồi Bedrock giả để kiểm tra đóng tài nguyên.
-
-    Args:
-        value: Nội dung JSON mà Claude trả.
-        stop_reason: Lý do dừng mô phỏng.
-
-    Returns:
-        Stream nhị phân chứa phong bì Messages API.
-    """
-    return io.BytesIO(json.dumps({
-        "stop_reason": stop_reason,
-        "content": [{"type": "text", "text": json.dumps(value)}],
-    }).encode())
+    """Tạo phản hồi Converse giả lập."""
+    return {
+        "stopReason": stop_reason,
+        "output": {"message": {"role": "assistant", "content": [
+            {"text": json.dumps(value)}
+        ]}},
+    }
 
 
 @pytest.mark.parametrize("method", [
     "generate_summary", "generate_quiz", "extract_key_concepts",
 ])
-def test_bedrock_validates_output_and_closes_stream(method):
-    """Adapter gọi Haiku đúng hợp đồng và đóng stream sau khi đọc."""
+def test_bedrock_validates_converse_output(method, monkeypatch):
+    """Nova nhận prompt và trả dữ liệu đã kiểm tra schema."""
+    monkeypatch.delenv("BEDROCK_MODEL_ID", raising=False)
     client = Mock()
     expected = getattr(MockAIAdapter(), method)("Transcript")
-    stream = mock_response(expected)
-    client.invoke_model.return_value = {"body": stream}
+    client.converse.return_value = mock_response(expected)
     ai = BedrockAIAdapter(client=client)
     assert getattr(ai, method)("Transcript") == expected
-    assert stream.closed
-    request = client.invoke_model.call_args.kwargs
-    assert request["modelId"] == "anthropic.claude-3-haiku-20240307-v1:0"
-    body = json.loads(request["body"])
-    assert body["anthropic_version"] == "bedrock-2023-05-31"
-    assert body["messages"][0]["role"] == "user"
+    request = client.converse.call_args.kwargs
+    assert request["modelId"] == "amazon.nova-micro-v1:0"
+    assert request["messages"][0]["role"] == "user"
+    assert request["messages"][0]["content"][0]["text"]
     assert not ai.used_fallback
 
 
@@ -327,7 +319,7 @@ def test_bedrock_validates_output_and_closes_stream(method):
 def test_bedrock_fallback_requires_explicit_flag(error):
     """Lỗi AWS chỉ chuyển sang Mock khi có cờ cho phép."""
     client = Mock()
-    client.invoke_model.side_effect = error
+    client.converse.side_effect = error
     strict = BedrockAIAdapter(client=client)
     with pytest.raises(type(error)):
         strict.generate_summary("Transcript")
@@ -359,16 +351,15 @@ def test_lazy_client_env_and_missing_credentials(monkeypatch):
 @pytest.mark.parametrize("mode", ["invalid", "truncated"])
 def test_invalid_ai_data_never_silently_falls_back(mode):
     """Dữ liệu sai schema hoặc bị cắt phải báo lỗi dù đã bật dự phòng."""
-    stream = mock_response(
+    response = mock_response(
         {} if mode == "invalid" else MockAIAdapter().generate_summary("text"),
         stop_reason="max_tokens" if mode == "truncated" else "end_turn",
     )
     client = Mock()
-    client.invoke_model.return_value = {"body": stream}
+    client.converse.return_value = response
     ai = BedrockAIAdapter(client=client, allow_fallback=True)
     with pytest.raises(ValueError):
         ai.generate_summary("Transcript")
-    assert stream.closed
     assert not ai.used_fallback
 
 
@@ -472,7 +463,7 @@ def test_mock_fallback_still_requires_review(db_session, review_context):
     """Nội dung dự phòng không thể tự chuyển thành PUBLISHED."""
     owner, _, _, lesson = review_context
     client = Mock()
-    client.invoke_model.side_effect = NoCredentialsError()
+    client.converse.side_effect = NoCredentialsError()
     ai = BedrockAIAdapter(client=client, allow_fallback=True)
     draft = review_service.generate_draft(
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
