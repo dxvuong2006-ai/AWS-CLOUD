@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LearnCloud · Demo Người C</title><script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+<header class="bg-slate-950 text-white"><div class="max-w-5xl mx-auto px-6 py-8">
+<p class="text-cyan-300 text-sm font-semibold tracking-widest">LEARNCLOUD / LOCAL DEMO</p>
+<h1 class="text-3xl font-bold mt-2">Kiểm thử học liệu AI</h1><p class="text-slate-300 mt-2">Duyệt bài, làm quiz và hỏi Tutor trên dữ liệu demo.</p>
+</div></header>
+<main class="max-w-5xl mx-auto px-6 py-8 space-y-5">
+<div class="bg-white rounded-xl p-5 shadow-sm flex flex-wrap gap-4 items-end">
+<label class="text-sm font-medium">Vai trò <select id="role" class="block border rounded p-2 mt-1"><option value="1">Học viên · ID 1</option><option value="2">Giảng viên · ID 2</option></select></label>
+<label class="text-sm font-medium">Lesson ID <input id="lesson" type="number" min="1" value="1" class="block border rounded p-2 mt-1 w-32"></label>
+<label class="text-sm font-medium">Section ID <input id="section" type="number" min="1" value="1" class="block border rounded p-2 mt-1 w-32"></label>
+<p class="text-sm text-slate-500">ID phải tồn tại và có đúng vai trò trong database local.</p></div>
+<div class="flex gap-2"><button id="show-instructor" class="bg-indigo-700 text-white rounded px-4 py-2">Giảng viên</button><button id="show-student" class="bg-cyan-700 text-white rounded px-4 py-2">Học viên</button></div>
+<section id="instructor" class="bg-white rounded-xl p-6 shadow-sm space-y-4">
+<h2 class="text-xl font-bold">Duyệt học liệu</h2><div class="flex gap-3">
+<button id="review" class="bg-slate-900 text-white rounded px-4 py-2">Xem bản nháp</button>
+<button id="approve" class="bg-emerald-700 text-white rounded px-4 py-2">Duyệt bài</button></div>
+<pre id="draft" class="whitespace-pre-wrap break-words text-sm text-slate-700"></pre></section>
+<section id="student" class="hidden bg-white rounded-xl p-6 shadow-sm space-y-4">
+<h2 class="text-xl font-bold">Làm bài trắc nghiệm</h2>
+<button id="load-quiz" class="bg-slate-900 text-white rounded px-4 py-2">Tải quiz</button>
+<form id="quiz" class="space-y-4"></form><div id="results" class="space-y-3"></div></section>
+<div id="message" role="status" class="text-sm text-rose-700 whitespace-pre-wrap"></div>
+</main>
+<script>
+const api='http://127.0.0.1:8000', el=id=>document.getElementById(id);
+let quiz=null, revision=null;
+async function request(path,method='GET',body) {
+ const headers={'X-Demo-User':el('role').value};
+ if(body!==undefined) headers['Content-Type']='application/json';
+ const response=await fetch(api+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await response.json().catch(()=>({detail:'Không đọc được phản hồi'}));
+ if(!response.ok) throw new Error(JSON.stringify(data.detail||data));
+ return data;
+}
+function guard(fn){return async e=>{e?.preventDefault();el('message').textContent='';try{await fn()}catch(error){el('message').textContent='Không thể thực hiện: '+error.message}}}
+el('show-instructor').onclick=()=>{el('role').value='2';el('instructor').classList.remove('hidden');el('student').classList.add('hidden')};
+el('show-student').onclick=()=>{el('role').value='1';el('student').classList.remove('hidden');el('instructor').classList.add('hidden')};
+el('review').onclick=guard(async()=>{const data=await request('/lessons/'+el('lesson').value+'/ai-content');revision=data.revision;el('draft').textContent=JSON.stringify(data,null,2)});
+el('approve').onclick=guard(async()=>{if(!revision)throw Error('Hãy xem bản nháp trước khi duyệt.');const data=await request('/lessons/'+el('lesson').value+'/approve','POST',{expected_revision:revision});el('message').textContent='Đã duyệt: '+data.status});
+el('load-quiz').onclick=guard(async()=>{
+ quiz=await request('/sections/'+el('section').value+'/quiz'); const form=el('quiz');form.replaceChildren();el('results').replaceChildren();
+ quiz.questions.forEach((q,i)=>{const box=document.createElement('fieldset');box.className='border rounded p-4';const title=document.createElement('legend');title.textContent=(i+1)+'. '+q.question;box.append(title);
+ q.options.forEach(option=>{const label=document.createElement('label');label.className='block mt-2';const input=document.createElement('input');input.type='radio';input.name='q'+q.id;input.value=option;label.append(input,document.createTextNode(' '+option));box.append(label)});form.append(box)});
+ const button=document.createElement('button');button.textContent='Nộp bài';button.className='bg-emerald-700 text-white rounded px-4 py-2';form.append(button);
+});
+el('quiz').onsubmit=guard(async()=>{
+ if(!quiz)throw Error('Hãy tải quiz trước.');
+ const answers=quiz.questions.flatMap(q=>{const chosen=document.querySelector('input[name="q'+q.id+'"]:checked');return chosen?[{question_id:q.id,selected_answer:chosen.value}]:[]});
+ const result=await request('/quizzes/'+quiz.id+'/attempts','POST',{answers});const container=el('results');container.replaceChildren();const score=document.createElement('p');score.textContent='Điểm: '+result.score+'% · '+(result.passed?'Đạt':'Chưa đạt');container.append(score);
+ (result.results||[]).filter(row=>!row.is_correct && row.selected_answer).forEach(row=>{const button=document.createElement('button');button.className='block bg-indigo-700 text-white rounded px-4 py-2';button.textContent='Hỏi AI Tutor: '+row.question;button.onclick=guard(async()=>{const data=await request('/tutor/remediations','POST',{attempt_id:result.id,lesson_id:Number(el('lesson').value),question_id:row.id,selected_option:row.selected_answer});const out=document.createElement('pre');out.className='whitespace-pre-wrap text-sm';out.textContent=JSON.stringify(data,null,2);container.append(out)});container.append(button)});
+});
+</script></body></html>

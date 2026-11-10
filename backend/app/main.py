@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 # app.main may be launched from the backend directory with --app-dir backend.
 # Add the repository root before API modules import the sibling ai_pipeline package.
@@ -27,6 +28,8 @@ app = FastAPI(
     description="Backend API for the LearnCloud learning platform",
     version="0.1.0",
 )
+
+app.mount("/demo", StaticFiles(directory=PROJECT_ROOT / "backend" / "static", html=True), name="demo")
 
 # Thêm middleware để ghi log các yêu cầu
 app.add_middleware(RequestLoggingMiddleware)

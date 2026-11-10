@@ -16,3 +16,16 @@ def get_course_analytics(course_id: int, db: Session = Depends(get_db),
     if result is None:
         raise HTTPException(404, "Course not found.")
     return result
+
+
+
+@router.get("/analytics/quizzes/{quiz_id}")
+def get_quiz_analytics(quiz_id: int, db: Session = Depends(get_db),
+                       instructor=Depends(require_instructor)):
+    """Trả thống kê quiz thuộc khóa học giảng viên."""
+    from app.schemas.analytics import QuizAnalytics
+
+    result = analytics_service.get_quiz_analytics(db, quiz_id, instructor.id)
+    if result is None:
+        raise HTTPException(404, "Quiz not found.")
+    return QuizAnalytics.model_validate(result)
