@@ -37,11 +37,13 @@ def _context(db: Session, lesson_id: int) -> tuple[Lesson, Section, Course] | No
 def _owned_context(
     db: Session, lesson_id: int, user: User,
 ) -> tuple[Lesson, Section, Course]:
+    if str(user.role).upper() != "INSTRUCTOR":
+        raise HTTPException(403, "Instructor role required.")
     context = _context(db, lesson_id)
     if context is None:
         raise HTTPException(404, "Lesson not found.")
     lesson, section, course = context
-    if str(user.role).upper() != "ADMIN" and course.instructor_id != user.id:
+    if course.instructor_id != user.id:
         raise HTTPException(403, "You do not own this course.")
     return lesson, section, course
 
@@ -117,8 +119,6 @@ def create_flashcard(
     user: User = Depends(get_current_user),
 ):
     lesson, _, _ = _owned_context(db, lesson_id, user)
-    if str(user.role).upper() not in ("INSTRUCTOR", "ADMIN"):
-        raise HTTPException(403, "Instructor role required.")
     card = Flashcard(
         lesson_id=lesson.id,
         front=payload.front,

@@ -9,7 +9,6 @@ from app.config import settings
 from app.repositories import auth_repo
 from app.schemas.auth import RegisterRequest
 from app.utils.logging import get_logger
-import json
 
 
 logger = get_logger(__name__)
@@ -65,39 +64,6 @@ def _raise_cognito_error(exc):
 
 
 
-
-def _role_from_groups(claims: dict) -> str:
-    raw = claims.get("cognito:groups") or []
-
-    if isinstance(raw, str):
-        raw = raw.strip()
-
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            parsed = raw.strip("[]").split(",")
-
-        raw = parsed
-
-    if isinstance(raw, str):
-        raw = [raw]
-
-    if not isinstance(raw, (list, tuple, set)):
-        raw = []
-
-    groups = {
-        group.strip().strip('"\'').upper()
-        for group in raw
-        if isinstance(group, str)
-    }
-
-    if "ADMIN" in groups:
-        return "ADMIN"
-
-    if "INSTRUCTOR" in groups:
-        return "INSTRUCTOR"
-
-    return "STUDENT"
 
 def _attributes_from_cognito(response: dict, fallback_email: str | None = None) -> dict:
     attributes = {}
@@ -164,6 +130,9 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
     user = auth_repo.get_by_cognito_sub(db, sub)
     if user is None and email:
         user = auth_repo.get_by_email(db, email)
+        # Email alone must not rebind a provisioned identity and inherit its role.
+        if user is not None and user.cognito_sub not in (None, sub):
+            raise InvalidToken()
 
     if user is None:
         if not email:
@@ -174,7 +143,8 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
             cognito_sub=sub,
             name=name or email,
             email=email,
-            role=_role_from_groups(claims) if "cognito:groups" in claims else "STUDENT",
+            # Privileged roles require explicit provisioning in PostgreSQL.
+            role="STUDENT",
         )
     else:
         if user.cognito_sub != sub:
@@ -184,12 +154,8 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
         if name:
             user.name = name
         user.password_hash = None
-        logger.info(
-        "Cognito groups diagnostic: type=%s, raw=%r",
-        type(claims.get("cognito:groups")).__name__,
-        claims.get("cognito:groups"),)
-        if "cognito:groups" in claims:
-            user.role = _role_from_groups(claims)
+        # users.role is authoritative. A still-valid token can carry obsolete
+        # groups after a demotion; authentication must never undo that change.
         db.commit()
         db.refresh(user)
     return user

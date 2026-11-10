@@ -19,7 +19,10 @@ def get_by_id(db: Session, user_id: int) -> User | None:
 
 
 def get_by_cognito_sub(db: Session, cognito_sub: str) -> User | None:
-    return db.query(User).filter(User.cognito_sub == cognito_sub).first()
+    # Refresh an identity-map entry as well as querying the database: role
+    # revocations must be observed even if the session already loaded this user.
+    return (db.query(User).filter(User.cognito_sub == cognito_sub)
+            .populate_existing().first())
 
 
 def create_cognito_user(

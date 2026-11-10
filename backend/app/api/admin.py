@@ -72,10 +72,32 @@ def update_user(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(404, "User not found")
     changes = payload.model_dump(exclude_unset=True)
+    if "role" in changes:
+        if changes["role"] is None:
+            raise HTTPException(422, "Role must not be null")
+        # Serialize role changes across PostgreSQL workers, not just a count
+        # outside a transaction. Always lock the admin set in the same order.
+        admins = list(db.scalars(
+            select(User).where(User.role == "ADMIN").order_by(User.id)
+            .with_for_update().execution_options(populate_existing=True)
+        ).all())
+        # The caller may have been demoted while waiting for these locks.
+        if not any(user.id == _admin.id for user in admins):
+            db.rollback()
+            raise HTTPException(403, "Admin role required")
+        user = db.scalar(
+            select(User).where(User.id == user_id).with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if user is not None and user.role == "ADMIN" and changes["role"] != "ADMIN" and len(admins) < 2:
+            db.rollback()
+            raise HTTPException(409, "Cannot demote the last admin")
+    else:
+        user = db.get(User, user_id)
+    if user is None:
+        db.rollback()
+        raise HTTPException(404, "User not found")
     old_role = user.role
     old_email = user.email
     if "email" in changes and changes["email"] is not None:
@@ -108,6 +130,7 @@ def update_user(
                 new_role=changes["role"],
             )
         except auth_service.CognitoAuthError as exc:
+            db.rollback()
             raise HTTPException(
                 exc.status_code,
                 detail={"code": exc.code, "message": exc.message},
