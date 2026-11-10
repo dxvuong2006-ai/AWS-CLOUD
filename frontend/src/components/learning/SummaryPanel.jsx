@@ -5,7 +5,7 @@ export default function SummaryPanel({ summary, keyConcepts }) {
     : [];
 
   return (
-    <div className="card">
+    <div className="card lesson-summary">
       <h3 className="card-title">Tóm tắt bài học</h3>
       <p style={{ margin: 0, lineHeight: 1.6 }}>{text || "Chưa có tóm tắt"}</p>
       {concepts.length > 0 && (

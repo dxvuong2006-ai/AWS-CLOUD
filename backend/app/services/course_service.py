@@ -68,6 +68,7 @@ def update_course(
         "title",
         "description",
         "learning_objectives",
+        "cover_image",
     }
     update_data = {
         key: value

@@ -7,7 +7,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.database import SessionLocal
 from app.repositories.auth_repo import get_by_email
-from app.services.auth_service import hash_password
+from app.config import settings
+import boto3
 
 
 def main():
@@ -22,8 +23,18 @@ def main():
         user = get_by_email(db, args.email.strip().lower())
         if user is None:
             raise SystemExit("User not found")
-        user.password_hash = hash_password(password)
-        db.commit()
+        if not user.cognito_sub or user.cognito_sub.startswith("local:"):
+            raise SystemExit("User is not linked to Cognito yet")
+        client = boto3.client(
+            "cognito-idp",
+            region_name=settings.COGNITO_REGION or settings.AWS_REGION,
+        )
+        client.admin_set_user_password(
+            UserPoolId=settings.COGNITO_USER_POOL_ID,
+            Username=user.cognito_sub,
+            Password=password,
+            Permanent=True,
+        )
         print(f"Password updated for user id={user.id}, role={user.role}.")
 
 

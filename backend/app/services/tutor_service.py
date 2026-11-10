@@ -78,7 +78,7 @@ def _public(session):
                 for q in session.practice_questions]}
 
 
-def create_session(db, student_id, attempt_id, ai_client=None):
+def create_session(db, student_id, attempt_id, ai_client=None, defer_commit=False):
     """Tạo phiên cho lượt thi chưa đạt của học viên."""
     owner = tutor_repo.get_attempt_owner(db, attempt_id)
     if owner is not None and owner != student_id:
@@ -123,7 +123,7 @@ def create_session(db, student_id, attempt_id, ai_client=None):
                            attempt_id=attempt_id,
                            practice_questions=result["practice_questions"],
                            remediation_completed=False)
-    tutor_repo.save_session(db, session, result["explanation"])
+    tutor_repo.save_session(db, session, result["explanation"], commit=not defer_commit)
     return {**_public(session), "explanation": result["explanation"]}
 
 
@@ -183,6 +183,12 @@ def submit_practice(db, student_id, session_id, answers):
     session = tutor_repo.get_session(db, session_id, student_id, lock=True)
     if session is None:
         raise TutorError(404, "Tutor session not found.")
+    if session.workflow_state:
+        from app.services import remediation_service
+        payload = remediation_service.submit(db, student_id, session_id, answers)
+        result = payload["result"]
+        return {"correct": result["correct"], "total": result["total"],
+                "remediation_completed": payload["remediation_completed"]}
     questions = session.practice_questions
     if not questions or len(answers) != len(questions):
         raise TutorError(422, "Submit one answer per practice question.")

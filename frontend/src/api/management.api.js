@@ -1,0 +1,10 @@
+import { request } from "./client";
+const id = encodeURIComponent;
+export const listCourses = () => request("/instructor/courses");
+export const getCourse = courseId => request("/instructor/courses/" + id(courseId));
+export const saveCourse = (courseId, body) => request(courseId ? "/courses/" + id(courseId) : "/courses", { method: courseId ? "PATCH" : "POST", body });
+export const addSection = (courseId, body) => request("/courses/" + id(courseId) + "/sections", { method: "POST", body });
+export const addLesson = (sectionId, body) => request("/sections/" + id(sectionId) + "/lessons", { method: "POST", body });
+export const publishCourse = courseId => request("/courses/" + id(courseId) + "/publish", { method: "POST" });
+export const processingStatus = lessonId => request("/lessons/" + id(lessonId) + "/processing-status");
+export const retryProcessing = lessonId => request("/lessons/" + id(lessonId) + "/retry", { method: "POST" });

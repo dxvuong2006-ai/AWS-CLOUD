@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.adapters.ai.bedrock_ai import BedrockAIAdapter
 from app.dependencies import get_db, require_instructor
@@ -13,8 +14,41 @@ from app.schemas.review import (
     DraftApproval, DraftGeneration, DraftUpdate, ReviewResponse,
 )
 from app.services import review_service
+from app.models.course import Course
+from app.models.section import Section
+from app.models.lesson import Lesson
 
 router = APIRouter(tags=["Instructor review"])
+
+
+@router.get("/instructor/review-queue")
+def list_review_queue(
+    db: Session = Depends(get_db),
+    instructor: User = Depends(require_instructor),
+):
+    lessons = db.scalars(
+        select(Lesson)
+        .join(Section, Section.id == Lesson.section_id)
+        .join(Course, Course.id == Section.course_id)
+        .where(
+            Course.instructor_id == instructor.id,
+            Lesson.status.in_(["REVIEW_REQUIRED", "PUBLISHED"]),
+        )
+        .order_by(Lesson.updated_at.desc(), Lesson.id.desc())
+    ).all()
+    rows = []
+    for lesson in lessons:
+        section = db.get(Section, lesson.section_id)
+        course = db.get(Course, section.course_id) if section else None
+        rows.append({
+            "id": lesson.id,
+            "title": lesson.title,
+            "course_id": course.id if course else None,
+            "course_title": course.title if course else "",
+            "processing_status": "READY" if lesson.status == "REVIEW_REQUIRED" else "PUBLISHED",
+            "status": lesson.status,
+        })
+    return rows
 
 
 def _call(operation, **kwargs) -> ReviewResponse:

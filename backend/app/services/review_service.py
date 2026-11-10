@@ -99,6 +99,10 @@ def _response(
         lesson_id=lesson.id, section_id=lesson.section_id, quiz_id=quiz.id,
         title=lesson.title, summary=lesson.summary,
         key_concepts=lesson.key_concepts_json, quiz_title=quiz.title,
+        flashcards=[
+            dict(front=item.front, back=item.back, position=item.position)
+            for item in review_repo.get_flashcards(db, lesson.id)
+        ],
         questions=[
             dict(
                 question=item.question, options=item.options_json,
@@ -172,6 +176,14 @@ def generate_draft(
         title=summary["title"], summary=summary["summary"],
         key_concepts=concepts, quiz_title=summary["title"],
         questions=quiz_data["questions"],
+        flashcards=[
+            dict(
+                front=item.term if hasattr(item, "term") else item["term"],
+                back=item.definition if hasattr(item, "definition") else item["definition"],
+                position=index,
+            )
+            for index, item in enumerate(concepts, 1)
+        ],
     )
     with review_repo.transaction(db):
         review_repo.lock_section(db, lesson_id)

@@ -5,6 +5,18 @@ from sqlalchemy.orm import Session
 
 from app.models.enrollment import Enrollment
 
+
+def list_student_enrollments(
+    db: Session,
+    student_id: int,
+) -> list[Enrollment]:
+    statement = (
+        select(Enrollment)
+        .where(Enrollment.student_id == student_id)
+        .order_by(Enrollment.enrolled_at.desc(), Enrollment.id.desc())
+    )
+    return list(db.scalars(statement).all())
+
 # lấy enrollment
 def get_enrollment(
     db: Session,

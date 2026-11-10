@@ -56,15 +56,18 @@ def get_lesson(db, lesson_id):
     return db.query(Lesson).filter(Lesson.id == lesson_id).first()
 
 
-def save_session(db, session, explanation):
+def save_session(db, session, explanation, commit=True):
     """Lưu phiên và lời giải trong một giao dịch."""
     try:
         db.add(session)
         db.flush()
         db.add(TutorMessage(session_id=session.id, role="ASSISTANT",
                             content=explanation))
-        db.commit()
-        db.refresh(session)
+        if commit:
+            db.commit()
+            db.refresh(session)
+        else:
+            db.flush()
         return session
     except Exception:
         db.rollback()

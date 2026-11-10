@@ -1,1 +1,380 @@
-
+{
+  "1:s1": {
+    "id": "quiz-cloud-s1",
+    "title": "Checkpoint cuối section",
+    "questions": [
+      {
+        "id": "q1",
+        "text": "Điện toán đám mây cho phép bạn làm gì?",
+        "concept": "Điện toán đám mây",
+        "options": [
+          {
+            "id": "a",
+            "text": "Thuê tài nguyên tính toán qua Internet"
+          },
+          {
+            "id": "b",
+            "text": "Chỉ mua máy chủ vật lý riêng"
+          },
+          {
+            "id": "c",
+            "text": "Chỉ lưu ảnh trên điện thoại"
+          },
+          {
+            "id": "d",
+            "text": "Cài phần mềm hoàn toàn offline"
+          }
+        ],
+        "correct_option_id": "a"
+      },
+      {
+        "id": "q2",
+        "text": "Mô hình chỉ trả tiền theo mức sử dụng gọi là gì?",
+        "concept": "Pay-as-you-go",
+        "options": [
+          {
+            "id": "a",
+            "text": "Thuê bao trọn đời"
+          },
+          {
+            "id": "b",
+            "text": "Mua đứt"
+          },
+          {
+            "id": "c",
+            "text": "Pay-as-you-go"
+          },
+          {
+            "id": "d",
+            "text": "Trả trước một năm"
+          }
+        ],
+        "correct_option_id": "c"
+      },
+      {
+        "id": "q3",
+        "text": "IaaS cho thuê thứ gì?",
+        "concept": "IaaS",
+        "options": [
+          {
+            "id": "a",
+            "text": "Phần mềm hoàn chỉnh"
+          },
+          {
+            "id": "b",
+            "text": "Hạ tầng như máy ảo, mạng, lưu trữ"
+          },
+          {
+            "id": "c",
+            "text": "Chỉ tên miền"
+          },
+          {
+            "id": "d",
+            "text": "Chỉ dịch vụ email"
+          }
+        ],
+        "correct_option_id": "b"
+      },
+      {
+        "id": "q4",
+        "text": "Gmail thuộc mô hình dịch vụ nào?",
+        "concept": "SaaS",
+        "options": [
+          {
+            "id": "a",
+            "text": "IaaS"
+          },
+          {
+            "id": "b",
+            "text": "PaaS"
+          },
+          {
+            "id": "c",
+            "text": "On-premises"
+          },
+          {
+            "id": "d",
+            "text": "SaaS"
+          }
+        ],
+        "correct_option_id": "d"
+      },
+      {
+        "id": "q5",
+        "text": "PaaS cho thuê thứ gì?",
+        "concept": "PaaS",
+        "options": [
+          {
+            "id": "a",
+            "text": "Nền tảng để triển khai ứng dụng mà không quản lý máy chủ"
+          },
+          {
+            "id": "b",
+            "text": "Chỉ ổ cứng"
+          },
+          {
+            "id": "c",
+            "text": "Chỉ băng thông"
+          },
+          {
+            "id": "d",
+            "text": "Chỉ chứng chỉ SSL"
+          }
+        ],
+        "correct_option_id": "a"
+      }
+    ]
+  },
+  "1:s2": {
+    "id": "quiz-cloud-s2",
+    "title": "Checkpoint: Dịch vụ lưu trữ",
+    "questions": [
+      {
+        "id": "quiz-cloud-s2-q1",
+        "text": "Amazon S3 lưu dữ liệu theo mô hình nào?",
+        "concept": "Object storage",
+        "options": [
+          {
+            "id": "a",
+            "text": "Object"
+          },
+          {
+            "id": "b",
+            "text": "Block"
+          },
+          {
+            "id": "c",
+            "text": "Bộ nhớ CPU"
+          },
+          {
+            "id": "d",
+            "text": "Cơ sở dữ liệu quan hệ"
+          }
+        ],
+        "correct_option_id": "a"
+      },
+      {
+        "id": "quiz-cloud-s2-q2",
+        "text": "Bucket trong S3 dùng để làm gì?",
+        "concept": "S3 bucket",
+        "options": [
+          {
+            "id": "a",
+            "text": "Chạy container"
+          },
+          {
+            "id": "b",
+            "text": "Chứa các object"
+          },
+          {
+            "id": "c",
+            "text": "Cấp địa chỉ IP"
+          },
+          {
+            "id": "d",
+            "text": "Biên dịch mã"
+          }
+        ],
+        "correct_option_id": "b"
+      },
+      {
+        "id": "quiz-cloud-s2-q3",
+        "text": "Presigned URL có đặc điểm nào?",
+        "concept": "Presigned URL",
+        "options": [
+          {
+            "id": "a",
+            "text": "Luôn công khai vĩnh viễn"
+          },
+          {
+            "id": "b",
+            "text": "Chứa mật khẩu AWS"
+          },
+          {
+            "id": "c",
+            "text": "Cấp quyền truy cập có thời hạn"
+          },
+          {
+            "id": "d",
+            "text": "Chỉ dùng để xóa bucket"
+          }
+        ],
+        "correct_option_id": "c"
+      },
+      {
+        "id": "quiz-cloud-s2-q4",
+        "text": "Muốn giữ nhiều phiên bản object, nên bật gì?",
+        "concept": "Versioning",
+        "options": [
+          {
+            "id": "a",
+            "text": "Public access"
+          },
+          {
+            "id": "b",
+            "text": "Auto Scaling"
+          },
+          {
+            "id": "c",
+            "text": "Load Balancer"
+          },
+          {
+            "id": "d",
+            "text": "Versioning"
+          }
+        ],
+        "correct_option_id": "d"
+      },
+      {
+        "id": "quiz-cloud-s2-q5",
+        "text": "Object key được dùng để làm gì?",
+        "concept": "Object key",
+        "options": [
+          {
+            "id": "a",
+            "text": "Xác định object trong bucket"
+          },
+          {
+            "id": "b",
+            "text": "Đặt mật khẩu đăng nhập"
+          },
+          {
+            "id": "c",
+            "text": "Tạo máy ảo"
+          },
+          {
+            "id": "d",
+            "text": "Cấu hình CPU"
+          }
+        ],
+        "correct_option_id": "a"
+      }
+    ]
+  },
+  "2:s1": {
+    "id": "quiz-docker-s1",
+    "title": "Checkpoint: Container cơ bản",
+    "questions": [
+      {
+        "id": "quiz-docker-s1-q1",
+        "text": "Docker image là gì?",
+        "concept": "Docker image",
+        "options": [
+          {
+            "id": "a",
+            "text": "Mẫu đóng gói ứng dụng và phụ thuộc"
+          },
+          {
+            "id": "b",
+            "text": "Một container đang chạy"
+          },
+          {
+            "id": "c",
+            "text": "Một tên miền"
+          },
+          {
+            "id": "d",
+            "text": "Một máy chủ vật lý"
+          }
+        ],
+        "correct_option_id": "a"
+      },
+      {
+        "id": "quiz-docker-s1-q2",
+        "text": "Container được tạo từ đâu?",
+        "concept": "Container",
+        "options": [
+          {
+            "id": "a",
+            "text": "DNS record"
+          },
+          {
+            "id": "b",
+            "text": "Docker image"
+          },
+          {
+            "id": "c",
+            "text": "IP công cộng"
+          },
+          {
+            "id": "d",
+            "text": "SSH key"
+          }
+        ],
+        "correct_option_id": "b"
+      },
+      {
+        "id": "quiz-docker-s1-q3",
+        "text": "Dockerfile dùng để làm gì?",
+        "concept": "Dockerfile",
+        "options": [
+          {
+            "id": "a",
+            "text": "Lưu lịch sử truy cập"
+          },
+          {
+            "id": "b",
+            "text": "Thay hệ điều hành host"
+          },
+          {
+            "id": "c",
+            "text": "Mô tả các bước xây dựng image"
+          },
+          {
+            "id": "d",
+            "text": "Cấp chứng chỉ TLS"
+          }
+        ],
+        "correct_option_id": "c"
+      },
+      {
+        "id": "quiz-docker-s1-q4",
+        "text": "Lệnh nào xây dựng image từ Dockerfile?",
+        "concept": "Docker build",
+        "options": [
+          {
+            "id": "a",
+            "text": "docker ps"
+          },
+          {
+            "id": "b",
+            "text": "docker stop"
+          },
+          {
+            "id": "c",
+            "text": "docker logs"
+          },
+          {
+            "id": "d",
+            "text": "docker build"
+          }
+        ],
+        "correct_option_id": "d"
+      },
+      {
+        "id": "quiz-docker-s1-q5",
+        "text": "Volume thường được dùng để làm gì?",
+        "concept": "Docker volume",
+        "options": [
+          {
+            "id": "a",
+            "text": "Lưu dữ liệu bền vững ngoài vòng đời container"
+          },
+          {
+            "id": "b",
+            "text": "Đổi tên image"
+          },
+          {
+            "id": "c",
+            "text": "Giảm phiên bản Docker"
+          },
+          {
+            "id": "d",
+            "text": "Tắt mạng của host"
+          }
+        ],
+        "correct_option_id": "a"
+      }
+    ]
+  }
+}
