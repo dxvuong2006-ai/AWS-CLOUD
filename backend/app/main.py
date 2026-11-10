@@ -19,6 +19,7 @@ from app.api.sections import router as sections_router
 from app.api.enrollments import router as enrollments_router
 from app.api.uploads import router as uploads_router
 from app.api.auth import router as auth_router
+from app.api.local_auth import router as local_auth_router
 from app.api.admin import router as admin_router
 from app.api.progress import router as progress_router
 from app.api.flashcards import router as flashcards_router
@@ -54,6 +55,7 @@ app.add_middleware(
 
 app.include_router(screen_workflows.router)
 app.include_router(auth_router)
+app.include_router(local_auth_router)
 app.include_router(quizzes_router)
 app.include_router(courses_router)
 app.include_router(tutor.router)

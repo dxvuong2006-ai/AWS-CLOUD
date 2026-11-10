@@ -1,5 +1,6 @@
 import { readSession, clearSession } from "./session";
 import { currentCognitoAccessToken } from "./cognito";
+import { LOCAL_AUTH } from "../config/auth";
 
 const BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ||
@@ -23,8 +24,8 @@ export async function request(
   let token = null;
   try {
     token = auth
-      ? storedSession?.token.startsWith("mock:")
-        ? storedSession.token
+      ? LOCAL_AUTH
+        ? storedSession?.token
         : await currentCognitoAccessToken()
       : null;
   } catch (error) {

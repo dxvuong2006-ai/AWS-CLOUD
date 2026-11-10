@@ -7,11 +7,12 @@ import {
 import { cognitoUserPoolsTokenProvider } from "aws-amplify/auth/cognito";
 import { sessionStorage as amplifySessionStorage } from "aws-amplify/utils";
 import { readSession, writeSession } from "./session";
+import { LOCAL_AUTH } from "../config/auth";
 
 const region = import.meta.env.VITE_AWS_REGION || import.meta.env.VITE_COGNITO_REGION;
 const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 const userPoolClientId = import.meta.env.VITE_COGNITO_APP_CLIENT_ID;
-const isConfigured = Boolean(region && userPoolId && userPoolClientId);
+const isConfigured = !LOCAL_AUTH && Boolean(region && userPoolId && userPoolClientId);
 
 class CognitoAuthError extends Error {
   constructor(status, message, code = "") {

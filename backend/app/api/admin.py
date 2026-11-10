@@ -100,6 +100,9 @@ def update_user(
         raise HTTPException(404, "User not found")
     old_role = user.role
     old_email = user.email
+    if not user.cognito_sub and "email" in changes and str(changes["email"]).lower() != old_email.lower():
+        db.rollback()
+        raise HTTPException(409, "Local login email changes require a separate ownership verification flow")
     if "email" in changes and changes["email"] is not None:
         changes["email"] = str(changes["email"]).lower()
     if "name" in changes and changes["name"] is not None:
@@ -109,19 +112,20 @@ def update_user(
     for key, value in changes.items():
         setattr(user, key, value)
     try:
-        auth_service.admin_update_profile(
-            cognito_sub=user.cognito_sub or "",
-            email=old_email,
-            name=changes.get("name"),
-            new_email=changes.get("email"),
-        )
+        if user.cognito_sub:
+            auth_service.admin_update_profile(
+                cognito_sub=user.cognito_sub,
+                email=old_email,
+                name=changes.get("name"),
+                new_email=changes.get("email"),
+            )
     except auth_service.CognitoAuthError as exc:
         db.rollback()
         raise HTTPException(
             exc.status_code,
             detail={"code": exc.code, "message": exc.message},
         ) from exc
-    if "role" in changes:
+    if "role" in changes and user.cognito_sub:
         try:
             auth_service.admin_update_role(
                 cognito_sub=user.cognito_sub or "",

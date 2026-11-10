@@ -1,11 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { AUTH_MOCK, loginUser, fetchCurrentUser } from "../api/auth.api";
+import { AUTH_MOCK, loginUser, logoutUser, fetchCurrentUser } from "../api/auth.api";
 import { readSession, writeSession, clearSession } from "../api/session";
 import { isAllowedRole } from "../utils/roles";
 import {
   currentCognitoSession,
   refreshCognitoSession,
-  signOutFromCognito,
 } from "../api/cognito";
 
 const AuthContext = createContext(null);
@@ -18,12 +17,14 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     operation.current += 1;
+    const pending = logoutUser();
     clearSession();
     setUser(null);
     setExpiresAt(null);
     setLoading(false);
-    signOutFromCognito().catch((error) => {
-      console.error("Cognito sign-out failed.", error);
+    return pending.catch((error) => {
+      if (error.status !== 401)
+        console.error("Server sign-out failed; the token will expire at its configured deadline.");
     });
   }, []);
 
@@ -65,8 +66,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!expiresAt) return;
-    const stored = readSession();
-    if (stored?.token.startsWith("mock:")) {
+    if (AUTH_MOCK) {
       const timer = setTimeout(logout, Math.max(0, expiresAt - Date.now()));
       return () => clearTimeout(timer);
     }
@@ -101,16 +101,17 @@ export function AuthProvider({ children }) {
       account = response.user ?? await fetchCurrentUser();
     } catch (error) {
       if (!response.user) {
+        await logoutUser().catch(() => {});
         clearSession();
-        await signOutFromCognito();
       }
       throw error;
     }
     if (!isAllowedRole(account?.role)) {
+      await logoutUser().catch(() => {});
       clearSession();
-      await signOutFromCognito();
       throw new Error("Tài khoản không có vai trò được hỗ trợ.");
     }
+    if (operation.current !== id) return;
     writeSession({ token: response.access_token, expiresAt: expiry, user: account });
     setExpiresAt(expiry);
     setUser(account);

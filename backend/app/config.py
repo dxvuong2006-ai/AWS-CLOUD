@@ -29,6 +29,20 @@ class Settings(BaseSettings):
     COGNITO_USER_POOL_ID: str = ""
     COGNITO_APP_CLIENT_ID: str = ""
 
+    # Independent of the frontend selector; never accepted in production.
+    LOCAL_AUTH_ENABLED: bool = False
+    LOCAL_AUTH_JWT_SECRET: SecretStr | None = None
+    LOCAL_AUTH_JWT_ISSUER: str = "learncloud-local"
+    LOCAL_AUTH_JWT_AUDIENCE: str = "learncloud-api"
+    LOCAL_AUTH_OTP_TTL_SECONDS: int = Field(default=600, ge=60, le=1800)
+    LOCAL_AUTH_RESEND_SECONDS: int = Field(default=60, ge=30, le=600)
+    LOCAL_AUTH_OTP_MAX_ATTEMPTS: int = Field(default=5, ge=1, le=10)
+    LOCAL_AUTH_LOGIN_MAX_ATTEMPTS: int = Field(default=5, ge=1, le=20)
+    LOCAL_AUTH_LOGIN_LOCK_SECONDS: int = Field(default=300, ge=60, le=3600)
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = Field(default=1025, ge=1, le=65535)
+    SMTP_FROM: str = "LearnCloud <no-reply@learncloud.test>"
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",

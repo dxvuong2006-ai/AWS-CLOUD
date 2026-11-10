@@ -131,7 +131,7 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
     if user is None and email:
         user = auth_repo.get_by_email(db, email)
         # Email alone must not rebind a provisioned identity and inherit its role.
-        if user is not None and user.cognito_sub not in (None, sub):
+        if user is not None and user.cognito_sub != sub:
             raise InvalidToken()
 
     if user is None:
@@ -147,6 +147,9 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
             role="STUDENT",
         )
     else:
+        email_owner = auth_repo.get_by_email(db, email) if email else None
+        if email_owner is not None and email_owner.id != user.id:
+            raise InvalidToken()
         if user.cognito_sub != sub:
             user.cognito_sub = sub
         if email:
@@ -170,6 +173,15 @@ def jwks_url() -> str:
 
 
 def user_from_access_token(db: Session, token: str):
+    # Untrusted header only selects a verifier. Each verifier pins its own
+    # algorithm, key and issuer; a failed verification never falls back.
+    try:
+        local_token = jwt.get_unverified_header(token).get("alg") == "HS256"
+    except jwt.PyJWTError:
+        local_token = False
+    if local_token:
+        from app.services import local_auth_service
+        return local_auth_service.user_from_access_token(db, token)
     try:
         signing_keys = jwt.PyJWKClient(jwks_url(), cache_keys=True, lifespan=3600).get_signing_key_from_jwt(token)
         claims = jwt.decode(
@@ -192,7 +204,8 @@ def user_from_access_token(db: Session, token: str):
         return user
     except InvalidToken:
         raise
-    except (jwt.PyJWTError, ValueError, TypeError, OSError, BotoCoreError, ClientError) as exc:
+    except (jwt.PyJWTError, ValueError, TypeError, OSError, BotoCoreError, ClientError,
+            auth_repo.EmailAlreadyExists) as exc:
         logger.warning(
             "Cognito token verification failed exception_type=%s",
             type(exc).__name__,
@@ -201,7 +214,9 @@ def user_from_access_token(db: Session, token: str):
 
 
 def register_student(db: Session, data: RegisterRequest):
-    del db
+    if auth_repo.get_by_email(db, str(data.email)) is not None:
+        raise CognitoAuthError("Email is already registered. Use its original sign-in method.",
+                               code="EMAIL_EXISTS", status_code=409)
     try:
         response = cognito_client().sign_up(
             ClientId=settings.COGNITO_APP_CLIENT_ID,
@@ -237,6 +252,9 @@ def verify_email(db: Session, email: str, code: str):
         existing = auth_repo.get_by_cognito_sub(db, identity["sub"])
         if existing is None:
             existing = auth_repo.get_by_email(db, identity["email"])
+        if existing is not None and existing.cognito_sub != identity["sub"]:
+            raise CognitoAuthError("Email belongs to a different identity. Account linking is not supported.",
+                                   code="IDENTITY_CONFLICT", status_code=409)
         if existing is None:
             auth_repo.create_cognito_user(
                 db,

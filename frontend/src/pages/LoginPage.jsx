@@ -41,7 +41,7 @@ export default function LoginPage() {
           : err.status === 409
             ? err.message
             : err.status === 503
-              ? "Không kết nối được Cognito. Vui lòng kiểm tra cấu hình và thử lại."
+              ? (AUTH_MOCK ? err.message : "Không kết nối được Cognito. Vui lòng kiểm tra cấu hình và thử lại.")
               : err.status === 422
                 ? "Vui lòng kiểm tra email và mật khẩu."
                 : "Không đăng nhập được. Vui lòng thử lại.");
@@ -106,7 +106,7 @@ export default function LoginPage() {
           <Link className="login-register" to="/register"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="12" cy="7" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></svg>Đăng ký tài khoản học viên</Link>
           <p className="login-account-note">Tài khoản giảng viên và quản trị viên do quản trị viên cấp.</p>
           {location.state?.message && <p className="login-notice login-notice-success" role="status">{location.state.message}</p>}
-          {AUTH_MOCK && <p className="login-notice">Tài khoản mô phỏng: đăng ký tài khoản mới để thử. Không dùng mật khẩu thật.</p>}
+          {AUTH_MOCK && <p className="login-notice">Xác thực nội bộ. Mở Mailpit tại localhost:8025 để lấy mã xác minh email.</p>}
           {error && <p><Link to="/verify-email">Xác minh email / gửi lại mã</Link></p>}
         </div>
       </section>

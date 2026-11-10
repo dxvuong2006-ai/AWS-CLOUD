@@ -30,6 +30,12 @@ class UserResponse(BaseModel):
     created_at: datetime | None = None
 
 
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
 class AdminUserCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)
