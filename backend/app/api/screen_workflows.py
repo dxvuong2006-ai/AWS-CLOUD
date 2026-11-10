@@ -1,6 +1,6 @@
 """Endpoints connecting UI screens 21–35 to owner-scoped services."""
 from typing import Literal
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, require_student, require_instructor, get_current_user
@@ -23,11 +23,13 @@ class Answers(BaseModel):
     answers: list[str] = Field(min_length=2, max_length=3)
 
 @router.get("/instructor/courses")
-def courses(db: Session = Depends(get_db), user=Depends(require_instructor)):
+def courses(response: Response, db: Session = Depends(get_db), user=Depends(require_instructor)):
+    response.headers["Cache-Control"] = "no-store"
     return service.instructor_courses(db, user.id)
 
 @router.get("/instructor/courses/{course_id}")
-def course(course_id: int, db: Session = Depends(get_db), user=Depends(require_instructor)):
+def course(course_id: int, response: Response, db: Session = Depends(get_db), user=Depends(require_instructor)):
+    response.headers["Cache-Control"] = "no-store"
     return service.course_detail(db, service.owned_course(db, user.id, course_id))
 
 @router.get("/instructor/dashboard")

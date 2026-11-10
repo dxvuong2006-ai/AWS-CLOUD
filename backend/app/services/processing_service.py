@@ -7,6 +7,7 @@ from app.adapters.video.base import ProcessorDispatchError, VideoProcessingReque
 from app.adapters.video.local_processor import LocalProcessor
 from app.config import settings
 from app.lesson_states import LessonStatus
+from app.schemas.lesson import LessonVideoFields
 from app.repositories import courses_repo, lessons_repo
 from app.services import lesson_service
 from app.utils.errors import AppError, ConflictError, ExternalServiceError, NotFoundError
@@ -51,11 +52,11 @@ def get_video_processor(db: Session | None = None) -> VideoProcessor:
     raise WorkflowUnavailableError()
 
 
-def status_response(lesson) -> dict:
+def status_response(lesson, upload_metadata=None) -> dict:
     # Stored pipeline messages are untrusted: never forward AWS errors, keys or URLs.
     return {
         "lesson_id": lesson.id,
-        "status": lesson.status,
+        **LessonVideoFields.model_validate(lesson).model_copy(update=upload_metadata or {}).model_dump(mode="json"),
         "retry_count": lesson.retry_count,
         "error_message": "Video processing failed. Please retry or contact support." if lesson.status == LessonStatus.FAILED.value else None,
         "updated_at": lesson.updated_at,
@@ -66,7 +67,8 @@ def get_processing_status(db: Session, lesson_id: int, *, user_id: int, user_rol
     lesson, _ = lesson_service.get_lesson_for_management(
         db, lesson_id, user_id=user_id, user_role=user_role
     )
-    return status_response(lesson)
+    from app.services.upload_service import pending_upload_metadata
+    return status_response(lesson, pending_upload_metadata(db, lesson))
 
 
 def _verify_input(key: str) -> None:

@@ -421,26 +421,36 @@ class PipelineTests(unittest.TestCase):
 
 
 class UploadCompatibilityTests(unittest.TestCase):
-    def test_legacy_upload_shape_and_no_ledger_when_disabled(self):
+    def reservation(self, enabled, fail=False):
         db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
+        storage.has_raw_video_objects.return_value = False
+        db.query.return_value.filter_by.return_value.populate_existing.return_value.limit.return_value.all.return_value = []
         storage.generate_upload_url.return_value = "opaque-test-url"
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", False):
-            result = UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
-        self.assertEqual(set(result), {"upload_url", "object_key", "expires_in", "method", "content_type"})
-        db.add.assert_not_called()
-        db.commit.assert_not_called()
+        if fail:
+            storage.generate_upload_url.side_effect = RuntimeError("signer unavailable")
+        lesson = SimpleNamespace(id=8, status="DRAFT", retry_count=0, raw_video_key=None, processed_video_key=None)
+        with patch.object(settings,"VIDEO_PIPELINE_ENABLED",enabled), \
+             patch.object(UploadService,"_lock",return_value=(lesson,SimpleNamespace(status="DRAFT"))), \
+             patch("app.services.upload_service.ledger_available",return_value=True):
+            if fail:
+                with self.assertRaises(RuntimeError):
+                    UploadService(storage).create_upload_url(db,8,1,"cloud.mp4","video/mp4",100)
+                result = None
+            else:
+                result = UploadService(storage).create_upload_url(db,8,1,"cloud.mp4","video/mp4",100)
+        return db, storage, lesson, result
+
+    def test_ledger_and_conditional_put_also_required_when_pipeline_disabled(self):
+        db, storage, lesson, result = self.reservation(False)
+        db.add.assert_called_once()
+        db.commit.assert_called_once()
+        self.assertEqual(result["required_headers"]["If-None-Match"],"*")
+        self.assertEqual(source_identity(result["object_key"])[1],result["upload_id"])
+        self.assertEqual(lesson.status,"DRAFT")
+        self.assertIsNone(lesson.raw_video_key)
 
     def test_opt_in_upload_registers_intent_before_commit_and_returns_required_headers(self):
-        db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
-        lesson = SimpleNamespace(id=8, section_id=4, status="DRAFT", retry_count=0)
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", True), \
-             patch("app.repositories.lessons_repo.get_by_id", return_value=lesson), \
-             patch("app.repositories.lessons_repo.get_section", return_value=SimpleNamespace(course_id=2)), \
-             patch("app.repositories.courses_repo.lock_by_id", return_value=SimpleNamespace(status="DRAFT", instructor_id=1)), \
-             patch("app.repositories.lessons_repo.lock_by_id", return_value=lesson):
-            result = UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
+        db, storage, lesson, result = self.reservation(True)
         db.add.assert_called_once()
         db.commit.assert_called_once()
         self.assertEqual(result["required_headers"]["If-None-Match"], "*")
@@ -448,17 +458,7 @@ class UploadCompatibilityTests(unittest.TestCase):
         self.assertEqual(lesson.status, "DRAFT")
 
     def test_opt_in_signer_failure_rolls_back_intent(self):
-        db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
-        storage.generate_upload_url.side_effect = RuntimeError("signer unavailable")
-        lesson = SimpleNamespace(id=8, section_id=4, status="DRAFT", retry_count=0)
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", True), \
-             patch("app.repositories.lessons_repo.get_by_id", return_value=lesson), \
-             patch("app.repositories.lessons_repo.get_section", return_value=SimpleNamespace(course_id=2)), \
-             patch("app.repositories.courses_repo.lock_by_id", return_value=SimpleNamespace(status="DRAFT", instructor_id=1)), \
-             patch("app.repositories.lessons_repo.lock_by_id", return_value=lesson):
-            with self.assertRaises(RuntimeError):
-                UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
+        db, storage, lesson, result = self.reservation(True,fail=True)
         db.commit.assert_not_called()
         db.rollback.assert_called_once()
 

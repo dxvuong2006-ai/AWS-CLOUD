@@ -1,8 +1,8 @@
 """Internal pipeline service. Never invoked automatically at import/startup.
 
 All claims use PostgreSQL row locks and a durable ledger. No DB schema creation.
-S3 EventBridge is the sole initial-upload dispatcher; confirmation is the verified
-S3 write itself, not an unimplemented confirm-upload endpoint.
+S3 EventBridge is the sole initial-upload dispatcher. API confirmation may attach
+verified RAW metadata but never starts a workflow or advances its generation.
 """
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -120,7 +120,9 @@ def claim(db, payload, execution_arn, storage):
         run = repo.run_for_attempt(db, upload.id, 0)
         if run is not None:
             return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
-        if lesson.status != "DRAFT" or lesson.retry_count != 0:
+        if (lesson.status != "DRAFT" or lesson.retry_count != 0
+                or lesson.raw_video_key not in (None, "", key)
+                or (lesson.processed_video_key and lesson.raw_video_key != key)):
             return {"decision": "IGNORE"}
         etag = _etag(payload.get("etag"))
         try:

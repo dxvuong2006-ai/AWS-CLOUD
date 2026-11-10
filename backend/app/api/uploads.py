@@ -3,15 +3,15 @@ from fastapi import (
     Depends,
     HTTPException,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 from botocore.exceptions import BotoCoreError, ClientError
 
-from app.database import SessionLocal
 from app.dependencies import get_db, require_instructor
 from app.models.user import User
 from app.adapters.storage.s3_storage import S3StorageAdapter
 from app.services.upload_service import UploadService
+from app.schemas.lesson import LessonProcessingStatusResponse
 
 
 router = APIRouter(
@@ -21,9 +21,21 @@ router = APIRouter(
 
 
 class UploadUrlRequest(BaseModel):
-    filename: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid")
+    filename: str = Field(min_length=1, max_length=255)
     content_type: str
     file_size: int = Field(gt=0)
+
+
+class ConfirmUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    upload_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+
+
+@router.post("/{lesson_id}/confirm-upload", response_model=LessonProcessingStatusResponse)
+def confirm_upload(lesson_id: int, payload: ConfirmUploadRequest,
+                   db: Session = Depends(get_db), instructor: User = Depends(require_instructor)):
+    return UploadService(S3StorageAdapter()).confirm_upload(db, lesson_id, instructor.id, payload.upload_id)
 
 
 @router.post("/{lesson_id}/upload-url")

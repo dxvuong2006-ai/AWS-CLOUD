@@ -9,13 +9,17 @@ from app.models.progress import LessonProgress
 from app.models.quiz import Quiz, QuizAttempt
 from app.models.user import User
 from app.services import analytics_service
+from app.schemas.lesson import LessonVideoFields
+from app.services.upload_service import pending_upload_metadata
 
 
 def course_detail(db, course):
     sections = db.query(Section).filter(Section.course_id == course.id).order_by(Section.position, Section.id).all()
     return {**{c.name: getattr(course, c.name) for c in course.__table__.columns},
             "sections": [{"id": s.id, "title": s.title, "position": s.position,
-                "lessons": [{"id": l.id, "title": l.title, "position": l.position, "status": l.status}
+                "lessons": [{"id": l.id, "title": l.title, "position": l.position,
+                             **LessonVideoFields.model_validate(l).model_copy(
+                                 update=pending_upload_metadata(db, l)).model_dump(mode="json")}
                     for l in db.query(Lesson).filter(Lesson.section_id == s.id).order_by(Lesson.position, Lesson.id)]}
                 for s in sections]}
 

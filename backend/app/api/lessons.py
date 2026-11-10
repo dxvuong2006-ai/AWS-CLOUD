@@ -13,6 +13,7 @@ from app.schemas.lesson import (
 from app.services import lesson_service, processing_service
 from app.models.course import Course
 from app.models.section import Section
+from app.services.upload_service import pending_upload_metadata
 
 router = APIRouter(tags=["Lessons"])
 
@@ -114,12 +115,13 @@ def get_lesson(
     user: User = Depends(get_current_user),
 ):
     try:
-        return lesson_service.get_lesson_for_user(
+        lesson = lesson_service.get_lesson_for_user(
             db,
             lesson_id,
             user_id=user.id,
             user_role=user.role,
         )
+        return LessonResponse.model_validate(lesson).model_copy(update=pending_upload_metadata(db, lesson))
     except (
         lesson_service.LessonNotFoundError,
         lesson_service.SectionNotFoundError,
@@ -212,7 +214,7 @@ def list_lessons(
     user: User = Depends(get_current_user),
 ):
     try:
-        return lesson_service.list_lessons_for_section(
+        rows = lesson_service.list_lessons_for_section(
             db,
             section_id,
             user_id=user.id,
@@ -220,6 +222,7 @@ def list_lessons(
             skip=skip,
             limit=limit,
         )
+        return [LessonResponse.model_validate(row).model_copy(update=pending_upload_metadata(db, row)) for row in rows]
     except (
         lesson_service.SectionNotFoundError,
         lesson_service.CourseNotFoundError,

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getCourse, saveCourse, addSection, addLesson, publishCourse } from "../api/management.api";
 import EditorDialog from "../components/instructor/EditorDialog";
-const statusLabels = { DRAFT: "Chưa có video", PUBLISHED: "Đã publish", REVIEW_REQUIRED: "Chờ duyệt", FAILED: "Thất bại", UPLOADED: "Đã tải lên", PROCESSING: "Đang xử lý", TRANSCRIBING: "Đang tạo transcript", AI_PROCESSING: "Đang tạo học liệu" };
+import { lessonVideoPresentation, shouldWatchVideoStatus } from "../utils/lessonVideoStatus";
 export default function CourseEditorPage() {
   const { courseId } = useParams();
   const navigate = useNavigate();
@@ -24,6 +24,7 @@ export default function CourseEditorPage() {
   const [sectionId, setSectionId] = useState("");
   const [version, setVersion] = useState(0);
   const guard = useRef(false);
+  const revision = useRef(0);
   useEffect(() => {
     let active = true;
     setCourse(null); setTitle(""); setDescription(""); setObjectives(""); setCover(null); setError(""); setNotice("");
@@ -33,9 +34,34 @@ export default function CourseEditorPage() {
       .catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [courseId, version]);
+  const watchVideoChanges = shouldWatchVideoStatus(course);
+  useEffect(() => {
+    if (!courseId) return;
+    let active = true, inFlight = false;
+    const refresh = async () => {
+      if (!active || document.hidden || guard.current || inFlight) return;
+      const requestedRevision = revision.current;
+      inFlight = true;
+      try {
+        const latest = await getCourse(courseId);
+        // Refresh server-backed structure/status, preserving unsaved form edits.
+        if (active && !guard.current && requestedRevision === revision.current) setCourse(latest);
+      } catch { /* Keep the last snapshot; normal load/retry still reports errors. */ }
+      finally { inFlight = false; }
+    };
+    const timer = watchVideoChanges ? setInterval(refresh, 5000) : null;
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [courseId, watchVideoChanges]);
   async function action(operation) {
     if (guard.current) return;
-    guard.current = true; setBusy(true); setError(""); setNotice("");
+    guard.current = true; revision.current += 1; setBusy(true); setError(""); setNotice("");
     try { await operation(); } catch (e) { setError(e.message || "Không lưu được thay đổi."); }
     finally { guard.current = false; setBusy(false); }
   }
@@ -91,8 +117,11 @@ export default function CourseEditorPage() {
       <div className="spec-card-heading"><h2>Section và lesson</h2><button className="btn-secondary" disabled={busy} onClick={() => openDialog("section")}>＋ Thêm section</button></div>
       {course.sections.map((section, index) => <section className="course-structure-section" key={section.id}>
         <div className="spec-card-heading"><h3>Section {index + 1} · {section.title}</h3><button className="btn-secondary" disabled={busy} onClick={() => openDialog("lesson", section.id)}>＋ Thêm lesson</button></div>
-        {section.lessons.map((lesson, i) => <div className="course-structure-lesson workflow-lesson" key={lesson.id}><strong>Bài {i + 1} · {lesson.title}</strong><div><span className={"status-chip " + (lesson.status === "PUBLISHED" ? "success" : lesson.status === "FAILED" ? "error" : "neutral")}>{statusLabels[lesson.status] || lesson.status}</span>
-          {lesson.status === "REVIEW_REQUIRED" ? <Link to={"/instructor/review/" + lesson.id}>Duyệt học liệu</Link> : lesson.status !== "PUBLISHED" && <Link to={"/instructor/courses/" + courseId + "/lessons/" + lesson.id + "/upload"}>{lesson.status === "DRAFT" ? "Tải video" : "Xem trạng thái"}</Link>}</div></div>)}
+        {section.lessons.map((lesson, i) => {
+          const video = lessonVideoPresentation(lesson);
+          return <div className="course-structure-lesson workflow-lesson" key={lesson.id}><strong>Bài {i + 1} · {lesson.title}</strong><div><span className={"status-chip " + video.tone}>{video.label}</span>
+            {video.action === "review" ? <Link to={"/instructor/review/" + lesson.id}>Duyệt học liệu</Link> : video.action && <Link to={"/instructor/courses/" + courseId + "/lessons/" + lesson.id + "/upload"}>{video.action === "upload" ? "Tải video" : "Xem trạng thái"}</Link>}</div></div>;
+        })}
         {!section.lessons.length && <p className="management-subtitle">Chưa có lesson. Thêm lesson để bắt đầu.</p>}
       </section>)}
       {!course.sections.length && <p>Thêm section đầu tiên cho khóa học.</p>}

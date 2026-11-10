@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 import base64
+from app.schemas.lesson import LessonVideoFields
 
 
 class CoverFields(BaseModel):
@@ -41,7 +42,7 @@ class CourseUpdateRequest(CoverFields):
         return self
 
 
-class CourseLessonResponse(BaseModel):
+class CourseLessonResponse(LessonVideoFields):
     id: int
     title: str
     position: int
