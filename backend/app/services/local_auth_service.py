@@ -60,10 +60,20 @@ def _user(db, email):
 
 
 def _identity(db, user):
-    if user is None or user.cognito_sub is not None or not user.password_hash:
+    if user is None or not user.password_hash:
         return None
-    return (db.query(LocalIdentity).filter_by(user_id=user.id)
-            .populate_existing().first())
+    identity = (db.query(LocalIdentity).filter_by(user_id=user.id)
+                .populate_existing().first())
+    if user.cognito_sub is not None and (identity is None or identity.provisioned_at is None):
+        return None
+    return identity
+
+
+def _email_otp_allowed(user, identity):
+    # Mailpit is not proof of ownership of a privileged or linked identity.
+    # The provisioning marker survives demotion, so recovery never reopens.
+    return (identity is not None and user.role == "STUDENT"
+            and user.cognito_sub is None and identity.provisioned_at is None)
 
 
 def _password_matches(encoded, password):
@@ -146,7 +156,7 @@ def send_otp(db, email, purpose):
     require_enabled()
     user = _user(db, email)
     identity = _identity(db, user)
-    eligible = identity and ((purpose == "verify" and identity.verified_at is None)
+    eligible = _email_otp_allowed(user, identity) and ((purpose == "verify" and identity.verified_at is None)
                              or (purpose == "reset" and identity.verified_at is not None))
     if eligible:
         try:
@@ -175,7 +185,7 @@ def verify_email(db, email, code):
     require_enabled()
     user = _user(db, email)
     identity = _identity(db, user)
-    if identity is None or identity.verified_at:
+    if not _email_otp_allowed(user, identity) or identity.verified_at:
         raise LocalAuthError("Invalid or expired verification code.", "INVALID_OTP")
     _consume_otp(db, user, "verify", code)
     identity.verified_at = now()
@@ -265,7 +275,7 @@ def reset_password(db, email, code, password):
     require_enabled()
     user = _user(db, email)
     identity = _identity(db, user)
-    if identity is None or identity.verified_at is None:
+    if not _email_otp_allowed(user, identity) or identity.verified_at is None:
         raise LocalAuthError("Invalid or expired verification code.", "INVALID_OTP")
     _consume_otp(db, user, "reset", code)
     user.password_hash = password_hasher.hash(password)

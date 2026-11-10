@@ -156,7 +156,8 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
             user.email = email
         if name:
             user.name = name
-        user.password_hash = None
+        # An explicitly provisioned local credential belongs to this same user.
+        # Cognito synchronization must not erase it (nor enroll it by email).
         # users.role is authoritative. A still-valid token can carry obsolete
         # groups after a demotion; authentication must never undo that change.
         db.commit()
@@ -267,7 +268,7 @@ def verify_email(db: Session, email: str, code: str):
             existing.cognito_sub = identity["sub"]
             existing.name = identity["name"]
             existing.email = identity["email"]
-            existing.password_hash = None
+            # Preserve any separately authorized local credential.
             db.commit()
         return {"message": "Đã xác minh email."}
     except (BotoCoreError, ClientError) as exc:

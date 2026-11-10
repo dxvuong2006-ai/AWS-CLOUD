@@ -23,7 +23,7 @@ from sqlalchemy import create_engine, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.api import auth, local_auth, admin, enrollments
+from app.api import auth, local_auth, admin, enrollments, courses
 from app.config import settings
 from app.dependencies import get_db, require_instructor
 from app.models.course import Course
@@ -102,7 +102,7 @@ def dual(auth_db, monkeypatch, rsa_key):
 
     app = FastAPI()
     register_exception_handlers(app)
-    for router in (auth.router, local_auth.router, admin.router, enrollments.router):
+    for router in (auth.router, local_auth.router, admin.router, enrollments.router, courses.router):
         app.include_router(router)
     app.dependency_overrides[get_db] = lambda: auth_db
 
@@ -171,6 +171,8 @@ def test_signup_password_email_and_verification(dual, caplog):
     assert result.status_code == 200 and code not in result.text
     assert post(dual, "verify-email", code=code).status_code == 400
     assert dual.db.get(LocalIdentity, user.id).verified_at
+    metadata = dual.db.get(LocalIdentity, user.id)
+    assert metadata.provisioned_at is None and metadata.provisioned_by is None and metadata.provisioning_reference is None
     assert post(dual, "login", password=PASSWORD).status_code == 200
 
 
