@@ -143,7 +143,7 @@ def test_legacy_raw_recovery_cli_is_preview_first_and_one_time(pg_upload,monkeyp
     monkeypatch.setattr(settings,'DATABASE_URL',url.render_as_string(hide_password=False))
     monkeypatch.setattr(settings,'VIDEO_PIPELINE_ENABLED',False)
     monkeypatch.setattr(recovery.sys.stdin,'isatty',lambda:True)
-    monkeypatch.setattr(recovery.getpass,'getpass',lambda *args:'')
+    monkeypatch.setattr(recovery.getpass, 'getpass', lambda *args: url.password)
     key=f"lessons/{ids['lesson']}/raw/{uuid4().hex}.mp4"
     meta={'ContentLength':100,'ContentType':'video/mp4','ETag':'"'+'b'*32+'"',
           'LastModified':datetime(2020,1,1,tzinfo=timezone.utc)}
