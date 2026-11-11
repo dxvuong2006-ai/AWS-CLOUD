@@ -45,7 +45,7 @@ def register_upload(db, *, upload_id, lesson_id, key, content_type, size_bytes):
     db.flush()
 
 
-def _lock_lesson(db, lesson_id):
+def _lock_lesson_and_course(db, lesson_id):
     lesson = lessons_repo.get_by_id(db, lesson_id)
     if lesson is None:
         raise PipelineError("LESSON_NOT_FOUND")
@@ -54,7 +54,14 @@ def _lock_lesson(db, lesson_id):
         raise PipelineError("SECTION_NOT_FOUND")
     course = courses_repo.lock_by_id(db, section.course_id)
     lesson = lessons_repo.lock_by_id(db, lesson_id)
-    if course is None or lesson is None or course.status != "DRAFT":
+    if course is None or lesson is None:
+        raise PipelineError("COURSE_NOT_DRAFT")
+    return lesson, course
+
+
+def _lock_lesson(db, lesson_id):
+    lesson, course = _lock_lesson_and_course(db, lesson_id)
+    if course.status != "DRAFT":
         raise PipelineError("COURSE_NOT_DRAFT")
     return lesson
 
@@ -112,7 +119,11 @@ def claim(db, payload, execution_arn, storage):
         raise PipelineError("EVENT_IDENTITY_MISMATCH")
     if payload.get("kind") not in {"upload", "retry"}:
         raise PipelineError("INVALID_EVENT_KIND")
-    lesson = _lock_lesson(db, lesson_id)
+    # Lock first so the idempotency decision is serialized with publication,
+    # retries and competing upload claims.  Do not require DRAFT until after
+    # the issued-upload and existing-run checks: a duplicate delivery must not
+    # turn a previously accepted upload into COURSE_NOT_DRAFT.
+    lesson, course = _lock_lesson_and_course(db, lesson_id)
     upload = repo.get_upload(db, key)
     if upload is None or upload.id != upload_id or upload.lesson_id != lesson_id:
         raise PipelineError("UNISSUED_UPLOAD")
@@ -124,6 +135,8 @@ def claim(db, payload, execution_arn, storage):
                 or lesson.raw_video_key not in (None, "", key)
                 or (lesson.processed_video_key and lesson.raw_video_key != key)):
             return {"decision": "IGNORE"}
+        if course.status != "DRAFT":
+            raise PipelineError("COURSE_NOT_DRAFT")
         etag = _etag(payload.get("etag"))
         try:
             etag = _head_source(storage, upload, etag=etag, initial=True)
@@ -154,6 +167,8 @@ def claim(db, payload, execution_arn, storage):
             return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
         if lesson.status != "PROCESSING" or run.state != "QUEUED":
             return {"decision": "IGNORE"}
+        if course.status != "DRAFT":
+            raise PipelineError("COURSE_NOT_DRAFT")
         try:
             # A failed initial validation is not confirmation. Check original S3
             # write time again on retry; delayed delivery is fine, an expired write

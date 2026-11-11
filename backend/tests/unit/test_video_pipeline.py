@@ -159,6 +159,30 @@ class PipelineTests(unittest.TestCase):
         self.assertIsNone(self.lesson.processed_video_key)
         self.mc.start.assert_not_called()
 
+    def test_duplicate_recorded_upload_is_idempotent_after_course_leaves_draft(self):
+        run = self.claim()
+        self.course.status = "PUBLISHED"
+        self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        self.assertEqual(service.claim(self.db, self.payload, OWNER, self.storage)["run_id"], run.id)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
+        self.assertEqual(self.storage.head_video.call_count, 1)
+
+    def test_new_upload_still_requires_draft_course(self):
+        self.course.status = "PUBLISHED"
+        with self.assertRaisesRegex(service.PipelineError, "COURSE_NOT_DRAFT"):
+            service.claim(self.db, self.payload, OWNER, self.storage)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+        self.assertIsNone(self.lesson.raw_video_key)
+        self.storage.head_video.assert_not_called()
+
+    def test_unissued_upload_is_rejected_before_non_draft_shortcut(self):
+        self.course.status = "PUBLISHED"
+        unissued_key = KEY.replace(self.upload.id, "f" * 32)
+        with self.assertRaisesRegex(service.PipelineError, "UNISSUED_UPLOAD"):
+            service.claim(self.db, {**self.payload, "key": unissued_key}, OTHER, self.storage)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+        self.storage.head_video.assert_not_called()
+
     def test_two_upload_intents_for_one_lesson_only_first_validated_claim_wins(self):
         other = VideoUpload(id="f"*32, lesson_id=8, source_key=f"lessons/8/raw/{'f'*32}.mp4",
             content_type="video/mp4", size_bytes=1234,
@@ -170,6 +194,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result, {"decision": "IGNORE"})
         self.assertEqual(self.lesson.raw_video_key, KEY)
         self.assertEqual(self.db.query(VideoPipelineRun).one().id, first.id)
+        self.assertEqual(self.storage.head_video.call_count, 1)
+
+    def test_stale_issued_upload_is_ignored_after_course_leaves_draft(self):
+        other = VideoUpload(id="f"*32, lesson_id=8, source_key=f"lessons/8/raw/{'f'*32}.mp4",
+            content_type="video/mp4", size_bytes=1234,
+            created_at=self.upload.created_at, expires_at=self.upload.expires_at)
+        self.db.add(other)
+        self.db.commit()
+        self.claim()
+        self.course.status = "PUBLISHED"
+        result = service.claim(self.db, {**self.payload, "key": other.source_key}, OTHER, self.storage)
+        self.assertEqual(result, {"decision": "IGNORE"})
+        self.assertEqual(self.lesson.raw_video_key, KEY)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
         self.assertEqual(self.storage.head_video.call_count, 1)
 
     def test_composite_fk_rejects_upload_from_another_existing_lesson(self):
