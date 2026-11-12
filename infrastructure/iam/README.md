@@ -128,8 +128,10 @@ không tự đổi encryption của bucket đang hoạt động để né lỗi 
 
 Lambda invocation từ EventBridge cần resource-based permission đúng rule ARN;
 Console thường thêm khi gắn trigger. Người thao tác cần iam:PassRole đúng role và
-service, không phải quyền PassRole toàn account. C cần role riêng cho Transcribe/
-Bedrock, chưa thuộc policy video này.
+service, không phải quyền PassRole toàn account. K5 dùng role riêng theo
+`lambda-ai-worker-permissions.json` cho Transcribe/Bedrock/S3; gắn thêm policy VPC
+hiện có nếu Lambda kết nối RDS trong VPC. Quyền SQL vẫn do database credential và
+security group quản lý, không nằm trong IAM policy video.
 
 Thao tác chi tiết, ARN và kiểm tra quyền:
 [phần IAM trong hướng dẫn](../../docs/aws-video-pipeline-console-setup.md#phan-2--iam-roles-va-policies).

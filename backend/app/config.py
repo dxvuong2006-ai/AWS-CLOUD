@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     MEDIACONVERT_QUEUE_ARN: str = ""
     VIDEO_EVENT_BUS: str = "default"
     VIDEO_AI_ENABLED: bool = False
+    AI_WORKER_ENABLED: bool = False
+    TRANSCRIBE_LANGUAGE_CODE: str = "vi-VN"
+    TRANSCRIBE_OUTPUT_BUCKET: str = ""
+    TRANSCRIBE_OUTPUT_PREFIX: str = "ai-transcripts"
+    AI_QUIZ_QUESTION_COUNT: int = Field(default=3, ge=1, le=20)
 
     JWT_SECRET_KEY: SecretStr | None = None
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=60, ge=1, le=1440)

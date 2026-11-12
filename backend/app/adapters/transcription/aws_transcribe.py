@@ -1,6 +1,7 @@
 """Kết nối AWS Transcribe cho các tác vụ phiên âm bất đồng bộ."""
 
 import logging
+import re
 import uuid
 
 import boto3
@@ -77,6 +78,68 @@ class AWSTranscribeAdapter:
         return {"job_id": job["TranscriptionJobName"],
                 "status": job["TranscriptionJobStatus"], "source": "aws"}
 
+    def start_job(
+        self, media_uri, *, job_name, language_code="vi-VN",
+        output_bucket=None, output_key=None, allow_fallback=False,
+    ):
+        """Start a deterministic job; a retry reuses the existing AWS job.
+
+        Production callers must leave ``allow_fallback`` disabled.  A stable
+        job name makes a Lambda timeout after StartTranscriptionJob safe to
+        retry without creating a second transcription job.
+        """
+        if not isinstance(media_uri, str) or not media_uri.startswith("s3://"):
+            raise ValueError("AWS Transcribe requires an s3:// media URI.")
+        if not isinstance(job_name, str) or not re.fullmatch(
+            r"[A-Za-z0-9._-]{1,200}", job_name,
+        ):
+            raise ValueError("Invalid Transcribe job name.")
+        if bool(output_bucket) != bool(output_key):
+            raise ValueError("Transcribe output bucket and key must be provided together.")
+        request = {
+            "TranscriptionJobName": job_name,
+            "Media": {"MediaFileUri": media_uri},
+            "LanguageCode": language_code,
+        }
+        if output_bucket:
+            request.update(OutputBucketName=output_bucket, OutputKey=output_key)
+        try:
+            response = self._get_client().start_transcription_job(**request)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConflictException":
+                existing = self._get_client().get_transcription_job(
+                    TranscriptionJobName=job_name,
+                )["TranscriptionJob"]
+                if existing.get("Media", {}).get("MediaFileUri") != media_uri:
+                    raise ValueError("Existing Transcribe job has a different media source.") from None
+                return self._job_result(existing)
+            if not allow_fallback:
+                raise
+            logger.warning("Transcribe source=mock; reason=%s", type(exc).__name__)
+            result = self._mock.transcribe(media_uri, language_code)
+            self._mock_jobs.add(job_name)
+            return {**result, "job_id": job_name, "source": "mock"}
+        except AWS_FAILURES as exc:
+            if not allow_fallback:
+                raise
+            logger.warning("Transcribe source=mock; reason=%s", type(exc).__name__)
+            result = self._mock.transcribe(media_uri, language_code)
+            self._mock_jobs.add(job_name)
+            return {**result, "job_id": job_name, "source": "mock"}
+        return self._job_result(response["TranscriptionJob"])
+
+    @staticmethod
+    def _job_result(job):
+        result = {
+            "job_id": job["TranscriptionJobName"],
+            "status": job["TranscriptionJobStatus"],
+            "source": "aws",
+        }
+        transcript = job.get("Transcript")
+        if isinstance(transcript, dict):
+            result["transcript_uri"] = transcript.get("TranscriptFileUri")
+        return result
+
     def get_job_status(self, job_id):
         """Lấy trạng thái tác vụ thật hoặc tác vụ mô phỏng đã tạo.
 
@@ -91,7 +154,7 @@ class AWSTranscribeAdapter:
         job = self._get_client().get_transcription_job(
             TranscriptionJobName=job_id,
         )["TranscriptionJob"]
-        result = {"job_id": job_id, "status": job["TranscriptionJobStatus"]}
+        result = self._job_result(job)
         if "Transcript" in job:
             result["transcript_uri"] = job["Transcript"].get("TranscriptFileUri")
         if "FailureReason" in job:
