@@ -127,3 +127,20 @@ def question_failure_rates(db, course_id):
         .group_by(Question.id, Question.question, Question.topic)
         .all()
     )
+
+
+def get_published_section_lessons(db, lesson_id):
+    """Return timestamped Tutor context from all published lessons in a section."""
+    section_id = db.query(Lesson.section_id).filter(
+        Lesson.id == lesson_id,
+    ).scalar()
+    if section_id is None:
+        return []
+    return (
+        db.query(Lesson)
+        .filter(
+            Lesson.section_id == section_id,
+            Lesson.status == "PUBLISHED",
+        )
+        .order_by(Lesson.position, Lesson.id).all()
+    )

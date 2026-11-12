@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, require_instructor
 from app.services import analytics_service
+from app.schemas.analytics import QuizAnalytics
 from app.models.course import Course
 from app.models.section import Section
 from app.models.lesson import Lesson
@@ -83,6 +84,19 @@ def get_course_analytics(course_id: int, db: Session = Depends(get_db),
     if result is None:
         raise HTTPException(404, "Course not found.")
     return result
+
+
+@router.get("/analytics/quizzes/{quiz_id}", response_model=QuizAnalytics)
+def get_quiz_analytics(
+    quiz_id: int,
+    db: Session = Depends(get_db),
+    instructor=Depends(require_instructor),
+) -> QuizAnalytics:
+    """Return quiz metrics only to the instructor who owns its course."""
+    result = analytics_service.get_quiz_analytics(db, quiz_id, instructor.id)
+    if result is None:
+        raise HTTPException(404, "Quiz not found.")
+    return QuizAnalytics.model_validate(result)
 
 
 @router.get("/instructor/students")
