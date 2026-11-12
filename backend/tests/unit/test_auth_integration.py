@@ -12,6 +12,7 @@ import httpx
 from fastapi import Depends, FastAPI
 
 from app.api.auth import router
+from app.config import settings
 from app.dependencies import get_db, require_instructor, require_admin, require_student
 from app.services import auth_service
 
@@ -142,6 +143,18 @@ class CognitoTokenVerificationLoggingTests(unittest.TestCase):
             auth_service.auth_repo,
             "get_by_cognito_sub",
             return_value=user,
+        ), patch.object(
+            settings,
+            "COGNITO_APP_CLIENT_ID",
+            "test-client",
+        ), patch.object(
+            settings,
+            "COGNITO_REGION",
+            "ap-southeast-1",
+        ), patch.object(
+            settings,
+            "COGNITO_USER_POOL_ID",
+            "ap-southeast-1_testpool",
         ), patch.object(
             auth_service,
             "cognito_client",

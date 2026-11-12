@@ -136,6 +136,12 @@ def test_unprovisioned_identity_cannot_bootstrap_admin_from_groups(security):
     assert user.role == "STUDENT"
 
 
+def test_auth_me_missing_database_identity_without_email_fails_closed(security):
+    response = security.client.get("/auth/me", headers=security.headers(99, ["ADMIN"]))
+    assert response.status_code == 401
+    assert auth_service.auth_repo.get_by_cognito_sub(security.db, "sub-99") is None
+
+
 @pytest.mark.parametrize("uid", [1, 4])
 def test_different_cognito_subject_cannot_inherit_database_privileges(security, uid):
     user = security.db.get(User, uid)
