@@ -129,6 +129,12 @@ class PipelineTests(unittest.TestCase):
             patcher = patch("app.services.video_pipeline_service." + name, return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        section_lock = patch(
+            "app.services.video_pipeline_service.review_repo.lock_section",
+            return_value=None,
+        )
+        section_lock.start()
+        self.addCleanup(section_lock.stop)
         now = datetime.now(timezone.utc)
         self.upload = VideoUpload(id=KEY.split("/")[-1][:-4], lesson_id=8, source_key=KEY,
             content_type="video/mp4", size_bytes=1234, created_at=now-timedelta(seconds=10), expires_at=now+timedelta(minutes=15))
@@ -350,11 +356,26 @@ class PipelineTests(unittest.TestCase):
     def test_ai_review_requires_current_proof_and_persisted_content(self):
         run = self.transcode()
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
-        self.lesson.transcript_json = {"segments": [{"text": "real worker fixture"}]}
+        self.lesson.transcript_json = {
+            "run_id": run.id,
+            "job_id": f"learncloud-k5-{run.id}",
+            "source": "aws_transcribe",
+            "text": "real worker fixture",
+            "segments": [{"text": "real worker fixture"}],
+        }
         self.lesson.summary, self.lesson.key_concepts_json = "worker fixture", ["concept"]
         with self.assertRaises(service.PipelineError):
             service.finalize_ai(self.db, run.id, OWNER, {"completed": True, "run_id": "stale"})
-        service.finalize_ai(self.db, run.id, OWNER, {"completed": True, "run_id": run.id})
+        quiz = SimpleNamespace(id=10, is_approved=False)
+        with (
+            patch.object(service.review_repo, "get_quiz", return_value=quiz),
+            patch.object(service.review_repo, "get_questions", return_value=[object()]),
+            patch.object(service.review_repo, "get_flashcards", return_value=[object()]),
+        ):
+            service.finalize_ai(
+                self.db, run.id, OWNER,
+                {"completed": True, "run_id": run.id},
+            )
         self.assertEqual(self.lesson.status, "REVIEW_REQUIRED")
         self.assertEqual(self.course.status, "DRAFT")
         self.assertEqual(service.finalize_ai(self.db, run.id, OWNER, {}), {"status": "REVIEW_REQUIRED"})
@@ -558,8 +579,57 @@ class InfrastructureTests(unittest.TestCase):
         })
         self.assertEqual(states["ClaimDecision"]["Default"], "InvalidUpload")
         self.assertEqual(states["AIEnabled"]["Default"], "VideoReadyAIPending")
+        for state_name in (
+            "StartAITranscription", "PollAITranscription", "GenerateAIContent",
+        ):
+            state = states[state_name]
+            self.assertEqual(state["Parameters"]["FunctionName"], "${AI_WORKER_ARN}")
+            self.assertIn("AIWorkerTemporaryError", state["Retry"][0]["ErrorEquals"])
+        self.assertEqual(
+            states["StartAITranscription"]["Parameters"]["Payload"]["action"],
+            "start_transcription",
+        )
+        self.assertEqual(
+            states["PollAITranscription"]["Parameters"]["Payload"]["action"],
+            "poll_transcription",
+        )
+        self.assertEqual(
+            states["GenerateAIContent"]["Parameters"]["Payload"]["action"],
+            "generate_content",
+        )
+        self.assertGreater(states["GenerateAIContent"]["TimeoutSeconds"], 600)
+        self.assertEqual(
+            states["ValidateAIAndRequireReview"]["Parameters"]["FunctionName"],
+            "${PIPELINE_LAMBDA_ARN}",
+        )
         self.assertEqual(states["VideoReadyAIPending"]["Type"], "Succeed")
         self.assertEqual(states["PipelineFailed"]["Type"], "Fail")
+
+    def test_k5_config_is_disabled_and_uses_least_privilege_templates(self):
+        env = json.loads((ROOT / "infrastructure/lambda/ai-worker-env.example.json").read_text())
+        self.assertEqual(env["Variables"]["AI_WORKER_ENABLED"], "false")
+        self.assertEqual(env["Variables"]["VIDEO_AI_ENABLED"], "false")
+        self.assertEqual(env["Variables"]["AWS_REGION"], "ap-southeast-1")
+        function = json.loads(
+            (ROOT / "infrastructure/lambda/ai-worker-function.example.json").read_text()
+        )
+        self.assertEqual(function["Runtime"], "python3.12")
+        self.assertEqual(function["Architectures"], ["x86_64"])
+        self.assertEqual(function["Handler"], "ai_worker_handler.handler")
+        policy = json.loads(
+            (ROOT / "infrastructure/iam/lambda-ai-worker-permissions.json").read_text()
+        )
+        actions = {
+            action
+            for statement in policy["Statement"]
+            for action in statement["Action"]
+        }
+        self.assertTrue({
+            "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob",
+            "bedrock:InvokeModel", "s3:GetObject", "s3:PutObject",
+            "logs:CreateLogStream", "logs:PutLogEvents",
+        }.issubset(actions))
+        self.assertFalse(any(action.endswith(":*") for action in actions))
 
     def test_all_json_files_parse_and_raw_filter_excludes_processed(self):
         from fnmatch import fnmatchcase

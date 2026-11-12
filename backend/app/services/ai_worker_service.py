@@ -28,6 +28,13 @@ def transcription_job_name(run_id: str) -> str:
 def transcription_output(run_id: str) -> tuple[str, str]:
     bucket = settings.TRANSCRIBE_OUTPUT_BUCKET or settings.S3_BUCKET
     prefix = settings.TRANSCRIBE_OUTPUT_PREFIX.strip("/")
+    if (
+        not isinstance(bucket, str)
+        or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", bucket)
+        or ".." in bucket
+        or re.fullmatch(r"[0-9.]+", bucket)
+    ):
+        raise AIWorkerError("INVALID_TRANSCRIBE_OUTPUT_BUCKET")
     if not prefix or ".." in prefix or "\\" in prefix:
         raise AIWorkerError("INVALID_TRANSCRIBE_OUTPUT_PREFIX")
     return bucket, f"{prefix}/{run_id}/transcript.json"
@@ -45,11 +52,15 @@ def _video_ready(db, run_id, execution_arn):
 
 def _content_complete(db, run, lesson) -> bool:
     transcript = lesson.transcript_json
+    expected_job = transcription_job_name(run.id)
     if (
         not isinstance(transcript, dict)
         or transcript.get("run_id") != run.id
+        or transcript.get("job_id") != expected_job
+        or transcript.get("source") != "aws_transcribe"
         or not isinstance(transcript.get("text"), str)
         or not transcript["text"].strip()
+        or not isinstance(transcript.get("segments"), list)
         or not isinstance(lesson.summary, str)
         or not lesson.summary.strip()
         or not isinstance(lesson.key_concepts_json, list)
@@ -59,9 +70,21 @@ def _content_complete(db, run, lesson) -> bool:
     quiz = review_repo.get_quiz(db, lesson.section_id)
     return bool(
         quiz is not None
+        and quiz.is_approved is False
         and review_repo.get_questions(db, quiz.id)
         and review_repo.get_flashcards(db, lesson.id)
     )
+
+
+def _validated_job_status(result, expected_job_id: str) -> str:
+    if (
+        not isinstance(result, dict)
+        or result.get("job_id") != expected_job_id
+        or result.get("source") != "aws"
+        or result.get("status") not in {"QUEUED", "IN_PROGRESS", "COMPLETED"}
+    ):
+        raise AIWorkerError("INVALID_TRANSCRIBE_RESPONSE")
+    return result["status"]
 
 
 def start_transcription(db, run_id, execution_arn, transcriber):
@@ -80,12 +103,9 @@ def start_transcription(db, run_id, execution_arn, transcriber):
         output_key=key,
         allow_fallback=False,
     )
-    if result.get("job_id") != job_id or result.get("status") not in {
-        "QUEUED", "IN_PROGRESS", "COMPLETED",
-    }:
-        raise AIWorkerError("INVALID_TRANSCRIBE_RESPONSE")
+    status = _validated_job_status(result, job_id)
     logger.info("ai_transcription_started lesson_id=%s run_id=%s", run.lesson_id, run.id)
-    return {"job_id": job_id, "status": result["status"]}
+    return {"job_id": job_id, "status": status}
 
 
 def poll_transcription(db, run_id, execution_arn, job_id, transcriber):
@@ -94,11 +114,11 @@ def poll_transcription(db, run_id, execution_arn, job_id, transcriber):
     if job_id != expected:
         raise AIWorkerError("TRANSCRIBE_JOB_MISMATCH")
     result = transcriber.get_job_status(job_id)
-    status = result.get("status")
-    if status == "FAILED":
+    if isinstance(result, dict) and result.get("status") == "FAILED":
+        if result.get("job_id") != expected or result.get("source") != "aws":
+            raise AIWorkerError("INVALID_TRANSCRIBE_RESPONSE")
         raise AIWorkerError("TRANSCRIPTION_FAILED")
-    if status not in {"QUEUED", "IN_PROGRESS", "COMPLETED"}:
-        raise AIWorkerError("INVALID_TRANSCRIBE_RESPONSE")
+    status = _validated_job_status(result, expected)
     if status == "COMPLETED":
         lesson.status = "AI_PROCESSING"
         db.commit()
@@ -107,10 +127,12 @@ def poll_transcription(db, run_id, execution_arn, job_id, transcriber):
 
 def _draft(transcript_text: str, ai) -> DraftContent:
     summary = ai.generate_summary(transcript_text)
-    concepts = ai.extract_key_concepts(transcript_text)
+    concepts = summary.get("key_concepts") if isinstance(summary, dict) else None
     quiz = ai.generate_quiz(
         transcript_text, num_questions=settings.AI_QUIZ_QUESTION_COUNT,
     )
+    if not isinstance(concepts, list) or not isinstance(quiz, dict):
+        raise AIWorkerError("INVALID_AI_OUTPUT")
     return DraftContent(
         title=summary["title"],
         summary=summary["summary"],
@@ -136,16 +158,29 @@ def generate_content(
         return {"completed": True, "run_id": run.id}
     db.commit()  # never retain row locks during AWS calls
 
-    status = transcriber.get_job_status(job_id).get("status")
+    status = _validated_job_status(
+        transcriber.get_job_status(job_id), expected,
+    )
     if status != "COMPLETED":
         raise AIWorkerError("TRANSCRIPTION_NOT_COMPLETE")
     bucket, key = transcription_output(run.id)
-    transcript = transcript_store.read(bucket, key)
+    transcript = transcript_store.read(
+        bucket, key, max_bytes=settings.AI_TRANSCRIPT_MAX_BYTES,
+    )
+    if (
+        not isinstance(transcript, dict)
+        or not isinstance(transcript.get("text"), str)
+        or len(transcript["text"]) > settings.AI_TRANSCRIPT_MAX_CHARACTERS
+        or not isinstance(transcript.get("segments"), list)
+    ):
+        raise AIWorkerError("INVALID_TRANSCRIPT_CONTENT")
     content = _draft(transcript["text"], ai)
 
     with review_repo.transaction(db):
-        run, lesson = _video_ready(db, run_id, execution_arn)
+        # Review/edit paths take the section lock first.  Use the same order so
+        # a concurrent instructor review cannot deadlock with K5 persistence.
         review_repo.lock_section(db, lesson.id)
+        run, lesson = _video_ready(db, run_id, execution_arn)
         if _content_complete(db, run, lesson):
             return {"completed": True, "run_id": run.id}
         quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)

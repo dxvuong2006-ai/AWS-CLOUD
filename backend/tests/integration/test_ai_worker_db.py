@@ -1,8 +1,10 @@
 """Opt-in K5 test against only a local, explicitly named PostgreSQL database."""
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
@@ -35,6 +37,34 @@ def _isolated_url():
     ):
         raise RuntimeError("Only local database learncloud_pipeline_test is permitted.")
     return url
+
+
+def _delete_concurrent_fixture(connection, email):
+    lesson_ids = (
+        "SELECT l.id FROM lessons l JOIN sections s ON s.id=l.section_id "
+        "JOIN courses c ON c.id=s.course_id JOIN users u ON u.id=c.instructor_id "
+        "WHERE u.email=:email"
+    )
+    section_ids = (
+        "SELECT s.id FROM sections s JOIN courses c ON c.id=s.course_id "
+        "JOIN users u ON u.id=c.instructor_id WHERE u.email=:email"
+    )
+    for statement in (
+        f"DELETE FROM video_pipeline_runs WHERE lesson_id IN ({lesson_ids})",
+        f"DELETE FROM video_uploads WHERE lesson_id IN ({lesson_ids})",
+        f"DELETE FROM flashcards WHERE lesson_id IN ({lesson_ids})",
+        "DELETE FROM questions WHERE quiz_id IN "
+        f"(SELECT id FROM quizzes WHERE section_id IN ({section_ids}))",
+        f"DELETE FROM quizzes WHERE section_id IN ({section_ids})",
+        f"DELETE FROM lessons WHERE section_id IN ({section_ids})",
+        "DELETE FROM sections WHERE course_id IN "
+        "(SELECT c.id FROM courses c JOIN users u ON u.id=c.instructor_id "
+        "WHERE u.email=:email)",
+        "DELETE FROM courses WHERE instructor_id IN "
+        "(SELECT id FROM users WHERE email=:email)",
+        "DELETE FROM users WHERE email=:email",
+    ):
+        connection.execute(text(statement), {"email": email})
 
 
 pytestmark = pytest.mark.skipif(
@@ -98,11 +128,17 @@ def test_k5_transaction_and_retry_idempotency_on_postgresql():
 
         job_id = ai_worker_service.transcription_job_name(run_id)
         transcriber, store, ai = Mock(), Mock(), Mock()
-        transcriber.start_job.return_value = {"job_id": job_id, "status": "IN_PROGRESS"}
-        transcriber.get_job_status.return_value = {"job_id": job_id, "status": "COMPLETED"}
+        transcriber.start_job.return_value = {
+            "job_id": job_id, "status": "IN_PROGRESS", "source": "aws",
+        }
+        transcriber.get_job_status.return_value = {
+            "job_id": job_id, "status": "COMPLETED", "source": "aws",
+        }
         store.read.return_value = {"text": "PostgreSQL cloud transcript", "segments": []}
-        ai.generate_summary.return_value = {"title": "Cloud", "summary": "Cloud summary"}
-        ai.extract_key_concepts.return_value = [{"term": "Cloud", "definition": "Elastic resources"}]
+        ai.generate_summary.return_value = {
+            "title": "Cloud", "summary": "Cloud summary",
+            "key_concepts": [{"term": "Cloud", "definition": "Elastic resources"}],
+        }
         ai.generate_quiz.return_value = {"questions": [{
             "question": f"Question {i}?", "options": ["A", "B", "C", "D"],
             "correct_answer": "A", "explanation": "A is correct",
@@ -127,3 +163,101 @@ def test_k5_transaction_and_retry_idempotency_on_postgresql():
         assert run.state == "COMPLETE"
     finally:
         stack.close()
+
+
+def test_concurrent_k5_generate_creates_one_material_set_on_postgresql():
+    engine = create_engine(_isolated_url(), connect_args={"connect_timeout": 3})
+    suffix = uuid4().hex
+    owner = f"arn:aws:states:ap-southeast-1:000000000000:execution:k5:{suffix}"
+    email = f"k5-concurrent-{suffix}@test.local"
+    setup = Session(engine, expire_on_commit=False)
+    try:
+        instructor = User(name="K5 concurrent", email=email, role="INSTRUCTOR")
+        setup.add(instructor)
+        setup.flush()
+        course = Course(instructor_id=instructor.id, title="K5 concurrent", status="DRAFT")
+        setup.add(course)
+        setup.flush()
+        section = Section(course_id=course.id, title="K5", position=1)
+        setup.add(section)
+        setup.flush()
+        lesson = Lesson(section_id=section.id, title="K5", position=1, status="PROCESSING")
+        setup.add(lesson)
+        setup.flush()
+        upload_id = uuid4().hex
+        raw = f"lessons/{lesson.id}/raw/{upload_id}.mp4"
+        output = f"lessons/{lesson.id}/processed/{upload_id}/attempt-1/video_720p.mp4"
+        lesson.raw_video_key, lesson.processed_video_key = raw, output
+        now = datetime.now(timezone.utc)
+        setup.add(VideoUpload(
+            id=upload_id, lesson_id=lesson.id, source_key=raw,
+            content_type="video/mp4", size_bytes=100,
+            created_at=now, expires_at=now + timedelta(minutes=15),
+        ))
+        setup.flush()
+        run_id = video_pipeline_service.run_identity(upload_id, 0)
+        setup.add(VideoPipelineRun(
+            id=run_id, upload_id=upload_id, lesson_id=lesson.id, attempt=0,
+            state="VIDEO_READY", execution_arn=owner, source_etag="e" * 32,
+            output_key=output, safe_to_retry=True,
+        ))
+        setup.commit()
+        lesson_id, section_id = lesson.id, section.id
+    finally:
+        setup.close()
+
+    job_id = ai_worker_service.transcription_job_name(run_id)
+    barrier = Barrier(2)
+
+    def invoke_worker():
+        db = Session(engine, expire_on_commit=False)
+        try:
+            transcriber = Mock()
+            transcriber.get_job_status.return_value = {
+                "job_id": job_id, "status": "COMPLETED", "source": "aws",
+            }
+            store = Mock()
+
+            def read_transcript(*args, **kwargs):
+                barrier.wait(timeout=5)
+                return {"text": "Concurrent cloud transcript", "segments": []}
+
+            store.read.side_effect = read_transcript
+            ai = Mock()
+            ai.generate_summary.return_value = {
+                "title": "Cloud", "summary": "Concurrent summary",
+                "key_concepts": [{"term": "Cloud", "definition": "Elastic resources"}],
+            }
+            ai.generate_quiz.return_value = {"questions": [{
+                "question": f"Question {i}?", "options": ["A", "B", "C", "D"],
+                "correct_answer": "A", "explanation": "A is correct",
+            } for i in range(1, 4)]}
+            return ai_worker_service.generate_content(
+                db, run_id, owner, job_id,
+                transcriber=transcriber, transcript_store=store, ai=ai,
+            )
+        finally:
+            db.close()
+
+    try:
+        with (
+            patch("boto3.client", side_effect=AssertionError("AWS client forbidden")),
+            patch("botocore.client.BaseClient._make_api_call", side_effect=AssertionError("AWS call forbidden")),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            results = list(pool.map(lambda _: invoke_worker(), range(2)))
+        assert results == [
+            {"completed": True, "run_id": run_id},
+            {"completed": True, "run_id": run_id},
+        ]
+        verify = Session(engine)
+        try:
+            assert verify.query(Quiz).filter_by(section_id=section_id).count() == 1
+            assert verify.query(Question).join(Quiz).filter(Quiz.section_id == section_id).count() == 3
+            assert verify.query(Flashcard).filter_by(lesson_id=lesson_id).count() == 1
+        finally:
+            verify.close()
+    finally:
+        with engine.begin() as connection:
+            _delete_concurrent_fixture(connection, email)
+        engine.dispose()

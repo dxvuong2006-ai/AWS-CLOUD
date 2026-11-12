@@ -1,6 +1,8 @@
 """K5 worker tests use injected AWS doubles and an isolated SQLite database."""
 
 import importlib.util
+import io
+import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
@@ -9,7 +11,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.adapters.transcription.aws_transcribe import AWSTranscribeAdapter
-from app.adapters.transcription.s3_transcript import parse_transcript
+from app.adapters.transcription.s3_transcript import S3TranscriptAdapter, parse_transcript
 from app.config import settings
 from app.models.course import Course
 from app.models.flashcard import Flashcard
@@ -77,10 +79,10 @@ def worker_context(db_session):
 def _aws_doubles():
     transcriber = Mock()
     transcriber.start_job.return_value = {
-        "job_id": f"learncloud-k5-{RUN_ID}", "status": "IN_PROGRESS",
+        "job_id": f"learncloud-k5-{RUN_ID}", "status": "IN_PROGRESS", "source": "aws",
     }
     transcriber.get_job_status.return_value = {
-        "job_id": f"learncloud-k5-{RUN_ID}", "status": "COMPLETED",
+        "job_id": f"learncloud-k5-{RUN_ID}", "status": "COMPLETED", "source": "aws",
     }
     store = Mock()
     store.read.return_value = {
@@ -90,11 +92,11 @@ def _aws_doubles():
     ai = Mock()
     ai.generate_summary.return_value = {
         "title": "Cloud computing", "summary": "A concise cloud summary.",
+        "key_concepts": [
+            {"term": "Elasticity", "definition": "Resources scale with demand."},
+            {"term": "IaaS", "definition": "Infrastructure delivered as a service."},
+        ],
     }
-    ai.extract_key_concepts.return_value = [
-        {"term": "Elasticity", "definition": "Resources scale with demand."},
-        {"term": "IaaS", "definition": "Infrastructure delivered as a service."},
-    ]
     ai.generate_quiz.return_value = {"questions": [_question(i) for i in range(1, 4)]}
     return transcriber, store, ai
 
@@ -158,6 +160,7 @@ def test_transcribe_conflict_reuses_matching_deterministic_job():
     client.get_transcription_job.return_value = {"TranscriptionJob": {
         "TranscriptionJobName": f"learncloud-k5-{RUN_ID}",
         "TranscriptionJobStatus": "IN_PROGRESS",
+        "LanguageCode": "vi-VN",
         "Media": {"MediaFileUri": "s3://bucket/video.mp4"},
     }}
     result = AWSTranscribeAdapter(client).start_job(
@@ -166,6 +169,45 @@ def test_transcribe_conflict_reuses_matching_deterministic_job():
     )
     assert result["status"] == "IN_PROGRESS"
     client.get_transcription_job.assert_called_once()
+
+
+def test_transcribe_conflict_rejects_mismatched_job_identity():
+    client = Mock()
+    client.start_transcription_job.side_effect = ClientError(
+        {"Error": {"Code": "ConflictException"}, "ResponseMetadata": {"HTTPStatusCode": 400}},
+        "StartTranscriptionJob",
+    )
+    client.get_transcription_job.return_value = {"TranscriptionJob": {
+        "TranscriptionJobName": f"learncloud-k5-{RUN_ID}",
+        "TranscriptionJobStatus": "IN_PROGRESS",
+        "LanguageCode": "en-US",
+        "Media": {"MediaFileUri": "s3://bucket/video.mp4"},
+    }}
+    with pytest.raises(ValueError, match="does not match"):
+        AWSTranscribeAdapter(client).start_job(
+            "s3://bucket/video.mp4", job_name=f"learncloud-k5-{RUN_ID}",
+            output_bucket="bucket", output_key="ai/transcript.json",
+        )
+
+
+def test_oversized_transcript_is_rejected_before_bedrock(
+    db_session, worker_context,
+):
+    transcriber, store, ai = _aws_doubles()
+    store.read.return_value = {
+        "text": "x" * 1_001,
+        "segments": [],
+    }
+    with (
+        patch.object(settings, "AI_TRANSCRIPT_MAX_CHARACTERS", 1_000),
+        pytest.raises(ai_worker_service.AIWorkerError, match="INVALID_TRANSCRIPT_CONTENT"),
+    ):
+        ai_worker_service.generate_content(
+            db_session, RUN_ID, OWNER, f"learncloud-k5-{RUN_ID}",
+            transcriber=transcriber, transcript_store=store, ai=ai,
+        )
+    ai.generate_summary.assert_not_called()
+    ai.generate_quiz.assert_not_called()
 
 
 def test_parse_realistic_transcribe_result():
@@ -185,6 +227,20 @@ def test_parse_realistic_transcribe_result():
     }
 
 
+def test_s3_transcript_reader_rejects_truncated_body():
+    payload = json.dumps({
+        "status": "COMPLETED",
+        "results": {"transcripts": [{"transcript": "Cloud"}], "items": []},
+    }).encode()
+    client = Mock()
+    client.get_object.return_value = {
+        "ContentLength": len(payload) + 1,
+        "Body": io.BytesIO(payload),
+    }
+    with pytest.raises(ValueError, match="Incomplete"):
+        S3TranscriptAdapter(client).read("bucket", "ai/transcript.json")
+
+
 def test_dedicated_handler_is_disabled_without_creating_aws_clients():
     path = ROOT / "infrastructure/lambda/ai_worker_handler.py"
     spec = importlib.util.spec_from_file_location("ai_worker_handler_test", path)
@@ -196,3 +252,51 @@ def test_dedicated_handler_is_disabled_without_creating_aws_clients():
         ):
             module.handler({}, None)
     client.assert_not_called()
+
+
+def test_handler_retries_only_retryable_aws_errors():
+    path = ROOT / "infrastructure/lambda/ai_worker_handler.py"
+    spec = importlib.util.spec_from_file_location("ai_worker_handler_errors", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    event = {"action": "generate_content", "run_id": RUN_ID, "execution_arn": OWNER}
+
+    denied = ClientError(
+        {"Error": {"Code": "AccessDeniedException"},
+         "ResponseMetadata": {"HTTPStatusCode": 403}},
+        "InvokeModel",
+    )
+    with (
+        patch.object(settings, "AI_WORKER_ENABLED", True),
+        patch.object(module, "_execute", side_effect=denied),
+        pytest.raises(ai_worker_service.AIWorkerError) as permanent,
+    ):
+        module.handler(event, None)
+    assert type(permanent.value) is ai_worker_service.AIWorkerError
+
+    throttled = ClientError(
+        {"Error": {"Code": "ThrottlingException"},
+         "ResponseMetadata": {"HTTPStatusCode": 429}},
+        "InvokeModel",
+    )
+    with (
+        patch.object(settings, "AI_WORKER_ENABLED", True),
+        patch.object(module, "_execute", side_effect=throttled),
+        pytest.raises(ai_worker_service.AIWorkerTemporaryError),
+    ):
+        module.handler(event, None)
+
+
+def test_handler_rejects_wrong_aws_region_before_dependencies():
+    path = ROOT / "infrastructure/lambda/ai_worker_handler.py"
+    spec = importlib.util.spec_from_file_location("ai_worker_handler_region", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with (
+        patch.object(settings, "AI_WORKER_ENABLED", True),
+        patch.object(settings, "AWS_REGION", "us-east-1"),
+        patch.object(module, "_execute") as execute,
+        pytest.raises(ai_worker_service.AIWorkerError, match="INVALID_AI_WORKER_REGION"),
+    ):
+        module.handler({}, None)
+    execute.assert_not_called()

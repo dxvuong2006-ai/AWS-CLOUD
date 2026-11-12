@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 def _enabled():
     if not settings.AI_WORKER_ENABLED:
         raise service.AIWorkerError("AI_WORKER_DISABLED")
+    if settings.AWS_REGION != "ap-southeast-1":
+        raise service.AIWorkerError("INVALID_AI_WORKER_REGION")
 
 
 def _execute(event, db):
@@ -41,26 +43,47 @@ def _execute(event, db):
 
 
 def handler(event, context):
-    _enabled()
-    with SessionLocal() as db:
-        try:
+    try:
+        _enabled()
+        with SessionLocal() as db:
             if not isinstance(event, dict):
                 raise service.AIWorkerError("INVALID_AI_WORKER_INPUT")
             return _execute(event, db)
-        except Exception as exc:
-            db.rollback()
-            logger.warning("ai_worker_operation_failed type=%s", type(exc).__name__)
-            if isinstance(exc, (OperationalError, BotoCoreError)):
-                raise service.AIWorkerTemporaryError("AI_WORKER_DEPENDENCY_UNAVAILABLE") from None
-            if isinstance(exc, ClientError):
-                status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
-                code = exc.response.get("Error", {}).get("Code", "")
-                if status >= 500 or status == 429 or code in {
-                    "ThrottlingException", "TooManyRequestsException",
-                    "LimitExceededException", "InternalFailure",
-                    "InternalFailureException", "ServiceUnavailableException",
-                    "ModelNotReadyException", "ModelTimeoutException",
-                }:
-                    raise service.AIWorkerTemporaryError("AI_WORKER_DEPENDENCY_UNAVAILABLE") from None
-            code = str(exc) if isinstance(exc, service.AIWorkerError) else "AI_WORKER_OPERATION_FAILED"
-            raise service.AIWorkerError(code) from None
+    except Exception as exc:
+        safe_code = (
+            str(exc) if isinstance(exc, service.AIWorkerError)
+            else "AI_WORKER_OPERATION_FAILED"
+        )
+        action = event.get("action", "invalid") if isinstance(event, dict) else "invalid"
+        run_id = event.get("run_id", "invalid") if isinstance(event, dict) else "invalid"
+        if action not in {"start_transcription", "poll_transcription", "generate_content"}:
+            action = "invalid"
+        if (
+            not isinstance(run_id, str)
+            or len(run_id) != 64
+            or any(character not in "0123456789abcdef" for character in run_id)
+        ):
+            run_id = "invalid"
+        logger.warning(
+            "ai_worker_operation_failed action=%s run_id=%s code=%s type=%s",
+            action, run_id, safe_code, type(exc).__name__,
+        )
+        if isinstance(exc, service.AIWorkerTemporaryError):
+            raise service.AIWorkerTemporaryError(safe_code) from None
+        if isinstance(exc, ClientError):
+            status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+            code = exc.response.get("Error", {}).get("Code", "")
+            if status >= 500 or status == 429 or code in {
+                "ThrottlingException", "TooManyRequestsException",
+                "LimitExceededException", "InternalFailure",
+                "InternalFailureException", "ServiceUnavailableException",
+                "ModelNotReadyException", "ModelTimeoutException",
+            }:
+                raise service.AIWorkerTemporaryError(
+                    "AI_WORKER_DEPENDENCY_UNAVAILABLE"
+                ) from None
+        if isinstance(exc, (OperationalError, BotoCoreError)):
+            raise service.AIWorkerTemporaryError(
+                "AI_WORKER_DEPENDENCY_UNAVAILABLE"
+            ) from None
+        raise service.AIWorkerError(safe_code) from None

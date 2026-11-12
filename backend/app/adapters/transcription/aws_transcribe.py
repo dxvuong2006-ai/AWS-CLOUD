@@ -5,6 +5,7 @@ import re
 import uuid
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import (
     ClientError, ConnectionClosedError, ConnectTimeoutError,
     CredentialRetrievalError, EndpointConnectionError, NoCredentialsError,
@@ -12,6 +13,7 @@ from botocore.exceptions import (
 )
 
 from app.adapters.transcription.mock_transcriber import MockTranscriber
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 AWS_FAILURES = (
@@ -32,7 +34,12 @@ class AWSTranscribeAdapter:
         """
         self._client = client
         self._mock_jobs = set()
-        self._mock = MockTranscriber()
+        self._mock = None
+
+    def _mock_transcriber(self):
+        if self._mock is None:
+            self._mock = MockTranscriber()
+        return self._mock
 
     def _get_client(self):
         """Tạo client theo chuỗi credentials mặc định của AWS.
@@ -41,12 +48,20 @@ class AWSTranscribeAdapter:
             Client Transcribe đã cấu hình.
         """
         if self._client is None:
-            self._client = boto3.client("transcribe")
+            self._client = boto3.client(
+                "transcribe",
+                region_name=settings.AWS_REGION,
+                config=Config(
+                    connect_timeout=5,
+                    read_timeout=15,
+                    retries={"total_max_attempts": 2, "mode": "standard"},
+                ),
+            )
         return self._client
 
     def transcribe(
         self, media_path_or_s3_uri, language_code="vi-VN",
-        allow_fallback=True,
+        allow_fallback=False,
     ):
         """Tạo tác vụ phiên âm cho media đã tải lên S3.
 
@@ -71,7 +86,9 @@ class AWSTranscribeAdapter:
             if not allow_fallback:
                 raise
             logger.warning("Transcribe source=mock; reason=%s", type(exc).__name__)
-            result = self._mock.transcribe(media_path_or_s3_uri, language_code)
+            result = self._mock_transcriber().transcribe(
+                media_path_or_s3_uri, language_code,
+            )
             self._mock_jobs.add(job_id)
             return {**result, "job_id": job_id, "source": "mock"}
         job = response["TranscriptionJob"]
@@ -110,20 +127,26 @@ class AWSTranscribeAdapter:
                 existing = self._get_client().get_transcription_job(
                     TranscriptionJobName=job_name,
                 )["TranscriptionJob"]
-                if existing.get("Media", {}).get("MediaFileUri") != media_uri:
-                    raise ValueError("Existing Transcribe job has a different media source.") from None
+                if (
+                    existing.get("TranscriptionJobName") != job_name
+                    or existing.get("Media", {}).get("MediaFileUri") != media_uri
+                    or existing.get("LanguageCode") != language_code
+                ):
+                    raise ValueError(
+                        "Existing Transcribe job does not match the requested job."
+                    ) from None
                 return self._job_result(existing)
             if not allow_fallback:
                 raise
             logger.warning("Transcribe source=mock; reason=%s", type(exc).__name__)
-            result = self._mock.transcribe(media_uri, language_code)
+            result = self._mock_transcriber().transcribe(media_uri, language_code)
             self._mock_jobs.add(job_name)
             return {**result, "job_id": job_name, "source": "mock"}
         except AWS_FAILURES as exc:
             if not allow_fallback:
                 raise
             logger.warning("Transcribe source=mock; reason=%s", type(exc).__name__)
-            result = self._mock.transcribe(media_uri, language_code)
+            result = self._mock_transcriber().transcribe(media_uri, language_code)
             self._mock_jobs.add(job_name)
             return {**result, "job_id": job_name, "source": "mock"}
         return self._job_result(response["TranscriptionJob"])
@@ -150,7 +173,7 @@ class AWSTranscribeAdapter:
             Trạng thái và URI kết quả khi AWS đã hoàn tất.
         """
         if job_id in self._mock_jobs:
-            return self._mock.get_job_status(job_id)
+            return self._mock_transcriber().get_job_status(job_id)
         job = self._get_client().get_transcription_job(
             TranscriptionJobName=job_id,
         )["TranscriptionJob"]

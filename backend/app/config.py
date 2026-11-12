@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     TRANSCRIBE_LANGUAGE_CODE: str = "vi-VN"
     TRANSCRIBE_OUTPUT_BUCKET: str = ""
     TRANSCRIBE_OUTPUT_PREFIX: str = "ai-transcripts"
+    AI_TRANSCRIPT_MAX_BYTES: int = Field(default=2_000_000, ge=1_000, le=5_000_000)
+    AI_TRANSCRIPT_MAX_CHARACTERS: int = Field(
+        default=400_000, ge=1_000, le=1_000_000,
+    )
     AI_QUIZ_QUESTION_COUNT: int = Field(default=3, ge=1, le=20)
 
     JWT_SECRET_KEY: SecretStr | None = None

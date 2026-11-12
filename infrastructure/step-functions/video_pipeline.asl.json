@@ -380,7 +380,7 @@
           "job_id.$": "$.transcription.Payload.job_id"
         }
       },
-      "TimeoutSeconds": 600,
+      "TimeoutSeconds": 620,
       "ResultPath": "$.last",
       "Retry": [
         {

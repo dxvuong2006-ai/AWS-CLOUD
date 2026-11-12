@@ -1,6 +1,7 @@
 """Read and validate an Amazon Transcribe result from a controlled S3 key."""
 
 import json
+import math
 
 import boto3
 from botocore.config import Config
@@ -21,12 +22,14 @@ class S3TranscriptAdapter:
                 "s3", region_name=settings.AWS_REGION,
                 config=Config(
                     connect_timeout=5, read_timeout=15,
-                    retries={"max_attempts": 2, "mode": "standard"},
+                    retries={"total_max_attempts": 2, "mode": "standard"},
                 ),
             )
         return self._client
 
     def read(self, bucket: str, key: str, *, max_bytes: int = 5_000_000) -> dict:
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or not 1 <= max_bytes <= 5_000_000:
+            raise ValueError("Invalid Transcribe result size limit.")
         response = self.client.get_object(Bucket=bucket, Key=key)
         length = response.get("ContentLength")
         if not isinstance(length, int) or length <= 0 or length > max_bytes:
@@ -38,6 +41,8 @@ class S3TranscriptAdapter:
             stream.close()
         if len(payload) > max_bytes:
             raise ValueError("Transcribe result is too large.")
+        if len(payload) != length:
+            raise ValueError("Incomplete Transcribe result body.")
         try:
             document = json.loads(payload)
         except (UnicodeDecodeError, json.JSONDecodeError):
@@ -70,6 +75,12 @@ def parse_transcript(document: dict) -> dict:
             start, end = float(item["start_time"]), float(item["end_time"])
         except (KeyError, TypeError, ValueError, OverflowError):
             continue
-        if isinstance(content, str) and content.strip() and 0 <= start <= end:
+        if (
+            isinstance(content, str)
+            and content.strip()
+            and math.isfinite(start)
+            and math.isfinite(end)
+            and 0 <= start <= end
+        ):
             segments.append({"start": start, "end": end, "text": content.strip()})
     return {"text": text.strip(), "segments": segments}

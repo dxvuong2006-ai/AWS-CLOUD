@@ -19,9 +19,11 @@ from ai_pipeline.processors.build_quiz import build_quiz
 from ai_pipeline.processors.build_summary import build_summary
 from app.adapters.ai.base import BaseAIAdapter
 from app.adapters.ai.mock_ai import MockAIAdapter
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+MAX_RESPONSE_BYTES = 1_000_000
 AWS_FAILURES = (
     ClientError, ConnectionClosedError, ConnectTimeoutError,
     CredentialRetrievalError, EndpointConnectionError, NoCredentialsError,
@@ -54,7 +56,7 @@ class BedrockAIAdapter(BaseAIAdapter):
         )
         self.region_name = (
             region_name or os.getenv("AWS_REGION")
-            or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+            or os.getenv("AWS_DEFAULT_REGION") or settings.AWS_REGION
         )
         self._client = client
         self.used_fallback = False
@@ -73,7 +75,7 @@ class BedrockAIAdapter(BaseAIAdapter):
                 "bedrock-runtime", region_name=self.region_name,
                 config=Config(
                     connect_timeout=5, read_timeout=60,
-                    retries={"max_attempts": 2, "mode": "standard"},
+                    retries={"total_max_attempts": 2, "mode": "standard"},
                 ),
             )
         response = self._client.invoke_model(
@@ -88,9 +90,15 @@ class BedrockAIAdapter(BaseAIAdapter):
         )
         stream = response["body"]
         try:
-            result = json.loads(stream.read())
+            payload = stream.read(MAX_RESPONSE_BYTES + 1)
         finally:
             stream.close()
+        if len(payload) > MAX_RESPONSE_BYTES:
+            raise ValueError("Claude returned an oversized response.")
+        try:
+            result = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Claude returned an invalid response envelope.") from None
         if not isinstance(result, dict):
             raise ValueError("Claude returned an invalid response envelope.")
         if result.get("stop_reason") == "max_tokens":

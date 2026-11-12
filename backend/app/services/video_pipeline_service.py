@@ -14,8 +14,9 @@ from app.adapters.video.base import ProcessingReceipt, ProcessorDispatchError, V
 from app.adapters.video.mediaconvert import MediaConvertError, output_key, source_identity
 from app.config import settings
 from app.models.video_pipeline import VideoPipelineRun, VideoUpload
-from app.repositories import courses_repo, lessons_repo, video_pipeline_repo as repo
-from app.services.review_service import validate_review_content
+from app.repositories import (
+    courses_repo, lessons_repo, review_repo, video_pipeline_repo as repo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -314,12 +315,36 @@ def finalize_ai(db, run_id, execution_arn, proof):
                 and lesson.processed_video_key == completed.output_key
                 and lesson.status in {"REVIEW_REQUIRED", "PUBLISHED"}):
             return {"status": "REVIEW_REQUIRED"}  # previous finalization committed; no mutation
+    # Serialize the proof check with instructor review writes.  K5 persistence
+    # and Review use the same section -> course -> lesson lock order.
+    pending = repo.get_run(db, run_id) if isinstance(run_id, str) else None
+    if pending is not None and pending.execution_arn == execution_arn:
+        review_repo.lock_section(db, pending.lesson_id)
     run, lesson, _ = _owned(db, run_id, execution_arn)
     if (run.state != "VIDEO_READY" or not isinstance(proof, dict)
             or proof.get("completed") is not True or proof.get("run_id") != run_id
             or lesson.processed_video_key != run.output_key):
         raise PipelineError("AI_NOT_COMPLETE")
-    validate_review_content(lesson)
+    transcript = lesson.transcript_json
+    quiz = review_repo.get_quiz(db, lesson.section_id)
+    if (
+        not isinstance(transcript, dict)
+        or transcript.get("run_id") != run.id
+        or transcript.get("job_id") != f"learncloud-k5-{run.id}"
+        or transcript.get("source") != "aws_transcribe"
+        or not isinstance(transcript.get("text"), str)
+        or not transcript["text"].strip()
+        or not isinstance(transcript.get("segments"), list)
+        or not isinstance(lesson.summary, str)
+        or not lesson.summary.strip()
+        or not isinstance(lesson.key_concepts_json, list)
+        or not lesson.key_concepts_json
+        or quiz is None
+        or quiz.is_approved is not False
+        or not review_repo.get_questions(db, quiz.id)
+        or not review_repo.get_flashcards(db, lesson.id)
+    ):
+        raise PipelineError("AI_NOT_COMPLETE")
     run.state = "COMPLETE"
     lesson.status = "REVIEW_REQUIRED"
     lesson.error_message = None

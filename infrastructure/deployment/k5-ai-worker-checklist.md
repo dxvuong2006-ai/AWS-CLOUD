@@ -3,8 +3,10 @@
 This repository change is local-only. Do not enable either feature flag until a
 non-production end-to-end run has completed.
 
-1. Build Linux Python 3.12 x86_64 dependencies in a clean container and run
-   `backend/scripts/build_ai_worker_package.py`. Verify ZIP root contains
+1. Install `backend/requirements-ai-worker.txt` into a clean Linux Python 3.12
+   x86_64 dependency directory, then run `backend/scripts/build_ai_worker_package.py`.
+   The builder rejects Windows/ARM/wrong-CPython native binaries and AWS size-limit
+   violations. Verify ZIP root contains
    `ai_worker_handler.py`, `app/`, `ai_pipeline/`, `psycopg2/` and JSON schemas/prompts.
 2. Create a dedicated execution role from `lambda-ai-worker-permissions.json`.
    Add the existing VPC ENI policy only when the function is attached to the RDS VPC.

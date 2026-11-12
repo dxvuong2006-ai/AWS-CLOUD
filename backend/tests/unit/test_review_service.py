@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
 
-from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+from app.adapters.ai.bedrock_ai import BedrockAIAdapter, MAX_RESPONSE_BYTES
 from app.adapters.ai.mock_ai import MockAIAdapter
 from app.dependencies import get_current_user, get_db
 from app.main import app
@@ -314,6 +314,15 @@ def test_bedrock_validates_output_and_closes_stream(method):
     assert body["anthropic_version"] == "bedrock-2023-05-31"
     assert body["messages"][0]["role"] == "user"
     assert not ai.used_fallback
+
+
+def test_bedrock_rejects_oversized_response_and_closes_stream():
+    client = Mock()
+    stream = io.BytesIO(b"x" * (MAX_RESPONSE_BYTES + 1))
+    client.invoke_model.return_value = {"body": stream}
+    with pytest.raises(ValueError, match="oversized"):
+        BedrockAIAdapter(client=client).generate_summary("Transcript")
+    assert stream.closed
 
 
 @pytest.mark.parametrize("error", [
