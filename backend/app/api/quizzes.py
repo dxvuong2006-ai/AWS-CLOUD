@@ -6,7 +6,6 @@ from app.dependencies import get_db, require_student
 from app.models.user import User
 from app.schemas.quiz import (
     QuizAttemptResultResponse,
-    QuizAttemptSubmitRequest,
     QuizDetailResponse,
     QuizHistoryItemResponse,
     QuizSubmitRequest,
@@ -51,7 +50,7 @@ def get_section_quiz(
 )
 def submit_quiz(
     quiz_id: int,
-    body: QuizAttemptSubmitRequest,
+    body: QuizSubmitRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_student),
 ):

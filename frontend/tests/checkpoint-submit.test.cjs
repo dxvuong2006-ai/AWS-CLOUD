@@ -32,7 +32,8 @@ test('double clicks share a request and a network retry preserves exact UUID and
   const rejectedFirst = assert.rejects(first, /offline/), rejectedSecond = assert.rejects(second, /offline/);
   reject(Error('offline')); await Promise.all([rejectedFirst, rejectedSecond]);
   const body = JSON.stringify(a.calls[0].options.body);
-  assert.ok(a.readPendingAttempt('2').request_id);
+  assert.match(a.readPendingAttempt('2').request_id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   a.handle(async () => ({id: 4, can_retry: false}));
   await a.submitAttempt('2', [], '1');
   assert.equal(JSON.stringify(a.calls[1].options.body), body);

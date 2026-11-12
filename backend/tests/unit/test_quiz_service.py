@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -9,13 +10,16 @@ from sqlalchemy.orm import sessionmaker
 from app.api.quizzes import submit_quiz as submit_quiz_endpoint
 from app.database import Base
 from app.models.course import Course
+from app.models.enrollment import Enrollment
+from app.models.lesson import Lesson
+from app.models.progress import LessonProgress
 from app.models.quiz import Question, Quiz, QuizAnswer, QuizAttempt
 from app.models.section import Section
 from app.models.user import User
 from app.repositories import quizzes_repo
 from app.schemas.quiz import (
     QuestionResponse,
-    QuizAttemptResponse,
+    QuizAttemptResultResponse,
     QuizDetailResponse,
     QuizSubmitRequest,
 )
@@ -45,9 +49,31 @@ def _create_quiz(db_session, section_id: int, *, approved: bool = True) -> Quiz:
     return quiz
 
 
+def _grant_access(db_session, student, course, section) -> Lesson:
+    """Create the enrollment/progress required by the production checkpoint gate."""
+    db_session.add(Enrollment(student_id=student.id, course_id=course.id))
+    lesson = Lesson(
+        section_id=section.id,
+        title="Published lesson",
+        position=1,
+        status="PUBLISHED",
+    )
+    db_session.add(lesson)
+    db_session.flush()
+    db_session.add(LessonProgress(
+        student_id=student.id,
+        lesson_id=lesson.id,
+        watched_seconds=1,
+        completed=True,
+    ))
+    db_session.commit()
+    return lesson
+
+
 def test_quiz_get_and_attempt_responses_validate(db_session, quiz_course):
-    student, _, sections = quiz_course
+    student, course, sections = quiz_course
     quiz = _create_quiz(db_session, sections[0].id)
+    lesson = _grant_access(db_session, student, course, sections[0])
     question = quizzes_repo.get_questions_by_quiz(db_session, quiz.id)[0]
 
     orm_question = QuestionResponse.model_validate(question)
@@ -64,28 +90,35 @@ def test_quiz_get_and_attempt_responses_validate(db_session, quiz_course):
     assert get_question["options"] == ["A", "B", "C", "D"]
     assert "correct_answer" not in get_question
     assert "explanation" not in get_question
+    assert get_response.is_approved is True
+    assert get_response.created_at == quiz.created_at
+    assert get_response.updated_at == quiz.updated_at
 
     post_data = quiz_service.submit_quiz(
         db_session,
         student_id=student.id,
         quiz_id=quiz.id,
         submission=QuizSubmitRequest(
+            request_id=uuid4(),
+            lesson_id=lesson.id,
             answers=[{"question_id": question.id, "selected_answer": "A"}]
         ),
     )
-    post_response = QuizAttemptResponse.model_validate(post_data)
-    result = post_response.model_dump()["results"][0]
-    assert result["options"] == ["A", "B", "C", "D"]
-    assert result["correct_answer"] == "A"
-    assert result["explanation"] == "A is correct."
+    post_response = QuizAttemptResultResponse.model_validate(post_data)
+    result = post_response.model_dump()["answers"][0]
+    assert result["selected_answer"] == "A"
+    assert result["is_correct"] is True
+    assert "correct_answer" not in post_response.model_dump_json()
+    assert "explanation" not in post_response.model_dump_json()
 
 
 def test_submit_locked_quiz_returns_403_without_attempt(
     db_session,
     quiz_course,
 ):
-    student, _, sections = quiz_course
+    student, course, sections = quiz_course
     _create_quiz(db_session, sections[0].id)
+    _grant_access(db_session, student, course, sections[0])
     locked_quiz = _create_quiz(db_session, sections[1].id)
     question = quizzes_repo.get_questions_by_quiz(db_session, locked_quiz.id)[0]
 
@@ -93,6 +126,7 @@ def test_submit_locked_quiz_returns_403_without_attempt(
         submit_quiz_endpoint(
             quiz_id=locked_quiz.id,
             body=QuizSubmitRequest(
+                request_id=uuid4(),
                 answers=[{"question_id": question.id, "selected_answer": "A"}]
             ),
             db=db_session,
@@ -103,24 +137,67 @@ def test_submit_locked_quiz_returns_403_without_attempt(
     assert db_session.query(QuizAttempt).count() == 0
 
 
+def test_quiz_submit_request_replays_without_exposing_answer_key(
+    db_session,
+    quiz_course,
+):
+    student, course, sections = quiz_course
+    quiz = _create_quiz(db_session, sections[0].id)
+    lesson = _grant_access(db_session, student, course, sections[0])
+    question = quizzes_repo.get_questions_by_quiz(db_session, quiz.id)[0]
+    request_id = uuid4()
+    payload = QuizSubmitRequest(
+        request_id=request_id,
+        lesson_id=lesson.id,
+        answers=[{"question_id": question.id, "selected_answer": "A"}],
+    )
+
+    first = quiz_service.submit_quiz(
+        db_session, student_id=student.id, quiz_id=quiz.id,
+        submission=payload,
+    )
+    replay = quiz_service.submit_quiz(
+        db_session, student_id=student.id, quiz_id=quiz.id,
+        submission=payload,
+    )
+
+    assert replay.id == first.id
+    assert db_session.query(QuizAttempt).count() == 1
+    public = replay.model_dump(mode="json")
+    assert "correct_answer" not in str(public)
+    assert "explanation" not in str(public)
+
+    with pytest.raises(HTTPException) as conflict:
+        quiz_service.submit_quiz(
+            db_session, student_id=student.id, quiz_id=quiz.id,
+            submission=QuizSubmitRequest(
+                request_id=request_id,
+                lesson_id=lesson.id,
+                answers=[{
+                    "question_id": question.id,
+                    "selected_answer": "B",
+                }],
+            ),
+        )
+    assert conflict.value.status_code == 409
+
+
 def test_failed_answer_persistence_rolls_back_passed_attempt(
     db_session,
     quiz_course,
     monkeypatch,
 ):
-    student, _, sections = quiz_course
+    student, course, sections = quiz_course
     quiz = _create_quiz(db_session, sections[0].id)
+    lesson = _grant_access(db_session, student, course, sections[0])
     question = quizzes_repo.get_questions_by_quiz(db_session, quiz.id)[0]
 
-    save_answers = quizzes_repo.save_attempt_answers
-
     def fail_after_saving_answers(*args, **kwargs):
-        save_answers(*args, **kwargs)
         raise RuntimeError("answer persistence failed")
 
     monkeypatch.setattr(
-        quizzes_repo,
-        "save_attempt_answers",
+        quiz_service,
+        "_result",
         fail_after_saving_answers,
     )
 
@@ -130,6 +207,8 @@ def test_failed_answer_persistence_rolls_back_passed_attempt(
             student_id=student.id,
             quiz_id=quiz.id,
             submission=QuizSubmitRequest(
+                request_id=uuid4(),
+                lesson_id=lesson.id,
                 answers=[{"question_id": question.id, "selected_answer": "A"}]
             ),
         )
@@ -169,7 +248,7 @@ def test_history_maps_title_without_changing_response(db_session, quiz_course):
     ]
 
 
-def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
+def test_concurrent_retries_with_same_request_create_one_attempt(tmp_path):
     database_path = tmp_path / "concurrent-quiz.sqlite3"
     engine = create_engine(
         f"sqlite:///{database_path.as_posix()}",
@@ -206,6 +285,24 @@ def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
             )
             setup_db.add(section)
             setup_db.flush()
+            setup_db.add(Enrollment(
+                student_id=student.id,
+                course_id=course.id,
+            ))
+            lesson = Lesson(
+                section_id=section.id,
+                title="Published lesson",
+                position=1,
+                status="PUBLISHED",
+            )
+            setup_db.add(lesson)
+            setup_db.flush()
+            setup_db.add(LessonProgress(
+                student_id=student.id,
+                lesson_id=lesson.id,
+                watched_seconds=1,
+                completed=True,
+            ))
             quiz = Quiz(
                 section_id=section.id,
                 title="Quiz",
@@ -227,8 +324,10 @@ def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
             student_id = student.id
             quiz_id = quiz.id
             question_id = question.id
+            lesson_id = lesson.id
 
         start_barrier = Barrier(2)
+        request_id = uuid4()
 
         def submit_concurrently():
             with session_factory() as db:
@@ -239,6 +338,8 @@ def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
                     student_id=student_id,
                     quiz_id=quiz_id,
                     submission=QuizSubmitRequest(
+                        request_id=request_id,
+                        lesson_id=lesson_id,
                         answers=[
                             {
                                 "question_id": question_id,
@@ -246,14 +347,14 @@ def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
                             }
                         ]
                     ),
-                )["attempt_number"]
+                ).attempt_number
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             attempt_numbers = list(
                 executor.map(lambda _: submit_concurrently(), range(2))
             )
 
-        assert sorted(attempt_numbers) == [1, 2]
+        assert attempt_numbers == [1, 1]
         with session_factory() as verify_db:
             persisted_numbers = [
                 attempt_number
@@ -266,7 +367,7 @@ def test_concurrent_submissions_get_distinct_attempt_numbers(tmp_path):
                 )
                 .all()
             ]
-        assert sorted(persisted_numbers) == [1, 2]
+        assert persisted_numbers == [1]
     finally:
         Base.metadata.drop_all(bind=engine)
         engine.dispose()

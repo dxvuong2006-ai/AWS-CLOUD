@@ -6,13 +6,16 @@ export function normalizeQuiz(data) {
     passingScore: Number(data.passing_score ?? 80),
     attemptCount: data.attempt_count ?? 0,
     previousScore: data.previous_score == null ? null : Number(data.previous_score),
-    questions: data.questions.map((q) => ({
-      id: String(q.id),
-      text: q.question,
-      concept: q.topic,
-      // The backend identifies options by their text, not an option table ID.
-      options: q.options_json.map((text) => ({ id: text, text })),
-    })),
+    questions: data.questions.map((q) => {
+      const options = q.options ?? q.options_json ?? [];
+      return {
+        id: String(q.id),
+        text: q.question,
+        concept: q.topic,
+        // The backend identifies options by their text, not an option table ID.
+        options: options.map((text) => ({ id: text, text })),
+      };
+    }),
   };
 }
 

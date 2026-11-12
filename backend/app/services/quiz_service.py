@@ -31,7 +31,6 @@ from app.repositories import quizzes_repo
 from app.schemas.quiz import (
     QuestionResponse,
     QuizAttemptResultResponse,
-    QuizAttemptSubmitRequest,
     QuizDetailResponse,
     QuizSubmitRequest,
 )
@@ -246,7 +245,7 @@ def _result(db: Session, attempt: QuizAttempt) -> QuizAttemptResultResponse:
     )
 
 
-def _fingerprint(payload: QuizAttemptSubmitRequest) -> str:
+def _fingerprint(payload: QuizSubmitRequest) -> str:
     canonical = {
         "lesson_id": payload.lesson_id,
         "answers": sorted(
@@ -292,7 +291,7 @@ def submit_attempt(
     db: Session,
     quiz_id: int,
     student_id: int,
-    payload: QuizAttemptSubmitRequest,
+    payload: QuizSubmitRequest,
 ) -> QuizAttemptResultResponse:
     request_id = str(payload.request_id)
     fingerprint = _fingerprint(payload)
@@ -451,6 +450,12 @@ def get_quiz_for_student(db: Session, *, section_id: int) -> dict:
         "section_id": quiz.section_id,
         "title": quiz.title,
         "passing_score": max(MIN_PASSING_SCORE, quiz.passing_score),
+        "is_approved": quiz.is_approved,
+        "created_at": quiz.created_at,
+        "updated_at": quiz.updated_at,
+        "attempt_count": 0,
+        "previous_score": None,
+        "can_retry": True,
         "questions": [
             {
                 "id": question.id,
@@ -484,105 +489,13 @@ def submit_quiz(
     student_id: int,
     quiz_id: int,
     submission: QuizSubmitRequest,
-) -> dict:
-    quiz = quizzes_repo.lock_quiz_for_submission(db, quiz_id=quiz_id)
-    if quiz is None:
-        raise QuizNotFoundError("Quiz not found.")
-    if not quiz.is_approved:
-        raise QuizNotApprovedError("Quiz is not approved yet.")
-
-    _assert_quiz_section_access(
+) -> QuizAttemptResultResponse:
+    return submit_attempt(
         db,
-        student_id=student_id,
-        section_id=quiz.section_id,
-    )
-    questions = quizzes_repo.get_questions_by_quiz(db, quiz_id)
-    if not questions:
-        raise InvalidSubmissionError("Cannot submit a quiz without questions.")
-
-    answers_by_question_id: dict[int, str] = {}
-    for answer in submission.answers:
-        if answer.question_id in answers_by_question_id:
-            raise InvalidSubmissionError(
-                f"Multiple answers submitted for question {answer.question_id}."
-            )
-        answers_by_question_id[answer.question_id] = answer.selected_answer
-
-    question_ids = {question.id for question in questions}
-    unexpected_ids = set(answers_by_question_id) - question_ids
-    if unexpected_ids:
-        raise InvalidSubmissionError(
-            "Submission contains questions that do not belong to this quiz."
-        )
-
-    correct_count = 0
-    results: list[dict] = []
-    answers_data: list[dict] = []
-    for question in questions:
-        selected_answer = answers_by_question_id.get(question.id, "")
-        if selected_answer and selected_answer not in question.options_json:
-            raise InvalidSubmissionError(
-                f"Answer for question {question.id} must match one of its options."
-            )
-        is_correct = bool(selected_answer) and selected_answer == question.correct_answer
-        if is_correct:
-            correct_count += 1
-        answers_data.append(
-            {
-                "question_id": question.id,
-                "selected_answer": selected_answer or None,
-                "is_correct": is_correct,
-            }
-        )
-        results.append(
-            {
-                "id": question.id,
-                "quiz_id": question.quiz_id,
-                "question": question.question,
-                "options": question.options_json,
-                "selected_answer": selected_answer or None,
-                "correct_answer": question.correct_answer,
-                "is_correct": is_correct,
-                "explanation": question.explanation,
-            }
-        )
-
-    score = Decimal(correct_count * 100) / Decimal(len(questions))
-    passed = score >= max(PASS_SCORE, Decimal(str(quiz.passing_score)))
-    attempt_number = quizzes_repo.count_user_attempts(
-        db,
-        student_id=student_id,
         quiz_id=quiz_id,
-    ) + 1
-
-    try:
-        with quizzes_repo.submission_transaction(db):
-            attempt = quizzes_repo.create_attempt(
-                db,
-                student_id=student_id,
-                quiz_id=quiz_id,
-                score=float(score),
-                passed=passed,
-                attempt_number=attempt_number,
-            )
-            quizzes_repo.save_attempt_answers(
-                db,
-                attempt_id=attempt.id,
-                answers_data=answers_data,
-            )
-    except Exception:
-        raise
-
-    return {
-        "id": attempt.id,
-        "quiz_id": attempt.quiz_id,
-        "student_id": attempt.student_id,
-        "score": attempt.score,
-        "passed": attempt.passed,
-        "attempt_number": attempt.attempt_number,
-        "created_at": attempt.created_at,
-        "results": results,
-    }
+        student_id=student_id,
+        payload=submission,
+    )
 
 
 def get_student_quiz_history(
