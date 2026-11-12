@@ -18,7 +18,8 @@ os.environ.update({
 if __name__ == "__main__":
     import pytest
     paths = sys.argv[1:] or [str(offline.root / "tests/unit" / name) for name in (
-        "test_auth_integration.py", "test_authorization_p0.py", "test_dual_auth.py", "test_local_auth_provisioning.py")]
+        "test_auth_integration.py", "test_authorization_p0.py", "test_dual_auth.py",
+        "test_local_auth_provisioning.py", "test_cognito_provisioning.py")]
     with ExitStack() as stack:
         for name in ("connect", "connect_ex", "sendto"):
             stack.enter_context(patch.object(offline.socket.socket, name, offline.deny_network))

@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadVerifiedCognitoProfileForProvisioning",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminGetUser"
+      ],
+      "Resource": "arn:aws:cognito-idp:${AWS_REGION}:${ACCOUNT_ID}:userpool/${COGNITO_USER_POOL_ID}"
+    },
+    {
+      "Sid": "AdminUserManagementUsedByLearnCloudRoutes",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminSetUserPassword",
+        "cognito-idp:AdminAddUserToGroup",
+        "cognito-idp:AdminRemoveUserFromGroup",
+        "cognito-idp:AdminUpdateUserAttributes"
+      ],
+      "Resource": "arn:aws:cognito-idp:${AWS_REGION}:${ACCOUNT_ID}:userpool/${COGNITO_USER_POOL_ID}"
+    }
+  ]
+}

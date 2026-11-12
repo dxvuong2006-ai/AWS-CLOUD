@@ -424,8 +424,9 @@ def test_cognito_confirmation_cannot_overwrite_local_user(dual, monkeypatch):
     encoded = user.password_hash
     # Only these Cognito responses are simulated, never a real AWS operation.
     client = Mock()
-    client.admin_get_user.return_value = {"UserAttributes": [
-        {"Name": "sub", "Value": "attacker"}, {"Name": "email", "Value": dual.email}]}
+    client.admin_get_user.return_value = {"Enabled": True, "UserStatus": "CONFIRMED", "UserAttributes": [
+        {"Name": "sub", "Value": "attacker"}, {"Name": "email", "Value": dual.email},
+        {"Name": "email_verified", "Value": "true"}]}
     monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
     result = dual.client.post("/auth/verify-email", json={"email": dual.email, "code": "123456"})
     assert result.status_code == 409

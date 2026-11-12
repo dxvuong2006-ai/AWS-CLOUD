@@ -163,7 +163,7 @@ class CognitoTokenVerificationLoggingTests(unittest.TestCase):
 
         self.assertIs(result, user)
         cognito_client.assert_not_called()
-        db.commit.assert_called_once()
+        db.commit.assert_not_called()
 
     def test_signature_error_is_logged_without_token(self):
         token = "sensitive.jwt.token"

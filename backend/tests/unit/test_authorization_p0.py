@@ -130,8 +130,20 @@ def test_cached_identity_observes_committed_database_role_change(security):
     assert response.json()["role"] == "STUDENT"
 
 
-def test_unprovisioned_identity_cannot_bootstrap_admin_from_groups(security):
-    claims = {**security.claims(99, ["ADMIN"]), "email": "new@example.com"}
+def test_unprovisioned_identity_cannot_bootstrap_admin_from_groups(security, monkeypatch):
+    client = Mock()
+    client.admin_get_user.return_value = {
+        "Enabled": True,
+        "UserStatus": "CONFIRMED",
+        "UserAttributes": [
+            {"Name": "sub", "Value": "sub-99"},
+            {"Name": "email", "Value": "new@example.com"},
+            {"Name": "email_verified", "Value": "true"},
+            {"Name": "name", "Value": "New user"},
+        ],
+    }
+    monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
+    claims = {**security.claims(99, ["ADMIN"]), "username": "new-user"}
     user = auth_service.sync_authorizer_claims(security.db, claims)
     assert user.role == "STUDENT"
 
@@ -143,9 +155,20 @@ def test_auth_me_missing_database_identity_without_email_fails_closed(security):
 
 
 @pytest.mark.parametrize("uid", [1, 4])
-def test_different_cognito_subject_cannot_inherit_database_privileges(security, uid):
+def test_different_cognito_subject_cannot_inherit_database_privileges(security, uid, monkeypatch):
     user = security.db.get(User, uid)
-    claims = {**security.claims(99, ["ADMIN"]), "email": user.email}
+    client = Mock()
+    client.admin_get_user.return_value = {
+        "Enabled": True,
+        "UserStatus": "CONFIRMED",
+        "UserAttributes": [
+            {"Name": "sub", "Value": "sub-99"},
+            {"Name": "email", "Value": user.email},
+            {"Name": "email_verified", "Value": "true"},
+        ],
+    }
+    monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
+    claims = {**security.claims(99, ["ADMIN"]), "username": "conflicting-user"}
     with pytest.raises(auth_service.InvalidToken):
         auth_service.sync_authorizer_claims(security.db, claims)
     assert security.db.get(User, uid).cognito_sub == f"sub-{uid}"

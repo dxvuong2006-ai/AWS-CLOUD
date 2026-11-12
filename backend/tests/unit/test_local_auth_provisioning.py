@@ -157,8 +157,9 @@ def test_cognito_confirmation_preserves_local_password(dual, monkeypatch):
     approved_fixture(dual, user)
     encoded = user.password_hash
     client = Mock()
-    client.admin_get_user.return_value = {"UserAttributes": [
+    client.admin_get_user.return_value = {"Enabled": True, "UserStatus": "CONFIRMED", "UserAttributes": [
         {"Name": "sub", "Value": user.cognito_sub}, {"Name": "email", "Value": user.email},
+        {"Name": "email_verified", "Value": "true"},
         {"Name": "name", "Value": user.name}]}
     monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
     assert dual.client.post("/auth/verify-email", json={"email": user.email, "code": "123456"}).status_code == 200
