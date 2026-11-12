@@ -17,3 +17,48 @@
 .flashcard-stats strong { font-size: 28px; }
 .flashcard-finish > span { font-size: 40px; color: var(--success, #168452); }
 .flashcard-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+/* Both faces share one grid cell so long answers never overlap the controls. */
+.flashcard-flip {
+  position: relative;
+  margin-top: 28px;
+  perspective: 1400px;
+}
+.flashcard-flip-rotor {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 560ms cubic-bezier(.22, .7, .24, 1);
+}
+.flashcard-flip[data-flipped="true"] .flashcard-flip-rotor {
+  transform: rotateY(180deg);
+}
+.flashcard-study .flashcard-flip .flashcard-face {
+  grid-area: 1 / 1;
+  margin-top: 0;
+  padding-bottom: 100px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flashcard-side-front { transform: rotateY(0deg); }
+.flashcard-side-back { transform: rotateY(180deg); }
+.flashcard-flip-toggle {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.flashcard-study .flashcard-flip[data-flipped="true"] + .flashcard-actions {
+  justify-content: center;
+}
+.flashcard-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .flashcard-flip-rotor { transition: none; }
+}
