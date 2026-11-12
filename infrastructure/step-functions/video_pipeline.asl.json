@@ -45,9 +45,14 @@
           "Variable": "$.decision",
           "StringEquals": "START",
           "Next": "InitPolls"
+        },
+        {
+          "Variable": "$.decision",
+          "StringEquals": "IGNORE",
+          "Next": "DuplicateIgnored"
         }
       ],
-      "Default": "DuplicateIgnored"
+      "Default": "InvalidUpload"
     },
     "InitPolls": {
       "Type": "Pass",

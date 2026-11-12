@@ -143,6 +143,20 @@ class VideoPipelinePostgresTests(unittest.TestCase):
         self.assertEqual(self.db.query(VideoPipelineRun).one().id, run.id)
         self.assertEqual(lessons_repo.get_by_id(self.db, self.lesson_id).raw_video_key, self.upload.source_key)
 
+    def test_uploaded_lesson_with_valid_ledger_and_no_runs_claims_generation_zero(self):
+        lesson = lessons_repo.get_by_id(self.db, self.lesson_id)
+        lesson.status = "UPLOADED"
+        lesson.raw_video_key = self.upload.source_key
+        self.db.commit()
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+
+        run = self.claim()
+
+        self.assertEqual(run.state, "CLAIMED")
+        self.assertEqual(run.upload_id, self.upload.id)
+        self.assertEqual(lesson.status, "PROCESSING")
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
+
     def test_real_course_lock_rejects_concurrent_claim_before_s3_or_second_run(self):
         self.claim()  # service acquires Course lock; outer transaction retains it
         competing_storage = Mock()

@@ -101,6 +101,17 @@ def _view(run):
     return {"decision": "START", "run_id": run.id, "ai_enabled": settings.VIDEO_AI_ENABLED}
 
 
+def _ignore(reason, *, lesson_id, run_id=None):
+    """Return the stable duplicate response and log only safe identifiers."""
+    logger.info(
+        "video_pipeline_claim_ignored reason=%s lesson_id=%s run_id=%s",
+        reason,
+        lesson_id,
+        run_id or "none",
+    )
+    return {"decision": "IGNORE"}
+
+
 def _clear_previous_content(lesson):
     # New generation must never inherit AI approval evidence from an older run.
     lesson.processed_video_key = None
@@ -130,11 +141,25 @@ def claim(db, payload, execution_arn, storage):
     if payload["kind"] == "upload":
         run = repo.run_for_attempt(db, upload.id, 0)
         if run is not None:
-            return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
-        if (lesson.status != "DRAFT" or lesson.retry_count != 0
-                or lesson.raw_video_key not in (None, "", key)
-                or (lesson.processed_video_key and lesson.raw_video_key != key)):
-            return {"decision": "IGNORE"}
+            return _view(run) if run.execution_arn == execution_arn else _ignore(
+                "UPLOAD_ALREADY_CLAIMED", lesson_id=lesson_id, run_id=run.id,
+            )
+        if lesson.status not in {"DRAFT", "UPLOADED"}:
+            return _ignore("INITIAL_LESSON_STATE", lesson_id=lesson_id)
+        if lesson.retry_count != 0:
+            return _ignore("INITIAL_ATTEMPT_MISMATCH", lesson_id=lesson_id)
+        if lesson.raw_video_key not in (None, "", key):
+            return _ignore("SOURCE_KEY_NOT_CURRENT", lesson_id=lesson_id)
+        if lesson.processed_video_key and lesson.raw_video_key != key:
+            return _ignore("PROCESSED_SOURCE_CONFLICT", lesson_id=lesson_id)
+        # UPLOADED is written by confirm-upload when the API Lambda does not
+        # dispatch the pipeline itself. Accept it only as an exact, confirmed
+        # generation: the issued ledger key must already be attached and no
+        # processed output may exist. DRAFT retains its existing event-first
+        # behavior where raw_video_key may still be empty.
+        if lesson.status == "UPLOADED" and (
+                lesson.raw_video_key != key or lesson.processed_video_key):
+            return _ignore("UPLOADED_GENERATION_MISMATCH", lesson_id=lesson_id)
         if course.status != "DRAFT":
             raise PipelineError("COURSE_NOT_DRAFT")
         etag = _etag(payload.get("etag"))
@@ -162,11 +187,17 @@ def claim(db, payload, execution_arn, storage):
         run = repo.get_run(db, payload.get("run_id"))
         if (run is None or run.upload_id != upload.id or run.lesson_id != lesson_id
                 or lesson.raw_video_key != key or run.attempt != lesson.retry_count):
-            return {"decision": "IGNORE"}
+            return _ignore(
+                "RETRY_IDENTITY_MISMATCH",
+                lesson_id=lesson_id,
+                run_id=getattr(run, "id", None),
+            )
         if run.execution_arn:
-            return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
+            return _view(run) if run.execution_arn == execution_arn else _ignore(
+                "RETRY_ALREADY_CLAIMED", lesson_id=lesson_id, run_id=run.id,
+            )
         if lesson.status != "PROCESSING" or run.state != "QUEUED":
-            return {"decision": "IGNORE"}
+            return _ignore("RETRY_STATE_MISMATCH", lesson_id=lesson_id, run_id=run.id)
         if course.status != "DRAFT":
             raise PipelineError("COURSE_NOT_DRAFT")
         try:

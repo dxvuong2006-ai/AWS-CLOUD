@@ -153,11 +153,47 @@ class PipelineTests(unittest.TestCase):
     def test_claim_and_duplicate_events_only_one_owner(self):
         run = self.claim()
         self.assertEqual(self.lesson.status, "PROCESSING")
-        self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        with self.assertLogs("app.services.video_pipeline_service", level="INFO") as captured:
+            self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        log_output = " ".join(captured.output)
+        self.assertIn("reason=UPLOAD_ALREADY_CLAIMED", log_output)
+        self.assertNotIn(KEY, log_output)
+        self.assertNotIn(ETAG, log_output)
+        self.assertNotIn(OTHER, log_output)
         self.assertEqual(service.claim(self.db, self.payload, OWNER, self.storage)["run_id"], run.id)
         self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
         self.assertIsNone(self.lesson.processed_video_key)
         self.mc.start.assert_not_called()
+
+    def test_confirmed_uploaded_lesson_with_valid_ledger_and_no_runs_is_claimed(self):
+        """Regression: API confirmation may persist UPLOADED before EventBridge claim."""
+        self.lesson.status = "UPLOADED"
+        self.lesson.raw_video_key = KEY
+
+        run = self.claim()
+
+        self.assertEqual(run.state, "CLAIMED")
+        self.assertEqual(run.upload_id, self.upload.id)
+        self.assertEqual(run.source_etag, ETAG)
+        self.assertEqual(self.lesson.status, "PROCESSING")
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
+        self.storage.head_video.assert_called_once_with(KEY)
+
+    def test_uploaded_lesson_requires_exact_current_unprocessed_generation(self):
+        self.lesson.status = "UPLOADED"
+        for raw_key, processed_key, reason in (
+                (None, None, "UPLOADED_GENERATION_MISMATCH"),
+                (KEY, "lessons/8/processed/existing.mp4", "UPLOADED_GENERATION_MISMATCH"),
+                ("lessons/8/raw/other.mp4", None, "SOURCE_KEY_NOT_CURRENT")):
+            with self.subTest(raw_key=raw_key, processed_key=processed_key):
+                self.lesson.raw_video_key = raw_key
+                self.lesson.processed_video_key = processed_key
+                with self.assertLogs("app.services.video_pipeline_service", level="INFO") as captured:
+                    result = service.claim(self.db, self.payload, OWNER, self.storage)
+                self.assertEqual(result, {"decision": "IGNORE"})
+                self.assertIn(f"reason={reason}", " ".join(captured.output))
+                self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+                self.storage.head_video.assert_not_called()
 
     def test_duplicate_recorded_upload_is_idempotent_after_course_leaves_draft(self):
         run = self.claim()
@@ -512,6 +548,15 @@ class InfrastructureTests(unittest.TestCase):
             self.assertTrue(all(t in states for t in targets), name)
             self.assertFalse(state.get("End") and "Next" in state)
         self.assertNotIn("Retry", states["SubmitMediaConvert"])
+        claim_choices = {
+            choice["StringEquals"]: choice["Next"]
+            for choice in states["ClaimDecision"]["Choices"]
+        }
+        self.assertEqual(claim_choices, {
+            "START": "InitPolls",
+            "IGNORE": "DuplicateIgnored",
+        })
+        self.assertEqual(states["ClaimDecision"]["Default"], "InvalidUpload")
         self.assertEqual(states["AIEnabled"]["Default"], "VideoReadyAIPending")
         self.assertEqual(states["VideoReadyAIPending"]["Type"], "Succeed")
         self.assertEqual(states["PipelineFailed"]["Type"], "Fail")

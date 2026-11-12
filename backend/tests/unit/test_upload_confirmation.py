@@ -137,6 +137,28 @@ def test_confirmation_and_eventbridge_claim_do_not_regress_or_duplicate(upload_h
     assert h.lesson.raw_video_key==intent["object_key"]
 
 
+def test_backend_uploaded_state_is_claimed_by_separately_enabled_pipeline(upload_http,monkeypatch):
+    """Regression for API/pipeline Lambdas using different enablement settings."""
+    h=upload_http
+    monkeypatch.setattr(settings,"VIDEO_PIPELINE_ENABLED",False)
+    intent=reserve(h).json(); h.put(intent)
+    assert confirm(h,intent).json()["status"]=="UPLOADED"
+    assert h.lesson.raw_video_key==intent["object_key"]
+    assert h.db.query(VideoPipelineRun).count()==0
+    upload=h.db.get(VideoUpload,intent["upload_id"])
+    upload.created_at=upload.created_at.replace(tzinfo=timezone.utc)
+    upload.expires_at=upload.expires_at.replace(tzinfo=timezone.utc)
+
+    monkeypatch.setattr(settings,"VIDEO_PIPELINE_ENABLED",True)
+    payload={"kind":"upload","bucket":settings.S3_BUCKET,
+             "key":intent["object_key"],"etag":"a"*32}
+    result=pipeline.claim(h.db,payload,"unit-execution",h.storage)
+
+    assert result["decision"]=="START"
+    assert h.lesson.status=="PROCESSING"
+    assert h.db.query(VideoPipelineRun).count()==1
+
+
 def test_processing_retry_reuses_current_raw_and_never_creates_an_upload(upload_http,monkeypatch):
     h=upload_http
     intent=reserve(h).json(); h.put(intent); confirm(h,intent)
