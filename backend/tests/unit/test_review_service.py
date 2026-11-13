@@ -25,6 +25,9 @@ from app.schemas.review import (
 )
 from app.services import lesson_service, quiz_service, review_service
 
+CLAUDE_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+NOVA_MODEL_ID = "apac.amazon.nova-micro-v1:0"
+
 
 @pytest.fixture
 def review_context(db_session, quiz_course):
@@ -305,14 +308,53 @@ def test_bedrock_validates_output_and_closes_stream(method):
     expected = getattr(MockAIAdapter(), method)("Transcript")
     stream = mock_response(expected)
     client.invoke_model.return_value = {"body": stream}
-    ai = BedrockAIAdapter(client=client)
+    ai = BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID)
     assert getattr(ai, method)("Transcript") == expected
     assert stream.closed
     request = client.invoke_model.call_args.kwargs
-    assert request["modelId"] == "anthropic.claude-3-haiku-20240307-v1:0"
+    assert request["modelId"] == CLAUDE_MODEL_ID
     body = json.loads(request["body"])
     assert body["anthropic_version"] == "bedrock-2023-05-31"
     assert body["messages"][0]["role"] == "user"
+    assert not ai.used_fallback
+
+
+@pytest.mark.parametrize("method", [
+    "generate_summary", "generate_quiz", "extract_key_concepts",
+])
+def test_bedrock_nova_micro_uses_converse_contract(method):
+    client = Mock()
+    expected = getattr(MockAIAdapter(), method)("Transcript")
+    client.converse.return_value = {
+        "stopReason": "end_turn",
+        "output": {"message": {
+            "role": "assistant",
+            "content": [{"text": json.dumps(expected)}],
+        }},
+    }
+    ai = BedrockAIAdapter(client=client, model_id=NOVA_MODEL_ID)
+
+    assert getattr(ai, method)("Transcript") == expected
+    request = client.converse.call_args.kwargs
+    assert request["modelId"] == NOVA_MODEL_ID
+    assert request["inferenceConfig"] == {"maxTokens": 4096, "temperature": 0}
+    assert request["messages"][0]["role"] == "user"
+    assert request["messages"][0]["content"][0]["text"]
+    client.invoke_model.assert_not_called()
+    assert not ai.used_fallback
+
+
+def test_bedrock_nova_micro_rejects_truncated_converse_response():
+    client = Mock()
+    client.converse.return_value = {
+        "stopReason": "max_tokens",
+        "output": {"message": {"content": [{"text": "{}"}]}},
+    }
+    ai = BedrockAIAdapter(
+        client=client, model_id=NOVA_MODEL_ID, allow_fallback=True,
+    )
+    with pytest.raises(ValueError, match="token limit"):
+        ai.generate_summary("Transcript")
     assert not ai.used_fallback
 
 
@@ -321,7 +363,9 @@ def test_bedrock_rejects_oversized_response_and_closes_stream():
     stream = io.BytesIO(b"x" * (MAX_RESPONSE_BYTES + 1))
     client.invoke_model.return_value = {"body": stream}
     with pytest.raises(ValueError, match="oversized"):
-        BedrockAIAdapter(client=client).generate_summary("Transcript")
+        BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID).generate_summary(
+            "Transcript"
+        )
     assert stream.closed
 
 
@@ -337,10 +381,12 @@ def test_bedrock_fallback_requires_explicit_flag(error):
     """Lỗi AWS chỉ chuyển sang Mock khi có cờ cho phép."""
     client = Mock()
     client.invoke_model.side_effect = error
-    strict = BedrockAIAdapter(client=client)
+    strict = BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID)
     with pytest.raises(type(error)):
         strict.generate_summary("Transcript")
-    fallback = BedrockAIAdapter(client=client, allow_fallback=True)
+    fallback = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     assert fallback.generate_summary("Transcript") == (
         MockAIAdapter().generate_summary("Transcript")
     )
@@ -374,7 +420,9 @@ def test_invalid_ai_data_never_silently_falls_back(mode):
     )
     client = Mock()
     client.invoke_model.return_value = {"body": stream}
-    ai = BedrockAIAdapter(client=client, allow_fallback=True)
+    ai = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     with pytest.raises(ValueError):
         ai.generate_summary("Transcript")
     assert stream.closed
@@ -472,7 +520,9 @@ def test_mock_fallback_still_requires_review(db_session, review_context):
     owner, _, _, lesson = review_context
     client = Mock()
     client.invoke_model.side_effect = NoCredentialsError()
-    ai = BedrockAIAdapter(client=client, allow_fallback=True)
+    ai = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     draft = review_service.generate_draft(
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
         payload=DraftGeneration(transcript="Transcript", allow_fallback=True),

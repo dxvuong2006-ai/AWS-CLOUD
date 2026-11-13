@@ -35,11 +35,25 @@
       "Resource": "arn:aws:transcribe:ap-southeast-1:${ACCOUNT_ID}:transcription-job/learncloud-k5-*"
     },
     {
+      "Sid": "InvokeNovaMicroInferenceProfile",
       "Effect": "Allow",
       "Action": [
         "bedrock:InvokeModel"
       ],
-      "Resource": "arn:aws:bedrock:ap-southeast-1::foundation-model/${BEDROCK_MODEL_ID}"
+      "Resource": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+    },
+    {
+      "Sid": "InvokeNovaMicroThroughApprovedProfile",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0",
+      "Condition": {
+        "StringEquals": {
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+        }
+      }
     }
   ]
 }

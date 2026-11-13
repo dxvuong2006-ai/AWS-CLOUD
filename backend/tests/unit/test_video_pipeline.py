@@ -630,6 +630,24 @@ class InfrastructureTests(unittest.TestCase):
             "logs:CreateLogStream", "logs:PutLogEvents",
         }.issubset(actions))
         self.assertFalse(any(action.endswith(":*") for action in actions))
+        bedrock = [
+            statement for statement in policy["Statement"]
+            if "bedrock:InvokeModel" in statement["Action"]
+        ]
+        profile_arn = (
+            "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/"
+            "apac.amazon.nova-micro-v1:0"
+        )
+        self.assertEqual(bedrock[0]["Resource"], profile_arn)
+        self.assertEqual(
+            bedrock[1]["Resource"],
+            "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0",
+        )
+        self.assertEqual(
+            bedrock[1]["Condition"]["StringEquals"]
+            ["bedrock:InferenceProfileArn"],
+            profile_arn,
+        )
 
     def test_all_json_files_parse_and_raw_filter_excludes_processed(self):
         from fnmatch import fnmatchcase

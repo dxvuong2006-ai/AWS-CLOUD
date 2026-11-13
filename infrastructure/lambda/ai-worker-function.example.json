@@ -32,7 +32,7 @@
       "TRANSCRIBE_LANGUAGE_CODE": "vi-VN",
       "AI_TRANSCRIPT_MAX_BYTES": "2000000",
       "AI_TRANSCRIPT_MAX_CHARACTERS": "400000",
-      "BEDROCK_MODEL_ID": "anthropic.claude-3-haiku-20240307-v1:0",
+      "BEDROCK_MODEL_ID": "apac.amazon.nova-micro-v1:0",
       "AI_QUIZ_QUESTION_COUNT": "3",
       "DATABASE_URL": "<inject-with-approved-secret-process>"
     }

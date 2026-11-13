@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     AI_TRANSCRIPT_MAX_CHARACTERS: int = Field(
         default=400_000, ge=1_000, le=1_000_000,
     )
+    BEDROCK_MODEL_ID: str = "apac.amazon.nova-micro-v1:0"
     AI_QUIZ_QUESTION_COUNT: int = Field(default=3, ge=1, le=20)
 
     JWT_SECRET_KEY: SecretStr | None = None
