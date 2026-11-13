@@ -87,6 +87,12 @@ def _validated_job_status(result, expected_job_id: str) -> str:
     return result["status"]
 
 
+def _contract_error(stage: str, code: str) -> AIWorkerError:
+    """Record only a constant stage/code; provider payloads may contain lesson data."""
+    logger.warning("ai_worker_contract_rejected stage=%s code=%s", stage, code)
+    return AIWorkerError(code)
+
+
 def start_transcription(db, run_id, execution_arn, transcriber):
     run, lesson = _video_ready(db, run_id, execution_arn)
     job_id = transcription_job_name(run.id)
@@ -164,9 +170,14 @@ def generate_content(
     if status != "COMPLETED":
         raise AIWorkerError("TRANSCRIPTION_NOT_COMPLETE")
     bucket, key = transcription_output(run.id)
-    transcript = transcript_store.read(
-        bucket, key, max_bytes=settings.AI_TRANSCRIPT_MAX_BYTES,
-    )
+    try:
+        transcript = transcript_store.read(
+            bucket, key, max_bytes=settings.AI_TRANSCRIPT_MAX_BYTES,
+        )
+    except ValueError:
+        raise _contract_error(
+            "transcript", "INVALID_TRANSCRIPT_RESULT",
+        ) from None
     if (
         not isinstance(transcript, dict)
         or not isinstance(transcript.get("text"), str)
@@ -174,7 +185,10 @@ def generate_content(
         or not isinstance(transcript.get("segments"), list)
     ):
         raise AIWorkerError("INVALID_TRANSCRIPT_CONTENT")
-    content = _draft(transcript["text"], ai)
+    try:
+        content = _draft(transcript["text"], ai)
+    except ValueError:
+        raise _contract_error("ai_output", "INVALID_AI_OUTPUT") from None
 
     with review_repo.transaction(db):
         # Review/edit paths take the section lock first.  Use the same order so

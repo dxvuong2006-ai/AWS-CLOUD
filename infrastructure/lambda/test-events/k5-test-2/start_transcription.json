@@ -1,0 +1,5 @@
+{
+  "action": "start_transcription",
+  "run_id": "038ef54af3fd1e35aa1d23c47ea80791f82e601aad1caece9975147a194e47de",
+  "execution_arn": "arn:aws:states:ap-southeast-1:000000000000:execution:k5-local:e2e-fixture-2"
+}

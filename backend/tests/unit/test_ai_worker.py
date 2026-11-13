@@ -210,6 +210,49 @@ def test_oversized_transcript_is_rejected_before_bedrock(
     ai.generate_quiz.assert_not_called()
 
 
+def test_invalid_s3_transcript_is_mapped_to_safe_worker_error(
+    db_session, worker_context, caplog,
+):
+    transcriber, store, ai = _aws_doubles()
+    sensitive_provider_detail = "invalid transcript: lesson words must not be logged"
+    store.read.side_effect = ValueError(sensitive_provider_detail)
+
+    with pytest.raises(
+        ai_worker_service.AIWorkerError,
+        match="^INVALID_TRANSCRIPT_RESULT$",
+    ):
+        ai_worker_service.generate_content(
+            db_session, RUN_ID, OWNER, f"learncloud-k5-{RUN_ID}",
+            transcriber=transcriber, transcript_store=store, ai=ai,
+        )
+
+    assert "stage=transcript code=INVALID_TRANSCRIPT_RESULT" in caplog.text
+    assert sensitive_provider_detail not in caplog.text
+    ai.generate_summary.assert_not_called()
+    ai.generate_quiz.assert_not_called()
+
+
+def test_invalid_bedrock_output_is_mapped_to_safe_worker_error(
+    db_session, worker_context, caplog,
+):
+    transcriber, store, ai = _aws_doubles()
+    sensitive_provider_detail = "invalid model output containing lesson words"
+    ai.generate_summary.side_effect = ValueError(sensitive_provider_detail)
+
+    with pytest.raises(
+        ai_worker_service.AIWorkerError,
+        match="^INVALID_AI_OUTPUT$",
+    ):
+        ai_worker_service.generate_content(
+            db_session, RUN_ID, OWNER, f"learncloud-k5-{RUN_ID}",
+            transcriber=transcriber, transcript_store=store, ai=ai,
+        )
+
+    assert "stage=ai_output code=INVALID_AI_OUTPUT" in caplog.text
+    assert sensitive_provider_detail not in caplog.text
+    ai.generate_quiz.assert_not_called()
+
+
 def test_parse_realistic_transcribe_result():
     result = parse_transcript({
         "status": "COMPLETED",
