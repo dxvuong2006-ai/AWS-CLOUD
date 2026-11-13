@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -210,34 +211,42 @@ def test_concurrent_k5_generate_creates_one_material_set_on_postgresql():
     barrier = Barrier(2)
 
     def invoke_worker():
-        db = Session(engine, expire_on_commit=False)
-        try:
-            transcriber = Mock()
-            transcriber.get_job_status.return_value = {
-                "job_id": job_id, "status": "COMPLETED", "source": "aws",
-            }
-            store = Mock()
+        # The Lambda handler maps a PostgreSQL NOWAIT collision to
+        # AIWorkerTemporaryError, and ASL retries the whole invocation. Model that
+        # boundary here instead of assuming two raw service calls cannot collide.
+        for attempt in range(3):
+            db = Session(engine, expire_on_commit=False)
+            try:
+                transcriber = Mock()
+                transcriber.get_job_status.return_value = {
+                    "job_id": job_id, "status": "COMPLETED", "source": "aws",
+                }
+                store = Mock()
 
-            def read_transcript(*args, **kwargs):
-                barrier.wait(timeout=5)
-                return {"text": "Concurrent cloud transcript", "segments": []}
+                def read_transcript(*args, **kwargs):
+                    barrier.wait(timeout=5)
+                    return {"text": "Concurrent cloud transcript", "segments": []}
 
-            store.read.side_effect = read_transcript
-            ai = Mock()
-            ai.generate_summary.return_value = {
-                "title": "Cloud", "summary": "Concurrent summary",
-                "key_concepts": [{"term": "Cloud", "definition": "Elastic resources"}],
-            }
-            ai.generate_quiz.return_value = {"questions": [{
-                "question": f"Question {i}?", "options": ["A", "B", "C", "D"],
-                "correct_answer": "A", "explanation": "A is correct",
-            } for i in range(1, 4)]}
-            return ai_worker_service.generate_content(
-                db, run_id, owner, job_id,
-                transcriber=transcriber, transcript_store=store, ai=ai,
-            )
-        finally:
-            db.close()
+                store.read.side_effect = read_transcript
+                ai = Mock()
+                ai.generate_summary.return_value = {
+                    "title": "Cloud", "summary": "Concurrent summary",
+                    "key_concepts": [{"term": "Cloud", "definition": "Elastic resources"}],
+                }
+                ai.generate_quiz.return_value = {"questions": [{
+                    "question": f"Question {i}?", "options": ["A", "B", "C", "D"],
+                    "correct_answer": "A", "explanation": "A is correct",
+                } for i in range(1, 4)]}
+                return ai_worker_service.generate_content(
+                    db, run_id, owner, job_id,
+                    transcriber=transcriber, transcript_store=store, ai=ai,
+                )
+            except OperationalError:
+                db.rollback()
+                if attempt == 2:
+                    raise
+            finally:
+                db.close()
 
     try:
         with (

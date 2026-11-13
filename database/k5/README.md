@@ -48,3 +48,12 @@ The seed is deliberately minimal: one synthetic instructor/course/section/lesson
 one video upload, and one `VIDEO_READY` pipeline run. It contains no password hash,
 OTP, real account, transcript, quiz, or flashcard; K5 is expected to create the last
 three kinds of learning content during E2E processing.
+
+## K4 + K5 isolated E2E fixtures
+
+- `e2e3/` retains the original Lesson 3 fixture and failure evidence.
+- `e2e4/` prepares the independent Lesson 4 run and documents the required
+  pgAdmin/S3/IAM/execution order.
+- `e2e/add_k4_k5_e2e_fixture.template.sql` is rendered for later Lesson N runs by
+  `infrastructure/deployment/render-k4-k5-e2e-test.ps1`.
+

@@ -84,10 +84,15 @@ def main():
         ):
             _write_tree(archive, base, prefix)
         archive.write(root / "infrastructure/lambda/ai_worker_handler.py", "ai_worker_handler.py")
+        archive.write(
+            root / "infrastructure/lambda/ai_worker_test_handler.py",
+            "ai_worker_test_handler.py",
+        )
     with ZipFile(output) as archive:
         names = archive.namelist()
         required_members = {
             "ai_worker_handler.py",
+            "ai_worker_test_handler.py",
             "app/config.py",
             "app/database.py",
             "app/services/ai_worker_service.py",

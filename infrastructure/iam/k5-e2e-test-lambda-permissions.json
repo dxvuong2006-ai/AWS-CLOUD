@@ -1,0 +1,57 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:ap-southeast-1:${ACCOUNT_ID}:log-group:/aws/lambda/learncloud-ai-worker-k5-e2e-test:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/4/processed/*",
+        "arn:aws:s3:::learncloud-videos-mentorcloud/ai-transcripts/65dcd70eecb600ef0ff1ec0dd3bc35c5b4444cea5668d9fd8594d689ce58eee6/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud/ai-transcripts/65dcd70eecb600ef0ff1ec0dd3bc35c5b4444cea5668d9fd8594d689ce58eee6/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "transcribe:StartTranscriptionJob",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-southeast-1",
+          "transcribe:OutputBucketName": "learncloud-videos-mentorcloud",
+          "transcribe:OutputKey": "ai-transcripts/65dcd70eecb600ef0ff1ec0dd3bc35c5b4444cea5668d9fd8594d689ce58eee6/transcript.json"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "transcribe:GetTranscriptionJob",
+      "Resource": "arn:aws:transcribe:ap-southeast-1:${ACCOUNT_ID}:transcription-job/learncloud-k5-65dcd70eecb600ef0ff1ec0dd3bc35c5b4444cea5668d9fd8594d689ce58eee6"
+    },
+    {
+      "Sid": "InvokeNovaMicroInferenceProfile",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+    },
+    {
+      "Sid": "InvokeNovaMicroThroughApprovedProfile",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0",
+      "Condition": {
+        "StringEquals": {
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+        }
+      }
+    }
+  ]
+}

@@ -30,6 +30,10 @@ def main():
                 if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
                     archive.write(path, prefix + path.relative_to(base).as_posix())
         archive.write(root / "infrastructure/lambda/video_pipeline_handler.py", "video_pipeline_handler.py")
+        archive.write(
+            root / "infrastructure/lambda/video_pipeline_test_handler.py",
+            "video_pipeline_test_handler.py",
+        )
     print(f"Local package created: {args.output}")
 
 

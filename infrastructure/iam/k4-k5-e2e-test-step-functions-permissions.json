@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": [
+        "arn:aws:lambda:ap-southeast-1:${ACCOUNT_ID}:function:learncloud-video-pipeline-k5-e2e-test",
+        "arn:aws:lambda:ap-southeast-1:${ACCOUNT_ID}:function:learncloud-ai-worker-k5-e2e-test"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies", "logs:DescribeLogGroups"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

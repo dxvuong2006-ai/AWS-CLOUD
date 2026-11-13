@@ -1,0 +1,289 @@
+{
+  "Comment": "ISOLATED TEST ONLY: K4 MediaConvert -> K5 Transcribe/Bedrock -> K4 finalize_ai. Replace TEST Lambda ARN placeholders; never point them at production functions.",
+  "StartAt": "Claim",
+  "TimeoutSeconds": 7200,
+  "States": {
+    "Claim": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "claim",
+          "payload.$": "$",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "OutputPath": "$.Payload",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException", "PipelineTemporaryError"],
+        "IntervalSeconds": 2,
+        "MaxAttempts": 3,
+        "BackoffRate": 2
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "Next": "InvalidUpload"}],
+      "Next": "ClaimDecision"
+    },
+    "ClaimDecision": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.decision", "StringEquals": "START", "Next": "RequireAIEnabled"},
+        {"Variable": "$.decision", "StringEquals": "IGNORE", "Next": "DuplicateIgnored"}
+      ],
+      "Default": "InvalidUpload"
+    },
+    "RequireAIEnabled": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.ai_enabled", "BooleanEquals": true, "Next": "InitVideoPolls"}],
+      "Default": "AIFlagDisabled"
+    },
+    "InitVideoPolls": {
+      "Type": "Pass",
+      "Parameters": {"run_id.$": "$.run_id", "video_polls": 0},
+      "Next": "SubmitMediaConvert"
+    },
+    "SubmitMediaConvert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "submit",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "WaitForMediaConvert"
+    },
+    "WaitForMediaConvert": {"Type": "Wait", "Seconds": 30, "Next": "PollMediaConvert"},
+    "PollMediaConvert": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "poll",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "PipelineTemporaryError"],
+        "IntervalSeconds": 2,
+        "BackoffRate": 2,
+        "MaxAttempts": 3
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "MediaConvertStatus"
+    },
+    "MediaConvertStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.last.Payload.status", "StringEquals": "COMPLETE", "Next": "VerifyProcessedObject"},
+        {"Variable": "$.last.Payload.status", "StringEquals": "FAILED", "Next": "RecordFailure"},
+        {"Variable": "$.video_polls", "NumericGreaterThanEquals": 119, "Next": "RecordFailure"}
+      ],
+      "Default": "IncrementVideoPolls"
+    },
+    "IncrementVideoPolls": {
+      "Type": "Pass",
+      "Parameters": {
+        "run_id.$": "$.run_id",
+        "video_polls.$": "States.MathAdd($.video_polls, 1)"
+      },
+      "Next": "WaitForMediaConvert"
+    },
+    "VerifyProcessedObject": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "verify",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.last",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "PipelineTemporaryError"],
+        "IntervalSeconds": 2,
+        "BackoffRate": 2,
+        "MaxAttempts": 3
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "StartTranscription"
+    },
+    "StartTranscription": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_AI_WORKER_ARN}",
+        "Payload": {
+          "action": "start_transcription",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.transcription",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "AIWorkerTemporaryError"],
+        "IntervalSeconds": 2,
+        "BackoffRate": 2,
+        "MaxAttempts": 3
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "StartTranscriptionStatus"
+    },
+    "StartTranscriptionStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "COMPLETED", "Next": "GenerateContent"},
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "IN_PROGRESS", "Next": "InitTranscriptionPolls"},
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "QUEUED", "Next": "InitTranscriptionPolls"}
+      ],
+      "Default": "RecordFailure"
+    },
+    "InitTranscriptionPolls": {
+      "Type": "Pass",
+      "Result": 0,
+      "ResultPath": "$.transcription_polls",
+      "Next": "WaitForTranscription"
+    },
+    "WaitForTranscription": {"Type": "Wait", "Seconds": 15, "Next": "PollTranscription"},
+    "PollTranscription": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_AI_WORKER_ARN}",
+        "Payload": {
+          "action": "poll_transcription",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id",
+          "job_id.$": "$.transcription.Payload.job_id"
+        }
+      },
+      "TimeoutSeconds": 30,
+      "ResultPath": "$.transcription",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "AIWorkerTemporaryError"],
+        "IntervalSeconds": 2,
+        "BackoffRate": 2,
+        "MaxAttempts": 3
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "TranscriptionStatus"
+    },
+    "TranscriptionStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "COMPLETED", "Next": "GenerateContent"},
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "IN_PROGRESS", "Next": "IncrementTranscriptionPolls"},
+        {"Variable": "$.transcription.Payload.status", "StringEquals": "QUEUED", "Next": "IncrementTranscriptionPolls"}
+      ],
+      "Default": "RecordFailure"
+    },
+    "IncrementTranscriptionPolls": {
+      "Type": "Pass",
+      "Parameters": {"value.$": "States.MathAdd($.transcription_polls, 1)"},
+      "ResultPath": "$.transcription_poll_counter",
+      "Next": "CopyTranscriptionPollCount"
+    },
+    "CopyTranscriptionPollCount": {
+      "Type": "Pass",
+      "Parameters": {
+        "run_id.$": "$.run_id",
+        "video_polls.$": "$.video_polls",
+        "last.$": "$.last",
+        "transcription.$": "$.transcription",
+        "transcription_polls.$": "$.transcription_poll_counter.value"
+      },
+      "Next": "TranscriptionPollLimit"
+    },
+    "TranscriptionPollLimit": {
+      "Type": "Choice",
+      "Choices": [{"Variable": "$.transcription_polls", "NumericGreaterThanEquals": 120, "Next": "RecordFailure"}],
+      "Default": "WaitForTranscription"
+    },
+    "GenerateContent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_AI_WORKER_ARN}",
+        "Payload": {
+          "action": "generate_content",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id",
+          "job_id.$": "$.transcription.Payload.job_id"
+        }
+      },
+      "TimeoutSeconds": 620,
+      "ResultPath": "$.proof",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "AIWorkerTemporaryError"],
+        "IntervalSeconds": 5,
+        "BackoffRate": 2,
+        "MaxAttempts": 2
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "FinalizeAI"
+    },
+    "FinalizeAI": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "finalize_ai",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id",
+          "proof.$": "$.proof.Payload"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.final",
+      "Retry": [{
+        "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException", "PipelineTemporaryError"],
+        "IntervalSeconds": 2,
+        "BackoffRate": 2,
+        "MaxAttempts": 3
+      }],
+      "Catch": [{"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}],
+      "Next": "ReviewRequired"
+    },
+    "RecordFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${TEST_PIPELINE_LAMBDA_ARN}",
+        "Payload": {
+          "action": "fail",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.failure_record",
+      "Retry": [{"ErrorEquals": ["States.ALL"], "IntervalSeconds": 2, "BackoffRate": 2, "MaxAttempts": 3}],
+      "Next": "PipelineFailed"
+    },
+    "InvalidUpload": {"Type": "Fail", "Error": "InvalidUploadOrClaimFailed"},
+    "AIFlagDisabled": {
+      "Type": "Pass",
+      "Result": {"error": "TEST_AI_FLAG_DISABLED"},
+      "ResultPath": "$.failure",
+      "Next": "RecordFailure"
+    },
+    "PipelineFailed": {"Type": "Fail", "Error": "K4K5E2ETestFailed"},
+    "DuplicateIgnored": {"Type": "Succeed"},
+    "ReviewRequired": {"Type": "Succeed"}
+  }
+}
