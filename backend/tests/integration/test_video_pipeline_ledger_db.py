@@ -194,6 +194,21 @@ class VideoPipelinePostgresTests(unittest.TestCase):
                 self.db.flush()
         self.assertEqual(caught.exception.orig.diag.constraint_name, "uq_video_run_upload_attempt")
 
+    def test_complete_job_persists_output_duration_and_processed_key(self):
+        run = self.claim()
+        service.submit(self.db, run.id, self.owner, self.storage, self.mc)
+        self.complete_job(run, duration_ms=119_000)
+
+        result = service.verify_output(self.db, run.id, self.owner, self.storage, self.mc)
+
+        self.assertEqual(result, {"video_ready": True, "ai_status": "PENDING"})
+        self.mc.get_job.assert_called_once_with("fixture-job-one")
+        lesson = lessons_repo.get_by_id(self.db, self.lesson_id)
+        self.db.refresh(lesson)
+        self.assertEqual(lesson.processed_video_key, run.output_key)
+        self.assertEqual(lesson.duration_seconds, 119)
+        self.assertEqual(repo.get_run(self.db, run.id).state, "VIDEO_READY")
+
     def test_old_callback_cannot_replace_new_attempt_processed_key(self):
         old = self.claim()
         service.submit(self.db, old.id, self.owner, self.storage, self.mc)

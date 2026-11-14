@@ -28,6 +28,21 @@ sung `workflow_state`, còn `0012_reconcile_tutor_remediation_columns.sql` là
 migration numbered hiện hành để hội tụ đủ ba cột TutorSession trên cả database
 bootstrap mới và database nâng cấp cũ.
 
+`0013_sync_progress_completion_on_duration_change.sql` đồng bộ các cờ
+`lesson_progress.completed` đã tồn tại và cài trigger để tính lại khi
+`lessons.duration_seconds` thay đổi. Migration giữ ngưỡng 10% và đặt cờ sai khi
+duration là `NULL` hoặc `0`.
+
+`0014_secure_progress_duration_trigger.sql` secures the 0013 trigger for K4:
+the Lambda runtime may update `lessons.duration_seconds` but receives no direct
+access to `lesson_progress`. It retains the existing trusted function owner
+`learncloud_admin`, uses a fixed schema-qualified body and safe `search_path`,
+and does not create or transfer roles. The owner may have broader rights than
+the trigger needs, so keep it trusted and the function body static. Review the
+migration preflight and run
+`backend/tests/integration/test_progress_trigger_permissions_postgres.py` on an
+isolated PostgreSQL 16 database before considering it for deployment.
+
 `0004_remove_approved_lesson_status.sql` loại `APPROVED` khỏi CHECK Lesson và
 đổi dữ liệu `APPROVED` còn sót thành `PUBLISHED`. Script chưa được tự áp dụng.
 Migration này không phụ thuộc file `0003` bị thiếu; nó yêu cầu bảng Lesson và

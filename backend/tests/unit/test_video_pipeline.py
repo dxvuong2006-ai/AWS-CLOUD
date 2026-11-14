@@ -391,6 +391,18 @@ class PipelineTests(unittest.TestCase):
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.assertEqual(self.lesson.duration_seconds, 13)
 
+    def test_complete_job_saves_duration_for_the_matching_processed_output(self):
+        run = self.transcode()
+        self.complete_job(run, duration_ms=119_000)
+
+        result = service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+
+        self.assertEqual(result, {"video_ready": True, "ai_status": "PENDING"})
+        self.mc.get_job.assert_called_once_with(run.job_id)
+        self.assertEqual(self.lesson.processed_video_key, run.output_key)
+        self.assertEqual(self.lesson.duration_seconds, 119)
+        self.assertEqual(run.state, "VIDEO_READY")
+
     def test_video_ready_keeps_processing_and_ai_fields_empty(self):
         run = self.transcode()
         self.complete_job(run)

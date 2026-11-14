@@ -101,7 +101,22 @@ def save_lesson_progress(
             or previous_update.lesson_id != lesson_id
         ):
             raise HTTPException(409, "Request id was already used.")
-        return previous_update.response
+        # Preserve request idempotency while refreshing completion when the
+        # lesson duration was backfilled after this request was first saved.
+        response = dict(previous_update.response)
+        replayed_watched = response.get(
+            "watched_seconds",
+            progress.watched_seconds if progress is not None else 0,
+        )
+        response["completed"] = progress_service.is_lesson_completed(
+            lesson.duration_seconds, replayed_watched
+        )
+        previous_update.response = response
+        if progress is not None:
+            progress_service.sync_lesson_progress_completion(lesson, progress)
+        if db.dirty:
+            db.commit()
+        return response
     if payload.sequence <= session.last_sequence:
         raise HTTPException(409, "Progress sequence is stale.")
 

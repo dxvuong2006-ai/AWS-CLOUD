@@ -8,6 +8,7 @@ from app.models.course import Course
 from app.models.enrollment import Enrollment
 from app.models.lesson import Lesson
 from app.models.progress import LessonProgress
+from app.models.progress_update import ProgressUpdate
 from app.models.section import Section
 from app.schemas.learning import ProgressUpdateRequest
 from app.models.user import User
@@ -166,7 +167,7 @@ def test_progress_read_repairs_legacy_row_after_duration_backfill(db_session):
     progress = LessonProgress(
         student_id=student.id,
         lesson_id=lesson.id,
-        watched_seconds=82,
+        watched_seconds=118,
         completed=False,
     )
     db_session.add(progress)
@@ -179,3 +180,33 @@ def test_progress_read_repairs_legacy_row_after_duration_backfill(db_session):
     assert result["lessons"][0]["completed"] is True
     db_session.refresh(progress)
     assert progress.completed is True
+
+
+def test_idempotent_replay_refreshes_completion_after_duration_backfill(db_session):
+    student, lesson = _lesson(db_session)
+    lesson.duration_seconds = None
+    db_session.commit()
+    session_id = start_viewing_session(lesson.id, db_session, student)["id"]
+    payload = ProgressUpdateRequest(
+        last_position_seconds=118,
+        watched_ranges=[[0, 118]],
+        playback_session_id=session_id,
+        sequence=1,
+        request_id=uuid4(),
+    )
+
+    first = save_lesson_progress(lesson.id, payload, db_session, student)
+    assert first["completed"] is False
+    progress = db_session.query(LessonProgress).one()
+    assert progress.completed is False
+
+    lesson.duration_seconds = 119
+    db_session.commit()
+    replay = save_lesson_progress(lesson.id, payload, db_session, student)
+
+    assert replay["watched_seconds"] == 118
+    assert replay["completed"] is True
+    db_session.refresh(progress)
+    assert progress.completed is True
+    update = db_session.get(ProgressUpdate, str(payload.request_id))
+    assert update.response["completed"] is True
