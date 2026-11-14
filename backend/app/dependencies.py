@@ -33,7 +33,15 @@ def get_current_user(
     claims = auth_service.authorizer_claims_from_event(event)
     if claims is not None:
         try:
-            return auth_service.sync_authorizer_claims(db, claims)
+            return auth_service.sync_authorizer_claims(
+                db, claims,
+                access_token=credentials.credentials if credentials else None,
+            )
+        except auth_service.CognitoAuthError as exc:
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail={"code": exc.code, "message": exc.message},
+            ) from exc
         except auth_service.InvalidToken as exc:
             raise HTTPException(status_code=401, detail="Authentication required",
                                 headers={"WWW-Authenticate": "Bearer"}) from exc
@@ -47,7 +55,10 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"}) from exc
     except auth_service.CognitoAuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
 
 
 def require_student(user: User = Depends(get_current_user)) -> User:

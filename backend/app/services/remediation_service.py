@@ -61,7 +61,7 @@ def start(db, student_id, attempt_id, regenerate=False):
         raise HTTPException(exc.code, str(exc)) from exc
     session = db.get(TutorSession, created["id"])
     wrong = [(q, a) for q, a in questions if a is None or not a.is_correct]
-    excerpt = tutor_service._transcript(lesson).strip()[:1200]
+    excerpt = tutor_service._grounded_transcript(lesson).strip()[:1200]
     errors = [{"id": str(q.id), "concept": q.topic or q.question,
                "question": q.question, "selected": a.selected_answer if a else None,
                "misconception": "Bạn chưa trả lời đúng câu hỏi: " + q.question,

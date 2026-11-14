@@ -5,6 +5,7 @@ import re
 import math
 from ai_pipeline.processors.build_tutor_context import build_tutor_context
 from app.models.tutor import TutorSession
+from app.config import PROJECT_ROOT
 from app.repositories import tutor_repo
 
 
@@ -63,9 +64,12 @@ def _segments(lesson):
 def _grounded_transcript(lesson):
     """Thêm mốc thời gian đã kiểm tra vào transcript gửi AI."""
     segments = _segments(lesson)
-    if segments:
-        return "\n".join(f"[{start} - {end}] {text}" for text, start, end in segments)
-    return _transcript(lesson)
+    transcript = ("\n".join(f"[{start} - {end}] {text}" for text, start, end in segments)
+                  if segments else _transcript(lesson))
+    concepts = getattr(lesson, "key_concepts_json", None)
+    definitions = [f"{item['term']}: {item['definition']}" for item in concepts
+                   if isinstance(item, dict) and item.get("term") and item.get("definition")] if isinstance(concepts, list) else []
+    return transcript + ("\nKhái niệm bài học:\n" + "\n".join(definitions) if definitions else "")
 
 
 def _public(session):
@@ -76,6 +80,23 @@ def _public(session):
             "practice_questions": [
                 {"question": q["question"], "options": q["options"]}
                 for q in session.practice_questions]}
+
+
+def _bedrock_enabled():
+    """Đọc cờ Tutor từ môi trường hoặc .env mà không bật mặc định."""
+    from dotenv import dotenv_values
+    value = os.environ.get("TUTOR_USE_BEDROCK")
+    if value is None:
+        value = dotenv_values(PROJECT_ROOT / ".env").get("TUTOR_USE_BEDROCK", "")
+    return str(value).lower() == "true"
+
+
+def _bedrock_adapter():
+    """Tạo adapter với cấu hình .env; không ghi thông tin khóa vào log."""
+    from dotenv import load_dotenv
+    from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    return BedrockAIAdapter()
 
 
 def create_session(db, student_id, attempt_id, ai_client=None, defer_commit=False):
@@ -103,11 +124,11 @@ def create_session(db, student_id, attempt_id, ai_client=None, defer_commit=Fals
     ]
     if not incorrect:
         raise TutorError(409, "No incorrect questions found.")
-    if ai_client is None and os.getenv("TUTOR_USE_BEDROCK", "").lower() == "true":
+    if ai_client is None and _bedrock_enabled():
         from ai_pipeline.processors._common import AIClientError
-        from app.adapters.ai.bedrock_ai import AWS_FAILURES, BedrockAIAdapter
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
 
-        adapter = BedrockAIAdapter()
+        adapter = _bedrock_adapter()
 
         def ai_client(prompt):
             """Gọi Bedrock và chuyển lỗi AWS sang lỗi pipeline có dự phòng."""
@@ -143,8 +164,8 @@ def send_message(db, student_id, session_id, message):
         raise TutorError(403, "Lesson is unavailable.")
     lessons = tutor_repo.get_published_section_lessons(db, lesson.id)
     transcript = " ".join(_transcript(item) for item in lessons)
-    if os.getenv("TUTOR_USE_BEDROCK", "").lower() == "true":
-        from app.adapters.ai.bedrock_ai import AWS_FAILURES, BedrockAIAdapter
+    if _bedrock_enabled():
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
 
         context = "\n".join(_grounded_transcript(item) for item in lessons)
         prompt = (
@@ -154,7 +175,7 @@ def send_message(db, student_id, session_id, message):
             + "\nCâu hỏi học viên: " + message
         )
         try:
-            answer = BedrockAIAdapter(allow_fallback=False)._invoke(prompt).strip()
+            answer = _bedrock_adapter()._invoke(prompt).strip()
         except AWS_FAILURES:
             answer = ""
         if answer:
@@ -248,12 +269,11 @@ def remediate_question(db, student_id, payload, ai_client=None):
 
     if (
         ai_client is None
-        and os.getenv("TUTOR_USE_BEDROCK", "").lower() == "true"
+        and _bedrock_enabled()
     ):
         from ai_pipeline.processors._common import AIClientError
-        from app.adapters.ai.bedrock_ai import AWS_FAILURES, BedrockAIAdapter
-
-        adapter = BedrockAIAdapter(allow_fallback=False)
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
+        adapter = _bedrock_adapter()
 
         def ai_client(prompt):
             try:

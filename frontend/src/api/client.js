@@ -59,6 +59,12 @@ export async function request(
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+  } catch (error) {
+    throw new ApiError(
+      0,
+      `Không kết nối được backend tại ${BASE_URL}. ${error.message}`,
+      "BACKEND_CONNECTION_ERROR",
+    );
   } finally {
     if (timer) clearTimeout(timer);
   }

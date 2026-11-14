@@ -9,9 +9,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.api import quizzes, review, tutor, analytics, screen_workflows, admin
+from app.api import tutor, analytics, screen_workflows
 from mangum import Mangum
-from app.api import quizzes, review, tutor, analytics
+from app.config import settings
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.courses import router as courses_router
 from app.api.lessons import router as lessons_router
@@ -45,9 +45,9 @@ register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://d1my2q1fj0jxmb.cloudfront.net",
+        origin.strip()
+        for origin in settings.CORS_ALLOWED_ORIGINS.split(",")
+        if origin.strip()
     ],
     allow_credentials=False,
     allow_methods=["*"],
@@ -69,6 +69,16 @@ app.include_router(review_router)
 app.include_router(admin_router)
 app.include_router(progress_router)
 app.include_router(flashcards_router)
+
+@app.on_event("startup")
+def initialize_local_tables():
+    from app.database import Base, engine
+    # Chỉ tạo bảng còn thiếu cho SQLite local, không xóa dữ liệu.
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+        from app.database import migrate_local_quiz_attempts
+        migrate_local_quiz_attempts()
+
 
 @app.get("/health", tags=["Health"])
 def health_check():

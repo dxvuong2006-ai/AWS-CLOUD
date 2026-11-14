@@ -103,7 +103,9 @@ def _require_provisionable_cognito_identity(identity: dict) -> None:
         raise InvalidToken()
 
 
-def _identity_from_verified_claims(claims: dict) -> dict:
+def _identity_from_verified_claims(
+    claims: dict, access_token: str | None = None
+) -> dict:
     """Build a canonical identity after the JWT/authorizer has verified claims.
 
     Cognito access tokens normally omit ``email``. For a subject that has no
@@ -114,14 +116,27 @@ def _identity_from_verified_claims(claims: dict) -> dict:
     username_claim = claims.get("username") or claims.get("cognito:username")
     if not isinstance(username_claim, str) or not username_claim.strip():
         logger.warning(
-            "Cognito authorizer user not found reason=missing_email_and_username_claims sub_present=true"
+            "Cognito authorizer user not found "
+            "reason=missing_email_and_username_claims sub_present=true"
         )
         raise InvalidToken()
     try:
-        response = cognito_client().admin_get_user(
-            UserPoolId=settings.COGNITO_USER_POOL_ID,
-            Username=username_claim.strip(),
-        )
+        if access_token:
+            # A verified bearer token can fetch its own profile without an
+            # IAM admin permission. GetUser only returns active access-token
+            # users, so normalize the two fields absent from that response.
+            response = cognito_client().get_user(AccessToken=access_token)
+            response = {
+                **response,
+                "Enabled": True,
+                "UserStatus": "CONFIRMED",
+            }
+        else:
+            # API Gateway authorizer contexts do not include the raw token.
+            response = cognito_client().admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=username_claim.strip(),
+            )
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)
     identity = _attributes_from_cognito(response)
@@ -213,7 +228,7 @@ def authorizer_claims_from_event(event: object) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
-def sync_authorizer_claims(db: Session, claims: dict) -> object:
+def sync_authorizer_claims(db: Session, claims: dict, access_token: str | None = None) -> object:
     sub = claims.get("sub")
     if not isinstance(sub, str) or not sub:
         raise InvalidToken()
@@ -236,7 +251,10 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
     user = auth_repo.get_by_cognito_sub(db, sub)
     if user is None:
         try:
-            user = ensure_cognito_profile(db, _identity_from_verified_claims(claims))
+            user = ensure_cognito_profile(
+                db,
+                _identity_from_verified_claims(claims, access_token=access_token),
+            )
         except IdentityConflict as exc:
             raise InvalidToken() from exc
     # Existing rows are intentionally read-only here. users.role is
@@ -279,7 +297,7 @@ def user_from_access_token(db: Session, token: str):
             logger.warning("Cognito access token rejected reason=client_id_mismatch")
             raise InvalidToken()
 
-        user = sync_authorizer_claims(db, claims)
+        user = sync_authorizer_claims(db, claims, access_token=token)
         if not user:
             raise InvalidToken()
         return user
