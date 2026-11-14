@@ -22,6 +22,12 @@ Backend cần nhưng không sửa bản ghi lịch sử `0004`.
 `V1__add_password_hash_to_users.sql` là script legacy riêng, không theo bộ chạy
 version bốn chữ số bên dưới.
 
+`V3__add_tutor_remediation_fields.sql` là migration lịch sử kiểu Flyway nên
+runner PowerShell bên dưới bỏ qua tên file này. `0006_screen_workflows.sql` bổ
+sung `workflow_state`, còn `0012_reconcile_tutor_remediation_columns.sql` là
+migration numbered hiện hành để hội tụ đủ ba cột TutorSession trên cả database
+bootstrap mới và database nâng cấp cũ.
+
 `0004_remove_approved_lesson_status.sql` loại `APPROVED` khỏi CHECK Lesson và
 đổi dữ liệu `APPROVED` còn sót thành `PUBLISHED`. Script chưa được tự áp dụng.
 Migration này không phụ thuộc file `0003` bị thiếu; nó yêu cầu bảng Lesson và

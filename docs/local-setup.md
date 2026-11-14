@@ -184,7 +184,7 @@ terminal.
 3. Từ thư mục backend, đặt mật khẩu cho tài khoản seed qua:
    python scripts/set_user_password.py --email EMAIL_SEED
    Script hỏi mật khẩu tương tác; không có mật khẩu mặc định trong source.
-4. Chạy uvicorn app.main:app --reload. Frontend cần VITE_API_URL=http://localhost:8000.
+4. Chạy uvicorn app.main:app --reload. Frontend cần VITE_API_URL=http://127.0.0.1:8000.
 5. VITE_USE_MOCK=true vẫn yêu cầu đăng nhập backend, nhưng nội dung/tiến độ/quiz dùng mock.
    VITE_USE_MOCK=false chưa có đầy đủ video/quiz/progress runtime, xem api-contract.md.
 6. Mở /login, thử từng vai trò. Không dùng X-Demo-User; API bảo vệ không nhận header đó.

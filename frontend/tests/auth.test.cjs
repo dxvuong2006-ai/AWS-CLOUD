@@ -33,6 +33,19 @@ test('API base URL accepts the documented name and normalizes its trailing slash
  await api.request('/health',{auth:false});
  assert.equal(calls[0].url,'https://api.example.test/default/health');
 });
+test('local API URLs use the IPv4 loopback listener',async()=>{
+ const {api,calls}=setup({apiBaseUrl:'http://localhost:8000/'});
+ await api.request('/health',{auth:false});
+ assert.equal(calls[0].url,'http://127.0.0.1:8000/health');
+});
+test('fetch rejection does not claim the backend is offline',async()=>{
+ const {api,ctx}=setup({apiBaseUrl:'http://127.0.0.1:8000'});
+ ctx.fetch=async()=>{throw new TypeError('Failed to fetch');};
+ await assert.rejects(()=>api.request('/student/remediation',{
+  method:'POST',auth:false,body:{attempt_id:8,regenerate:false},
+ }),e=>e.status===0 && e.code==='BACKEND_CONNECTION_ERROR' &&
+  e.message.includes('CORS') && e.message.includes('Failed to fetch'));
+});
 test('bearer requests, public login and logout',async()=>{
  const {api,calls}=setup();
  api.writeSession({token:'test-token',expiresAt:Date.now()+60000,user:{id:1}});

@@ -11,6 +11,7 @@ from app.models.progress import LessonProgress
 from app.models.section import Section
 from app.schemas.learning import ProgressUpdateRequest
 from app.models.user import User
+from app.services.progress_service import is_lesson_completed
 
 
 def _lesson(db_session):
@@ -147,3 +148,34 @@ def test_zero_duration_never_marks_completed(db_session):
         student,
     )
     assert result["completed"] is False
+
+
+@pytest.mark.parametrize(
+    ("duration", "watched", "expected"),
+    [(100, 10, True), (100, 9, False), (None, 100, False), (0, 100, False)],
+)
+def test_shared_completion_rule_threshold_and_unknown_duration(
+    duration, watched, expected
+):
+    assert is_lesson_completed(duration, watched) is expected
+
+
+def test_progress_read_repairs_legacy_row_after_duration_backfill(db_session):
+    student, lesson = _lesson(db_session)
+    lesson.duration_seconds = None
+    progress = LessonProgress(
+        student_id=student.id,
+        lesson_id=lesson.id,
+        watched_seconds=82,
+        completed=False,
+    )
+    db_session.add(progress)
+    db_session.commit()
+
+    lesson.duration_seconds = 119
+    db_session.commit()
+    result = get_course_progress(1, db_session, student)
+
+    assert result["lessons"][0]["completed"] is True
+    db_session.refresh(progress)
+    assert progress.completed is True

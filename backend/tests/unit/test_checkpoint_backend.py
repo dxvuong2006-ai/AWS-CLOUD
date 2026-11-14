@@ -59,8 +59,10 @@ class CheckpointFixture:
                          Section(id=2, course_id=1, title="Next", position=2)])
         self.db.add_all([Enrollment(student_id=1, course_id=1), Enrollment(student_id=2, course_id=1)])
         self.db.add_all([Lesson(id=i, section_id=1 if i < 3 else 2, title=f"Lesson {i}",
-                                position=i, status="PUBLISHED", key_concepts_json=[]) for i in (1, 2, 3)])
-        self.db.add_all([LessonProgress(student_id=1, lesson_id=i, watched_seconds=95,
+                                position=i, status="PUBLISHED", duration_seconds=100,
+                                key_concepts_json=[]) for i in (1, 2, 3)])
+        self.db.add_all([LessonProgress(student_id=1, lesson_id=i,
+                                       watched_seconds=95 if i != 2 else 5,
                                        completed=i != 2) for i in (1, 2, 3)])
         self.db.add_all([Quiz(id=i, section_id=i, title=f"Quiz {i}", is_approved=True) for i in (1, 2)])
         self.db.add_all([Question(id=i, quiz_id=1, question=f"Question {i}", options_json=["A", "B"],
@@ -105,6 +107,49 @@ class CheckpointTests(CheckpointFixture, unittest.TestCase):
         self.db.get(Course, 1).status = "PUBLISHED"
         self.db.get(Quiz, 1).is_approved = False; self.db.commit()
         self.assert_status(404, lambda: service.get_checkpoint(self.db, 1, 1))
+
+    def test_checkpoint_recomputes_and_repairs_legacy_progress_after_backfill(self):
+        lesson = self.db.get(Lesson, 1)
+        progress = self.db.scalar(select(LessonProgress).where(
+            LessonProgress.student_id == 1, LessonProgress.lesson_id == 1
+        ))
+        lesson.duration_seconds = None
+        progress.watched_seconds = 82
+        progress.completed = False
+        self.db.commit()
+
+        lesson.duration_seconds = 119
+        self.db.commit()
+        checkpoint = service.get_checkpoint(self.db, 1, 1, lesson_id=1)
+
+        self.assertEqual(checkpoint.id, 1)
+        self.db.refresh(progress)
+        self.assertTrue(progress.completed)
+
+    def test_checkpoint_requires_threshold_and_preserves_multi_lesson_scope(self):
+        first = self.db.get(Lesson, 1)
+        first_progress = self.db.scalar(select(LessonProgress).where(
+            LessonProgress.student_id == 1, LessonProgress.lesson_id == 1
+        ))
+        first_progress.watched_seconds = 9
+        first_progress.completed = True  # stale positive flag cannot bypass threshold
+        second_progress = self.db.scalar(select(LessonProgress).where(
+            LessonProgress.student_id == 1, LessonProgress.lesson_id == 2
+        ))
+        second_progress.watched_seconds = 95
+        second_progress.completed = True
+        self.db.commit()
+
+        self.assert_status(403, lambda: service.get_checkpoint(self.db, 1, 1, lesson_id=1))
+        # Without a lesson_id the existing section rule remains: any published
+        # lesson in the section can satisfy the checkpoint prerequisite.
+        self.assertEqual(service.get_checkpoint(self.db, 1, 1).id, 1)
+
+        first.duration_seconds = 0
+        first_progress.watched_seconds = 100
+        self.db.commit()
+        self.assert_status(403, lambda: service.get_checkpoint(self.db, 1, 1, lesson_id=1))
+        self.assertEqual(service.get_checkpoint(self.db, 1, 1).id, 1)
 
     def test_section_without_checkpoint_does_not_block_next_checkpoint(self):
         self.db.delete(self.db.get(Quiz, 1)); self.db.commit()

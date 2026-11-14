@@ -13,18 +13,10 @@ from app.models.section import Section
 from app.models.viewing_session import ViewingSession
 from app.models.progress_update import ProgressUpdate
 from app.schemas.learning import ProgressUpdateRequest
-from app.services import lesson_service
+from app.services import lesson_service, progress_service
 from app.services.unlock_service import SectionLockedError
 
 router = APIRouter(tags=["Learning progress"])
-
-
-def _is_lesson_completed(duration_seconds, watched_seconds: float) -> bool:
-    return bool(
-        duration_seconds
-        and duration_seconds > 0
-        and watched_seconds >= duration_seconds * 0.1
-    )
 
 
 def _assert_student_lesson_access(db: Session, lesson_id: int, student) -> None:
@@ -136,7 +128,9 @@ def save_lesson_progress(
     progress.last_sequence = payload.sequence
     progress.last_request_id = str(payload.request_id)
     session.last_sequence = payload.sequence
-    progress.completed = _is_lesson_completed(lesson.duration_seconds, watched_seconds)
+    progress.completed = progress_service.is_lesson_completed(
+        lesson.duration_seconds, watched_seconds
+    )
     response = _progress_response(progress)
     db.add(
         ProgressUpdate(
@@ -194,7 +188,11 @@ def get_course_progress(
         watched = progress.watched_seconds if progress else 0
         duration = lesson.duration_seconds or 0
         percent = min(100.0, watched * 100 / duration) if duration > 0 else 0.0
-        completed = _is_lesson_completed(lesson.duration_seconds, watched)
+        completed = (
+            progress_service.sync_lesson_progress_completion(lesson, progress)
+            if progress is not None
+            else progress_service.is_lesson_completed(lesson.duration_seconds, watched)
+        )
         if completed:
             completed_count += 1
         rows.append({
@@ -206,6 +204,9 @@ def get_course_progress(
             "watched_ranges": progress.watched_ranges if progress else [],
         })
     overall = completed_count * 100 / len(lessons) if lessons else 0.0
+    if db.dirty:
+        # Repair flags stored before a lesson duration was backfilled.
+        db.commit()
     return {
         "course_id": course_id,
         "completion_threshold_percent": 10,

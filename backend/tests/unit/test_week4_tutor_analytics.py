@@ -100,6 +100,16 @@ def test_tutor_and_analytics_endpoints(db_session, learning_data, monkeypatch):
     app.dependency_overrides[get_current_user] = user_override
     try:
         with TestClient(app) as client:
+            response = client.post("/student/remediation", json={
+                "attempt_id": attempt.id,
+                "regenerate": False,
+            })
+            assert response.status_code == 200
+            remediation = response.json()
+            assert remediation["attempt_id"] == attempt.id
+            assert remediation["errors"]
+            assert remediation["practice_questions"]
+
             response = client.post("/tutor/sessions",
                                    json={"attempt_id": attempt.id})
             assert response.status_code == 201

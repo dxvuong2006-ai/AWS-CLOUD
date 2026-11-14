@@ -28,6 +28,7 @@ from app.models.quiz import (
 from app.models.section import Section
 from app.models.user import User
 from app.repositories import quizzes_repo
+from app.services import progress_service
 from app.schemas.quiz import (
     QuestionResponse,
     QuizAttemptResultResponse,
@@ -147,19 +148,26 @@ def _eligibility(
                     detail="Pass the previous section checkpoint first.",
                 )
 
-    completed_query = (
-        select(LessonProgress.id)
+    progress_rows_stmt = (
+        select(Lesson, LessonProgress)
         .join(Lesson, Lesson.id == LessonProgress.lesson_id)
         .where(
             Lesson.section_id == section.id,
             Lesson.status == "PUBLISHED",
             LessonProgress.student_id == student_id,
-            LessonProgress.completed.is_(True),
         )
     )
     if lesson_id is not None:
-        completed_query = completed_query.where(Lesson.id == lesson_id)
-    if db.scalar(completed_query.limit(1)) is None:
+        progress_rows_stmt = progress_rows_stmt.where(Lesson.id == lesson_id)
+    completed = False
+    for lesson, progress in db.execute(progress_rows_stmt):
+        # Derive from watched time and the current duration. This also repairs
+        # rows written while duration_seconds was NULL before a backfill.
+        completed = (
+            progress_service.sync_lesson_progress_completion(lesson, progress)
+            or completed
+        )
+    if not completed:
         raise HTTPException(
             status_code=403,
             detail="Complete the current lesson before this checkpoint.",
@@ -186,6 +194,8 @@ def get_checkpoint(
 
     quiz, section, _ = _context(db, quiz_id, student_id)
     latest = _eligibility(db, quiz, section, student_id, lesson_id)
+    if db.dirty:
+        db.commit()
     questions = db.scalars(
         select(Question)
         .where(Question.quiz_id == quiz.id)

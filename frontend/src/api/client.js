@@ -2,11 +2,18 @@ import { readSession, clearSession } from "./session";
 import { currentCognitoAccessToken } from "./cognito";
 import { LOCAL_AUTH } from "../config/auth";
 
-const BASE_URL = (
+const configuredBaseUrl = (
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
-  "http://localhost:8000"
+  "http://127.0.0.1:8000"
 ).replace(/\/+$/, "");
+// The local FastAPI instructions bind Uvicorn to IPv4 (127.0.0.1). On some
+// Windows setups, fetch resolves "localhost" to ::1 first and fails instead
+// of retrying the IPv4 listener, so normalize only that loopback hostname.
+const BASE_URL = configuredBaseUrl.replace(
+  /^(https?:\/\/)localhost(?=[:/]|$)/i,
+  "$1127.0.0.1",
+);
 
 export class ApiError extends Error {
   constructor(status, detail, code = "") {
@@ -62,7 +69,7 @@ export async function request(
   } catch (error) {
     throw new ApiError(
       0,
-      `Không kết nối được backend tại ${BASE_URL}. ${error.message}`,
+      `Không nhận được phản hồi từ ${BASE_URL}. Lỗi này có thể do kết nối, CORS hoặc URL API. ${error.message}`,
       "BACKEND_CONNECTION_ERROR",
     );
   } finally {

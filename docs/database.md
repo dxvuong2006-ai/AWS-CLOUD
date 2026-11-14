@@ -41,7 +41,7 @@ tham chiếu tới một `quiz_attempt` để tạo remediation từ bài làm c
 | `questions`         | Câu hỏi, lựa chọn và đáp án server-side.                        | Duy nhất `(quiz_id, position)`; đáp án phải là key trong `options_json`.                          |
 | `quiz_attempts`     | Kết quả một lần làm quiz.                                       | Duy nhất `(student_id, quiz_id, attempt_number)`; score 0–100.                                    |
 | `quiz_answers`      | Câu trả lời theo từng câu hỏi trong attempt.                    | Duy nhất `(attempt_id, question_id)`.                                                             |
-| `tutor_sessions`    | Phiên remediation của student.                                  | Trigger xác minh student/section khớp quiz attempt nếu có.                                        |
+| `tutor_sessions`    | Phiên remediation của student.                                  | `practice_questions`, `remediation_completed`, `workflow_state` do migration 0012 hội tụ; trigger xác minh student/section khớp quiz attempt nếu có. |
 | `tutor_messages`    | Hội thoại thuộc một Tutor session.                              | role chỉ `USER` hoặc `ASSISTANT`; content không rỗng.                                             |
 | `schema_migrations` | Các version schema đã được áp dụng.                             | `version` là khóa chính.                                                                          |
 | `video_uploads` (0005, optional) | Intent cho presigned upload, chưa phải biên nhận xác nhận. | Source key duy nhất; UNIQUE `(id, lesson_id)` cho FK ghép. |

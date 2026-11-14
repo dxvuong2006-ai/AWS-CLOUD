@@ -57,6 +57,7 @@ def _grant_access(db_session, student, course, section) -> Lesson:
         title="Published lesson",
         position=1,
         status="PUBLISHED",
+        duration_seconds=10,
     )
     db_session.add(lesson)
     db_session.flush()
@@ -294,6 +295,7 @@ def test_concurrent_retries_with_same_request_create_one_attempt(tmp_path):
                 title="Published lesson",
                 position=1,
                 status="PUBLISHED",
+                    duration_seconds=10,
             )
             setup_db.add(lesson)
             setup_db.flush()
