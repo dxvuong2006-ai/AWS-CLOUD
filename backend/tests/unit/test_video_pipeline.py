@@ -144,8 +144,24 @@ class PipelineTests(unittest.TestCase):
         self.storage.head_video.return_value = {"ContentLength": 1234, "ContentType": "video/mp4", "ETag": f'"{ETAG}"', "LastModified": now}
         self.mc = Mock()
         self.mc.start.return_value = ProcessingReceipt("unit-job")
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
         self.payload = {"kind": "upload", "bucket": BUCKET, "key": KEY, "etag": ETAG}
+
+    def complete_job(self, run, duration_ms=12050):
+        destination = f"s3://{BUCKET}/{run.output_key.removesuffix('_720p.mp4')}"
+        self.mc.get_job.return_value = {
+            "Status": "COMPLETE",
+            "Settings": {
+                "OutputGroups": [{
+                    "OutputGroupSettings": {
+                        "FileGroupSettings": {"Destination": destination},
+                    },
+                    "Outputs": [{"NameModifier": "_720p"}],
+                }],
+            },
+            "OutputGroupDetails": [{
+                "OutputDetails": [{"DurationInMs": duration_ms}],
+            }],
+        }
 
     def claim(self):
         result = service.claim(self.db, self.payload, OWNER, self.storage)
@@ -342,11 +358,46 @@ class PipelineTests(unittest.TestCase):
             service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.assertIsNone(self.lesson.processed_video_key)
 
+    def test_missing_duration_metadata_does_not_publish_video_output(self):
+        run = self.transcode()
+        self.mc.get_job.return_value = {"Status": "COMPLETE", "InputDetails": [{}]}
+        with self.assertRaisesRegex(service.PipelineError, "OUTPUT_DURATION_UNAVAILABLE"):
+            service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+        self.assertIsNone(self.lesson.processed_video_key)
+
+    def test_matching_output_duration_is_selected_without_assuming_first_output(self):
+        run = self.transcode()
+        destination = f"s3://{BUCKET}/{run.output_key.removesuffix('_720p.mp4')}"
+        self.mc.get_job.return_value = {
+            "Status": "COMPLETE",
+            "Settings": {
+                "OutputGroups": [{
+                    "OutputGroupSettings": {
+                        "FileGroupSettings": {"Destination": destination},
+                    },
+                    "Outputs": [
+                        {"NameModifier": "_thumbnail"},
+                        {"NameModifier": "_720p"},
+                    ],
+                }],
+            },
+            "OutputGroupDetails": [{
+                "OutputDetails": [
+                    {"DurationInMs": 1},
+                    {"DurationInMs": 12050},
+                ],
+            }],
+        }
+        service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+        self.assertEqual(self.lesson.duration_seconds, 13)
+
     def test_video_ready_keeps_processing_and_ai_fields_empty(self):
         run = self.transcode()
+        self.complete_job(run)
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.assertEqual(run.state, "VIDEO_READY")
         self.assertEqual(self.lesson.processed_video_key, run.output_key)
+        self.assertEqual(self.lesson.duration_seconds, 13)
         self.assertEqual(self.lesson.status, "PROCESSING")
         for proof in ({"completed": True, "run_id": run.id}, {"completed": False, "run_id": run.id}):
             with self.assertRaises(Exception):
@@ -355,6 +406,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_ai_review_requires_current_proof_and_persisted_content(self):
         run = self.transcode()
+        self.complete_job(run)
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.lesson.transcript_json = {
             "run_id": run.id,
@@ -407,7 +459,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(service.fail(self.db, run.id, OWNER), {"recorded": False})
         self.assertEqual(self.lesson.status, "PROCESSING")
         service.submit(self.db, queued.id, OTHER, self.storage, self.mc)
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
+        self.complete_job(queued)
         service.verify_output(self.db, queued.id, OTHER, self.storage, self.mc)
         newer_key = self.lesson.processed_video_key
         with self.assertRaises(service.PipelineError):

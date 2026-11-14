@@ -129,22 +129,23 @@ def _eligibility(
         )
     ).all()
     for previous in prior_sections:
-        passed = db.scalar(
-            select(QuizAttempt.id)
-            .join(Quiz, Quiz.id == QuizAttempt.quiz_id)
-            .where(
-                Quiz.section_id == previous.id,
-                Quiz.is_approved.is_(True),
-                QuizAttempt.student_id == student_id,
-                QuizAttempt.passed.is_(True),
+        previous_quizzes = db.scalars(
+            select(Quiz).where(Quiz.section_id == previous.id)
+        ).all()
+        for previous_quiz in previous_quizzes:
+            passed = db.scalar(
+                select(QuizAttempt.id).where(
+                    QuizAttempt.quiz_id == previous_quiz.id,
+                    QuizAttempt.student_id == student_id,
+                    QuizAttempt.passed.is_(True),
+                    QuizAttempt.score >= PASS_SCORE,
+                ).limit(1)
             )
-            .limit(1)
-        )
-        if passed is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Pass the previous section checkpoint first.",
-            )
+            if not previous_quiz.is_approved or passed is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Pass the previous section checkpoint first.",
+                )
 
     completed_query = (
         select(LessonProgress.id)

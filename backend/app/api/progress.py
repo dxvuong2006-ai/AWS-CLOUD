@@ -19,6 +19,14 @@ from app.services.unlock_service import SectionLockedError
 router = APIRouter(tags=["Learning progress"])
 
 
+def _is_lesson_completed(duration_seconds, watched_seconds: float) -> bool:
+    return bool(
+        duration_seconds
+        and duration_seconds > 0
+        and watched_seconds >= duration_seconds * 0.1
+    )
+
+
 def _assert_student_lesson_access(db: Session, lesson_id: int, student) -> None:
     try:
         lesson_service.get_lesson_for_user(
@@ -107,7 +115,10 @@ def save_lesson_progress(
 
     merged = []
     prior_ranges = progress.watched_ranges if progress is not None else []
-    for start, end in sorted([*prior_ranges, *payload.watched_ranges]):
+    for start, end in sorted(
+        [*prior_ranges, *payload.watched_ranges],
+        key=lambda r: (r[0], r[1])
+    ):
         if merged and start <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(merged[-1][1], end))
         else:
@@ -125,7 +136,7 @@ def save_lesson_progress(
     progress.last_sequence = payload.sequence
     progress.last_request_id = str(payload.request_id)
     session.last_sequence = payload.sequence
-    progress.completed = bool(lesson.duration_seconds and watched_seconds >= lesson.duration_seconds * 0.1)
+    progress.completed = _is_lesson_completed(lesson.duration_seconds, watched_seconds)
     response = _progress_response(progress)
     db.add(
         ProgressUpdate(
@@ -183,7 +194,7 @@ def get_course_progress(
         watched = progress.watched_seconds if progress else 0
         duration = lesson.duration_seconds or 0
         percent = min(100.0, watched * 100 / duration) if duration > 0 else 0.0
-        completed = bool(progress.completed) if progress else False
+        completed = _is_lesson_completed(lesson.duration_seconds, watched)
         if completed:
             completed_count += 1
         rows.append({

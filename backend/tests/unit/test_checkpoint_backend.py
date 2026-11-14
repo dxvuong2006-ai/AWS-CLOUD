@@ -106,6 +106,14 @@ class CheckpointTests(CheckpointFixture, unittest.TestCase):
         self.db.get(Quiz, 1).is_approved = False; self.db.commit()
         self.assert_status(404, lambda: service.get_checkpoint(self.db, 1, 1))
 
+    def test_section_without_checkpoint_does_not_block_next_checkpoint(self):
+        self.db.delete(self.db.get(Quiz, 1)); self.db.commit()
+        self.assertEqual(service.get_checkpoint(self.db, 2, 1, 3).id, 2)
+
+    def test_unapproved_previous_checkpoint_cannot_be_bypassed(self):
+        self.db.get(Quiz, 1).is_approved = False; self.db.commit()
+        self.assert_status(403, lambda: service.get_checkpoint(self.db, 2, 1, 3))
+
     def test_grade_omissions_history_and_unlock_are_persisted(self):
         result = service.submit_attempt(self.db, 1, 1, self.payload(4, lesson_id=1))
         self.assertEqual(result.score, Decimal("80.00")); self.assertTrue(result.passed)

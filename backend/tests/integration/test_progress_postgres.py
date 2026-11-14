@@ -145,6 +145,24 @@ def test_progress_postgres_idempotency_resume_and_concurrent_sequence():
             outcomes = [future.exception() for future in results]
         assert sum(error is None for error in outcomes) == 1
         assert sum(getattr(error, "status_code", None) == 409 for error in outcomes) == 1
+
+        lesson.duration_seconds = None
+        db.commit()
+        unknown_duration = get_course_progress(course.id, db, student)
+        assert unknown_duration["lessons"][0]["progress_percent"] == 0
+        assert unknown_duration["lessons"][0]["completed"] is False
+
+        lesson.duration_seconds = 0
+        db.commit()
+        zero_duration = get_course_progress(course.id, db, student)
+        assert zero_duration["lessons"][0]["completed"] is False
+
+        lesson.duration_seconds = 200
+        db.commit()
+        backfilled_duration = get_course_progress(course.id, db, student)
+        assert backfilled_duration["lessons"][0]["progress_percent"] == 12.5
+        assert backfilled_duration["lessons"][0]["completed"] is True
+        assert backfilled_duration["overall_percent"] == 100.0
     finally:
         db.rollback()
         db.close()

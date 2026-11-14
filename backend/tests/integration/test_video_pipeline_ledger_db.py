@@ -99,9 +99,25 @@ class VideoPipelinePostgresTests(unittest.TestCase):
         self.storage.head_video.return_value = {"ContentLength": 1234, "ContentType": "video/mp4",
                                                "ETag": '"' + "a"*32 + '"', "LastModified": now}
         self.mc.start.side_effect = [ProcessingReceipt("fixture-job-one"), ProcessingReceipt("fixture-job-two")]
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
         self.payload = {"kind": "upload", "bucket": settings.S3_BUCKET,
                         "key": self.upload.source_key, "etag": "a"*32}
+
+    def complete_job(self, run, duration_ms=12050):
+        destination = f"s3://{settings.S3_BUCKET}/{run.output_key.removesuffix('_720p.mp4')}"
+        self.mc.get_job.return_value = {
+            "Status": "COMPLETE",
+            "Settings": {
+                "OutputGroups": [{
+                    "OutputGroupSettings": {
+                        "FileGroupSettings": {"Destination": destination},
+                    },
+                    "Outputs": [{"NameModifier": "_720p"}],
+                }],
+            },
+            "OutputGroupDetails": [{
+                "OutputDetails": [{"DurationInMs": duration_ms}],
+            }],
+        }
 
     def claim(self):
         result = service.claim(self.db, self.payload, self.owner, self.storage)
@@ -191,7 +207,7 @@ class VideoPipelinePostgresTests(unittest.TestCase):
         newer = repo.run_for_attempt(self.db, self.upload.id, 1)
         service.claim(self.db, {**self.payload, "kind": "retry", "run_id": newer.id}, self.other_owner, self.storage)
         service.submit(self.db, newer.id, self.other_owner, self.storage, self.mc)
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
+        self.complete_job(newer)
         service.verify_output(self.db, newer.id, self.other_owner, self.storage, self.mc)
         with self.assertRaisesRegex(service.PipelineError, "STALE_EXECUTION"):
             service.verify_output(self.db, old.id, self.owner, self.storage, self.mc)
@@ -199,6 +215,7 @@ class VideoPipelinePostgresTests(unittest.TestCase):
         lesson = lessons_repo.get_by_id(self.db, self.lesson_id)
         self.db.refresh(lesson)
         self.assertEqual(lesson.processed_video_key, newer.output_key)
+        self.assertEqual(lesson.duration_seconds, 13)
         self.assertNotEqual(lesson.processed_video_key, old.output_key)
         self.assertEqual(lesson.status, "PROCESSING")
 

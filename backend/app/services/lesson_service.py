@@ -236,7 +236,7 @@ def get_lesson_for_management(
     if user_role.upper() != "INSTRUCTOR":
         raise LessonAccessDeniedError("Instructor role required.")
     _check_lesson_access(
-        db, course, section_id=section_id, user_id=user_id, user_role=user_role
+        db, course, section_id=lesson.section_id, user_id=user_id, user_role=user_role
     )
     return lesson, course
 

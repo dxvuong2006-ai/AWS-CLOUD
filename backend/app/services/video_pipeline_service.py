@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
+import math
 import re
 
 from app.adapters.video.base import ProcessingReceipt, ProcessorDispatchError, VideoProcessingRequest
@@ -119,6 +120,62 @@ def _clear_previous_content(lesson):
     lesson.transcript_json = None
     lesson.summary = None
     lesson.key_concepts_json = []
+
+
+def _output_key(path: str) -> str:
+    if path.startswith("s3://"):
+        path = path.split("/", 3)[-1]
+    return path.lstrip("/")
+
+
+def _output_path(destination: str, name_modifier: str) -> str:
+    destination = destination.rstrip("/")
+    if destination.lower().endswith(".mp4"):
+        return f"{destination[:-4]}{name_modifier}.mp4"
+    return f"{destination}{name_modifier}.mp4"
+
+
+def _duration_seconds_from_job(job, expected_output_key: str) -> int | None:
+    """Find the matching MediaConvert output duration, conservatively."""
+    if not isinstance(job, dict):
+        return None
+    settings = job.get("Settings")
+    output_groups = settings.get("OutputGroups") if isinstance(settings, dict) else None
+    detail_groups = job.get("OutputGroupDetails")
+    if not isinstance(output_groups, list) or not isinstance(detail_groups, list):
+        return None
+
+    duration_ms = None
+    expected_output_key = _output_key(expected_output_key)
+    for group, details in zip(output_groups, detail_groups):
+        if not isinstance(group, dict) or not isinstance(details, dict):
+            continue
+        group_settings = group.get("OutputGroupSettings")
+        file_settings = (
+            group_settings.get("FileGroupSettings")
+            if isinstance(group_settings, dict)
+            else None
+        )
+        destination = file_settings.get("Destination") if isinstance(file_settings, dict) else None
+        outputs = group.get("Outputs")
+        output_details = details.get("OutputDetails")
+        if not isinstance(destination, str) or not isinstance(outputs, list) or not isinstance(output_details, list):
+            continue
+        for output, output_detail in zip(outputs, output_details):
+            if not isinstance(output, dict) or not isinstance(output_detail, dict):
+                continue
+            candidate = _output_path(destination, output.get("NameModifier", ""))
+            if _output_key(candidate) == expected_output_key:
+                duration_ms = output_detail.get("DurationInMs")
+                break
+        if duration_ms is not None:
+            break
+
+    if isinstance(duration_ms, bool) or not isinstance(duration_ms, (int, float)):
+        return None
+    if not math.isfinite(duration_ms) or duration_ms <= 0:
+        return None
+    return max(1, math.ceil(duration_ms / 1000))
 
 
 def claim(db, payload, execution_arn, storage):
@@ -291,8 +348,12 @@ def poll(db, run_id, execution_arn, mediaconvert):
 
 def verify_output(db, run_id, execution_arn, storage, mediaconvert):
     run, lesson, upload = _owned(db, run_id, execution_arn)
-    if not run.job_id or mediaconvert.get_job(run.job_id).get("Status") != "COMPLETE":
+    job = mediaconvert.get_job(run.job_id) if run.job_id else {}
+    if job.get("Status") != "COMPLETE":
         raise PipelineError("JOB_NOT_COMPLETE")
+    duration_seconds = _duration_seconds_from_job(job, run.output_key)
+    if duration_seconds is None:
+        raise PipelineError("OUTPUT_DURATION_UNAVAILABLE")
     _head_source(storage, upload, etag=run.source_etag)
     metadata = storage.head_video(run.output_key)
     if not isinstance(metadata.get("ContentLength"), int) or metadata["ContentLength"] <= 0:
@@ -303,6 +364,7 @@ def verify_output(db, run_id, execution_arn, storage, mediaconvert):
     run.state = "VIDEO_READY"
     run.safe_to_retry = True
     lesson.processed_video_key = run.output_key
+    lesson.duration_seconds = duration_seconds
     db.commit()
     return {"video_ready": True, "ai_status": "PENDING"}
 
