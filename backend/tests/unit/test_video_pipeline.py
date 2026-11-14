@@ -619,20 +619,32 @@ class InfrastructureTests(unittest.TestCase):
         policy = json.loads(
             (ROOT / "infrastructure/iam/lambda-ai-worker-permissions.json").read_text()
         )
-        actions = {
-            action
-            for statement in policy["Statement"]
-            for action in statement["Action"]
-        }
+        actions = set()
+        for statement in policy["Statement"]:
+            value = statement["Action"]
+            actions.update(value if isinstance(value, list) else [value])
         self.assertTrue({
             "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob",
             "bedrock:InvokeModel", "s3:GetObject", "s3:PutObject",
             "logs:CreateLogStream", "logs:PutLogEvents",
         }.issubset(actions))
         self.assertFalse(any(action.endswith(":*") for action in actions))
+        start = next(
+            statement for statement in policy["Statement"]
+            if statement["Action"] == "transcribe:StartTranscriptionJob"
+        )
+        self.assertEqual(start["Resource"], "*")
+        self.assertEqual(
+            start["Condition"]["StringEquals"]["transcribe:OutputBucketName"],
+            "learncloud-videos-mentorcloud",
+        )
+        self.assertEqual(
+            start["Condition"]["StringLike"]["transcribe:OutputKey"],
+            "ai-transcripts/*/transcript.json",
+        )
         bedrock = [
             statement for statement in policy["Statement"]
-            if "bedrock:InvokeModel" in statement["Action"]
+            if statement["Action"] == ["bedrock:InvokeModel"]
         ]
         profile_arn = (
             "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/"

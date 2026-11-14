@@ -56,6 +56,7 @@ Build the K4 test ZIP from the reviewed Linux Python 3.12 x86_64 dependency fold
 ```powershell
 .\.venv\Scripts\python.exe backend\scripts\build_video_pipeline_package.py `
   --dependencies build\video-dependencies-k4-fixed `
+  --include-test-support `
   --output build\video-pipeline-k4-k5-e2e-test.zip
 ```
 
@@ -64,6 +65,7 @@ Build the K5 test ZIP with the same reviewed dependency folder:
 ```powershell
 .\.venv\Scripts\python.exe backend\scripts\build_ai_worker_package.py `
   --dependencies build\video-dependencies-k4-fixed `
+  --include-test-support `
   --output build\ai-worker-k4-k5-e2e-test.zip
 ```
 

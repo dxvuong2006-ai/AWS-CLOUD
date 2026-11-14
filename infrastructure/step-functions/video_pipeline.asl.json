@@ -1,5 +1,5 @@
 {
-  "Comment": "CODE READY / AWS NOT DEPLOYED. Standard workflow; Lambda CreateJob + bounded GetJob polling; no unsupported .sync assumption. Replace both ARN placeholders. No automatic submit retry.",
+  "Comment": "PRODUCTION TEMPLATE: K4 MediaConvert, optional K5 Transcribe/Bedrock, then K4 finalize_ai. Standard workflow with ledger ownership, bounded polling, and no automatic submit retry. Replace both ARN placeholders before deployment.",
   "StartAt": "Claim",
   "TimeoutSeconds": 7200,
   "States": {

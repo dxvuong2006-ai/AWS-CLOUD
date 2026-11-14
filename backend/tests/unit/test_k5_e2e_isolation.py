@@ -19,8 +19,9 @@ TEST_URL = (
     "postgresql+psycopg2://learncloud_k5_test_user:placeholder@db.invalid/"
     "learncloud_k5_test"
 )
-FIXTURE_UPLOAD_ID = "00000000000000000000000000000003"
-FIXTURE_RUN_ID = "158087c71b268297dfb20dfb02254b3dd6b34d9627bd092459655f552536e409"
+FIXTURE_LESSON_ID = 4
+FIXTURE_UPLOAD_ID = "00000000000000000000000000000004"
+FIXTURE_RUN_ID = "65dcd70eecb600ef0ff1ec0dd3bc35c5b4444cea5668d9fd8594d689ce58eee6"
 
 
 @pytest.mark.parametrize(
@@ -159,7 +160,7 @@ def test_test_input_and_lambda_configs_are_fixture_scoped():
     assert event == {
         "kind": "upload",
         "bucket": "learncloud-videos-mentorcloud",
-        "key": f"lessons/3/raw/{FIXTURE_UPLOAD_ID}.mp4",
+        "key": "lessons/__LESSON_ID__/raw/__UPLOAD_ID__.mp4",
         "etag": "__S3_ETAG_WITHOUT_QUOTES__",
     }
 
@@ -197,7 +198,15 @@ def test_test_iam_policies_do_not_name_production_lambda_or_other_lessons():
     k5_policy = json.loads(texts[1])
     resources = json.dumps(k5_policy["Statement"])
     assert FIXTURE_RUN_ID in resources
-    assert "lessons/3/processed/*" in resources
+    assert f"lessons/{FIXTURE_LESSON_ID}/processed/*" in resources
+    start = next(
+        statement for statement in k5_policy["Statement"]
+        if statement.get("Action") == "transcribe:StartTranscriptionJob"
+    )
+    assert start["Resource"] == "*"
+    assert start["Condition"]["StringEquals"]["transcribe:OutputKey"] == (
+        f"ai-transcripts/{FIXTURE_RUN_ID}/transcript.json"
+    )
 
 
 def test_recovery_rule_is_scoped_to_test_state_machine_placeholder():
