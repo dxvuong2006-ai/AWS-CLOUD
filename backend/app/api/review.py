@@ -222,7 +222,13 @@ def patch_ai_content(
         review_service.get_draft, db=db, lesson_id=lesson_id,
         instructor_id=instructor.id,
     )
-    allowed = {"title", "summary", "key_concepts", "quiz_title", "questions"}
+    # A PATCH is partial.  Keep every review material that was not supplied by
+    # the client; otherwise DraftUpdate's default would turn omitted
+    # flashcards into an empty list and replace_content() would delete them.
+    allowed = {
+        "title", "summary", "key_concepts", "flashcards",
+        "quiz_title", "questions",
+    }
     if set(payload) - (allowed | {"expected_revision"}):
         raise HTTPException(422, "Unsupported draft field.")
     values = current.model_dump(include=allowed)

@@ -39,6 +39,11 @@ def validate_review_content(lesson: Lesson) -> None:
     summary = lesson.summary
     key_concepts = lesson.key_concepts_json
 
+    if not isinstance(lesson.processed_video_key, str) or not lesson.processed_video_key.strip():
+        raise ConflictError(
+            "A processed video is required.",
+            code="PROCESSED_VIDEO_REQUIRED",
+        )
     if (
         not isinstance(transcript, dict)
         or not transcript
@@ -50,6 +55,33 @@ def validate_review_content(lesson: Lesson) -> None:
         raise ConflictError(
             "Review content is incomplete.",
             code="REVIEW_CONTENT_INCOMPLETE",
+        )
+
+
+def validate_review_materials(
+    db: Session, lesson: Lesson, quiz: Quiz | None, *, require_approved: bool,
+) -> None:
+    """Require the reviewed flashcards and section checkpoint used by students."""
+    flashcards = review_repo.get_flashcards(db, lesson.id)
+    if not flashcards:
+        raise ConflictError(
+            "At least one flashcard is required.",
+            code="REVIEW_CONTENT_INCOMPLETE",
+        )
+    if require_approved and any(not item.is_approved for item in flashcards):
+        raise ConflictError(
+            "All flashcards must be approved before publishing.",
+            code="REVIEW_CONTENT_NOT_APPROVED",
+        )
+    if quiz is None or not review_repo.get_questions(db, quiz.id):
+        raise ConflictError(
+            "A checkpoint with questions is required.",
+            code="CHECKPOINT_REQUIRED",
+        )
+    if require_approved and not quiz.is_approved:
+        raise ConflictError(
+            "The section checkpoint must be approved before publishing.",
+            code="CHECKPOINT_NOT_APPROVED",
         )
 
 
@@ -244,6 +276,13 @@ def approve_draft(
         review_repo.lock_section(db, lesson_id)
         lesson = _owned_lesson(db, lesson_id, instructor_id)
         quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
+        if lesson.status != "REVIEW_REQUIRED":
+            raise ConflictError(
+                "Only lessons awaiting review can be approved.",
+                code="LESSON_NOT_REVIEWABLE",
+            )
+        validate_review_content(lesson)
+        validate_review_materials(db, lesson, quiz, require_approved=False)
         current = _response(db, lesson, quiz)
         if current.revision != payload.expected_revision:
             raise ReviewError(409, "Draft changed; reload before approving.")

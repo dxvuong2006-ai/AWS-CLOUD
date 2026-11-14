@@ -15,8 +15,10 @@ sau vào `schema_migrations`:
 | `0001` | LearnCloud core schema. |
 | `0002` | Flashcard, approval state và các constraint/trigger integrity. |
 
-Repository hiện **không có** file `0003_reconcile_legacy_schema.sql` từng được
-nhắc trong tài liệu. Không coi `0003` là đã áp dụng hoặc tự tạo version giả.
+Repository có `0003_reconcile_legacy_schema.sql`. Bốn file lịch sử cùng dùng version
+`0004`; không được dùng runner theo version cho tới khi đã chọn kế hoạch reconcile
+phù hợp với registry/schema đích. `0010_reconcile_0004_consistency.sql` hội tụ DDL
+Backend cần nhưng không sửa bản ghi lịch sử `0004`.
 `V1__add_password_hash_to_users.sql` là script legacy riêng, không theo bộ chạy
 version bốn chữ số bên dưới.
 
@@ -114,9 +116,21 @@ Chạy từ root repository. Script chỉ chạy các file chưa có version tro
 ```powershell
 $psql = @("exec", "-i", "learncloud-db", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-U", "learncloud", "-d", "learncloud")
 
-Get-ChildItem .\database\migrations -Filter "[0-9][0-9][0-9][0-9]_*.sql" |
-  Where-Object { $_.Name -notlike "*.down.sql" } |
-  Sort-Object Name |
+$migrationFiles = Get-ChildItem .\database\migrations -File |
+  Where-Object { $_.Name -match '^\d{4}_.+\.sql$' -and $_.Name -notlike "*.down.sql" } |
+  Sort-Object Name
+
+$duplicateVersions = $migrationFiles |
+  Group-Object { $_.Name.Substring(0, 4) } |
+  Where-Object Count -gt 1
+if ($duplicateVersions) {
+  $details = ($duplicateVersions | ForEach-Object {
+    "$($_.Name): $($_.Group.Name -join ', ')"
+  }) -join '; '
+  throw "Duplicate migration versions require an explicit reviewed plan: $details"
+}
+
+$migrationFiles |
   ForEach-Object {
     $version = $_.Name.Substring(0, 4)
     $applied = docker @psql -tAc "SELECT 1 FROM schema_migrations WHERE version = '$version'"
