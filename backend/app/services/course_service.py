@@ -42,7 +42,10 @@ def get_course_detail(db: Session, course_id: int):
             "course_id": section.course_id,
             "title": section.title,
             "position": section.position,
-            "lessons": lessons_repo.get_by_section(db, section.id),
+            "lessons": [
+                lesson for lesson in lessons_repo.get_by_section(db, section.id)
+                if lesson.status == LessonStatus.PUBLISHED.value
+            ],
         }
         for section in sections
     ]

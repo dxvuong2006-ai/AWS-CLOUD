@@ -1,9 +1,12 @@
 #HTTP Router tiếp nhận request Quiz & Unlock
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_student
 from app.models.user import User
+from app.models.course import Course
+from app.models.enrollment import Enrollment
 from app.schemas.quiz import (
     QuizAttemptResultResponse,
     QuizDetailResponse,
@@ -132,6 +135,18 @@ def get_course_unlock_status(
     Returns:
         Danh sách section_id/is_unlocked của các chương trong khóa học.
     """
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(404, "Course not found.")
+    if course.status != "PUBLISHED":
+        raise HTTPException(403, "Course is not published.")
+    if db.scalar(
+        select(Enrollment.id).where(
+            Enrollment.course_id == course_id,
+            Enrollment.student_id == current_user.id,
+        )
+    ) is None:
+        raise HTTPException(403, "Course enrollment is required.")
     return unlock_service.get_course_unlock_status(
         db,
         student_id=current_user.id,

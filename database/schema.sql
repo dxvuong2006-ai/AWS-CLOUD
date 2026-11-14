@@ -83,9 +83,31 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
     student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
     watched_seconds INTEGER NOT NULL DEFAULT 0 CHECK (watched_seconds >= 0),
+    last_position_seconds DOUBLE PRECISION NOT NULL DEFAULT 0
+        CHECK (last_position_seconds >= 0),
+    watched_ranges JSONB NOT NULL DEFAULT '[]'::jsonb,
     completed BOOLEAN NOT NULL DEFAULT FALSE,
+    playback_session_id VARCHAR(36),
+    last_sequence INTEGER NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
+    last_request_id VARCHAR(36),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (student_id, lesson_id)
+);
+
+CREATE TABLE IF NOT EXISTS viewing_sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    last_sequence INTEGER NOT NULL DEFAULT 0 CHECK (last_sequence >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS progress_updates (
+    request_id VARCHAR(36) PRIMARY KEY,
+    student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lesson_id INTEGER NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+    response JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS quizzes (
