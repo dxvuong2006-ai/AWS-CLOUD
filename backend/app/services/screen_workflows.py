@@ -55,9 +55,13 @@ def dashboard(db, instructor_id):
         "tasks": tasks[:6]}
 
 
-def instructor_students(db, instructor_id):
-    course_ids = [row[0] for row in db.query(Course.id).filter(
-        Course.instructor_id == instructor_id).all()]
+def instructor_students(db, instructor_id, course_id=None):
+    if course_id is not None:
+        owned_course(db, instructor_id, course_id)
+    course_ids = [course_id] if course_id is not None else [
+        row[0] for row in db.query(Course.id).filter(
+            Course.instructor_id == instructor_id).all()
+    ]
     if not course_ids:
         return []
     rows = db.query(User).join(Enrollment, Enrollment.student_id == User.id).filter(
@@ -65,7 +69,8 @@ def instructor_students(db, instructor_id):
     result = []
     for student in rows:
         courses = db.query(Course).join(Enrollment, Enrollment.course_id == Course.id).filter(
-            Enrollment.student_id == student.id, Course.instructor_id == instructor_id).all()
+            Enrollment.student_id == student.id, Course.instructor_id == instructor_id,
+            Course.id.in_(course_ids)).all()
         values = [round(100 * detail["completed_lessons"] / detail["lesson_count"])
                   if detail["lesson_count"] else 0
                   for detail in (completion(db, student.id, course.id) for course in courses)]

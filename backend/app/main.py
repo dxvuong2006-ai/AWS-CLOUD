@@ -35,7 +35,11 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.mount("/demo", StaticFiles(directory=PROJECT_ROOT / "backend" / "static", html=True), name="demo")
+app.mount(
+    "/demo",
+    StaticFiles(directory=PROJECT_ROOT / "backend" / "static", html=True),
+    name="demo",
+)
 
 # Thêm middleware để ghi log các yêu cầu
 app.add_middleware(RequestLoggingMiddleware)
@@ -70,6 +74,16 @@ app.include_router(review_router)
 app.include_router(admin_router)
 app.include_router(progress_router)
 app.include_router(flashcards_router)
+
+@app.on_event("startup")
+def initialize_local_tables():
+    from app.database import Base, engine
+    # Chỉ tạo bảng còn thiếu cho SQLite local, không xóa dữ liệu.
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+        from app.database import migrate_local_quiz_attempts
+        migrate_local_quiz_attempts()
+
 
 @app.get("/health", tags=["Health"])
 def health_check():

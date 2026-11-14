@@ -78,7 +78,7 @@ export default function CourseEditorPage() {
     <div className="breadcrumb"><Link to="/instructor/courses">Khóa học</Link> / {course ? course.title : "Tạo khóa học"}</div>
     <div className="page-head"><div><h1>{course ? course.title : "Tạo khóa học"}</h1><p className="management-subtitle">{course ? "Cấu trúc khóa học · " + (course.status === "PUBLISHED" ? "Đã publish" : "Bản nháp") : "Nhập thông tin cơ bản, sau đó thêm section và lesson."}</p></div>
       <div className="management-actions"><Link className="btn-secondary" to="/instructor/courses">Hủy</Link><button disabled={busy || coverBusy} className={course ? "btn-secondary" : "btn-primary"} form="course-editor-form" type="submit">{busy ? "Đang lưu..." : course ? "Lưu thay đổi" : "Tạo khóa học"}</button>
-        {course?.status === "DRAFT" && <button className="btn-primary" disabled={busy} onClick={() => openDialog("publish")}>↑ Publish khóa học</button>}</div>
+        {course?.status === "DRAFT" && <button className="btn-primary course-publish-button" disabled={busy} onClick={() => openDialog("publish")}><span aria-hidden="true">↗</span> Xuất bản khóa học</button>}</div>
     </div>
     {error && !dialog && <p className="workflow-error" role="alert">{error}</p>}{notice && <p role="status" className="status-chip success">{notice}</p>}
     <form id="course-editor-form" className="management-form course-editor-form new-course" onSubmit={save}>
@@ -97,9 +97,9 @@ export default function CourseEditorPage() {
       </section>)}
       {!course.sections.length && <p>Thêm section đầu tiên cho khóa học.</p>}
     </section>}
-    {dialog && <EditorDialog title={dialog === "publish" ? "Publish khóa học" : dialog === "section" ? "Thêm section" : "Thêm lesson"} busy={busy} onClose={() => { setDialog(null); setError(""); }}>
+    {dialog && <EditorDialog title={dialog === "publish" ? "Xuất bản khóa học" : dialog === "section" ? "Thêm section" : "Thêm lesson"} busy={busy} onClose={() => { setDialog(null); setError(""); }}>
       {error && <p role="alert" className="workflow-error">{error}</p>}
-      {dialog === "publish" ? <><p>Tất cả lesson cần được duyệt trước khi học viên có thể đăng ký khóa học.</p><div className="management-actions"><button disabled={busy} onClick={() => setDialog(null)}>Hủy</button><button className="btn-primary" disabled={busy} onClick={() => action(async () => { await publishCourse(courseId); setCourse(await getCourse(courseId)); setDialog(null); setNotice("Đã xuất bản khóa học."); })}>{busy ? "Đang xuất bản..." : "Publish khóa học"}</button></div></> :
+      {dialog === "publish" ? <><p>Sau khi xuất bản, học viên có thể tìm thấy và đăng ký khóa học. Mỗi chương cần có bài học; tất cả bài học phải có video đã xử lý, học liệu hợp lệ và được duyệt.</p><div className="management-actions"><button disabled={busy} onClick={() => setDialog(null)}>Hủy</button><button className="btn-primary" disabled={busy} onClick={() => action(async () => { await publishCourse(courseId); setCourse(await getCourse(courseId)); setDialog(null); setNotice("Đã xuất bản khóa học."); })}>{busy ? "Đang xuất bản..." : "Xuất bản khóa học"}</button></div></> :
         <form className="management-form" onSubmit={createItem}><p>{dialog === "lesson" ? "Lesson sẽ được thêm vào cuối section." : "Section sẽ được thêm vào cuối khóa học."}</p>
           <label>{dialog === "lesson" ? "Tên lesson" : "Tên section"}<input autoFocus required maxLength={255} value={newTitle} onChange={e => setNewTitle(e.target.value)} disabled={busy} /></label>
           {dialog === "lesson" && <label>Thuộc section<select value={sectionId} onChange={e => setSectionId(e.target.value)} disabled={busy} required>{course.sections.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}</select></label>}

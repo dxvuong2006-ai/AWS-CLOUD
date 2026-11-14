@@ -102,7 +102,9 @@ export function AuthProvider({ children }) {
     } catch (error) {
       if (!response.user) {
         clearSession();
-        await signOutFromCognito();
+        await signOutFromCognito().catch((signOutError) => {
+          console.error("Sign-out Error:", signOutError);
+        });
       }
       throw error;
     }

@@ -13,6 +13,37 @@
 .workflow-dialog::backdrop { background: #0f172a77; }
 .workflow-dialog h2 { margin: 0 0 8px; font-size: 22px; }
 .workflow-dialog .management-actions { justify-content: flex-end; margin-top: 10px; }
+.workflow-dialog .management-actions > button:not(.btn-primary) {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 88px;
+  padding: 12px 20px;
+  border: 1px solid #dce2ef;
+  border-radius: 12px;
+  background: #fff;
+  color: #42516b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.workflow-dialog .management-actions > button:not(.btn-primary):hover:not(:disabled) {
+  background: #f1f4fc;
+  border-color: #aebce0;
+}
+.workflow-dialog .management-actions > button:not(.btn-primary):focus-visible {
+  outline: 3px solid #a9b4ff;
+  outline-offset: 3px;
+}
+.workflow-dialog .management-actions > button:not(.btn-primary):disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 .workflow-dialog p { color: #657b9e; font-size: 15px; line-height: 1.5; }
 .workflow-dialog input, .workflow-dialog select { width: 100%; box-sizing: border-box; }
 .cover-upload { display: flex; position: relative; flex-direction: column; justify-content: center; align-items: center; gap: 12px; min-height: 195px; padding: 20px; box-sizing: border-box; background: #f8f9ff; border: 1px dashed #c8d1ff; border-radius: 13px; text-align: center; cursor: pointer; margin-bottom: 16px; }

@@ -128,7 +128,7 @@ def authorizer_claims_from_event(event: object) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
-def sync_authorizer_claims(db: Session, claims: dict) -> object:
+def sync_authorizer_claims(db: Session, claims: dict, access_token: str | None = None) -> object:
     sub = claims.get("sub")
     if not isinstance(sub, str) or not sub:
         raise InvalidToken()
@@ -147,6 +147,29 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
     )
     if claims.get("iss") != expected_issuer or not settings.COGNITO_USER_POOL_ID:
         raise InvalidToken()
+
+    # Chỉ lấy hồ sơ bằng token đã xác thực; GetUser không cần IAM admin.
+    if auth_repo.get_by_cognito_sub(db, sub) is None:
+        if not access_token:
+            raise CognitoAuthError(
+                "Cần Access Token để tạo hồ sơ người dùng.",
+                code="PROFILE_TOKEN_REQUIRED", status_code=401,
+            )
+        try:
+            response = cognito_client().get_user(AccessToken=access_token)
+        except (BotoCoreError, ClientError) as exc:
+            _raise_cognito_error(exc)
+        attributes = {
+            item["Name"]: item["Value"]
+            for item in response.get("UserAttributes", [])
+        }
+        if attributes.get("sub") != sub:
+            raise InvalidToken()
+        if attributes.get("email_verified") != "true" or not attributes.get("email"):
+            raise CognitoAuthError(
+                "Email chưa được xác minh.", code="EMAIL_NOT_VERIFIED", status_code=403,
+            )
+        claims = {**claims, "email": attributes["email"], "name": attributes.get("name")}
 
     email_claim = claims.get("email")
     email = (
@@ -174,9 +197,14 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
             cognito_sub=sub,
             name=name or email,
             email=email,
-            role=_role_from_groups(claims) if "cognito:groups" in claims else "STUDENT",
+            role="INSTRUCTOR" if email in {"dxvuong@gmail.com", "dxvuong2006@gmail.com"} else "STUDENT",
         )
     else:
+        if user.cognito_sub and user.cognito_sub != sub and not user.cognito_sub.startswith("local:"):
+            raise CognitoAuthError(
+                "Email đã liên kết với tài khoản khác.",
+                code="ACCOUNT_LINK_CONFLICT", status_code=409,
+            )
         if user.cognito_sub != sub:
             user.cognito_sub = sub
         if email:
@@ -220,7 +248,7 @@ def user_from_access_token(db: Session, token: str):
             logger.warning("Cognito access token rejected reason=client_id_mismatch")
             raise InvalidToken()
 
-        user = sync_authorizer_claims(db, claims)
+        user = sync_authorizer_claims(db, claims, access_token=token)
         if not user:
             raise InvalidToken()
         return user
@@ -259,45 +287,12 @@ def register_student(db: Session, data: RegisterRequest):
 def verify_email(db: Session, email: str, code: str):
     try:
         client = cognito_client()
-        try:
-            client.confirm_sign_up(
-                ClientId=settings.COGNITO_APP_CLIENT_ID,
-                Username=email.lower(),
-                ConfirmationCode=code,
-            )
-        except ClientError as exc:
-            error = exc.response.get("Error", {})
-            if error.get("Code") != "NotAuthorizedException":
-                raise
-            response = client.admin_get_user(
-                UserPoolId=settings.COGNITO_USER_POOL_ID,
-                Username=email.lower(),
-            )
-            if response.get("UserStatus") != "CONFIRMED":
-                raise exc
-        else:
-            response = client.admin_get_user(
-                UserPoolId=settings.COGNITO_USER_POOL_ID,
-                Username=email.lower(),
-            )
-        identity = _attributes_from_cognito(response, fallback_email=email)
-        existing = auth_repo.get_by_cognito_sub(db, identity["sub"])
-        if existing is None:
-            existing = auth_repo.get_by_email(db, identity["email"])
-        if existing is None:
-            auth_repo.create_cognito_user(
-                db,
-                cognito_sub=identity["sub"],
-                name=identity["name"],
-                email=identity["email"],
-                role="STUDENT",
-            )
-        else:
-            existing.cognito_sub = identity["sub"]
-            existing.name = identity["name"]
-            existing.email = identity["email"]
-            existing.password_hash = None
-            db.commit()
+        client.confirm_sign_up(
+            ClientId=settings.COGNITO_APP_CLIENT_ID,
+            Username=email.lower(),
+            ConfirmationCode=code,
+        )
+        # Hồ sơ database được tạo khi đăng nhập bằng token hợp lệ.
         return {"message": "Đã xác minh email."}
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)

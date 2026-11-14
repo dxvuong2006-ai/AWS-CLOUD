@@ -39,8 +39,9 @@ def queue(db: Session = Depends(get_db), user=Depends(require_instructor)):
     return service.queue(db, user.id)
 
 @router.get("/instructor/students")
-def students(db: Session = Depends(get_db), user=Depends(require_instructor)):
-    return service.instructor_students(db, user.id)
+def students(course_id: int | None = Query(None, gt=0),
+             db: Session = Depends(get_db), user=Depends(require_instructor)):
+    return service.instructor_students(db, user.id, course_id)
 
 @router.get("/instructor/students/{student_id}")
 def student(student_id: int, db: Session = Depends(get_db),
