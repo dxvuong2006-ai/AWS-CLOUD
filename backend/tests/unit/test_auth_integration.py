@@ -27,6 +27,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
                 name=role,
                 email=f"{role.lower()}@example.com",
                 role=role,
+                status="ACTIVE",
                 password_hash=None,
                 created_at=None,
             )
@@ -127,6 +128,7 @@ class CognitoTokenVerificationLoggingTests(unittest.TestCase):
             name="Student",
             email="student@example.com",
             role="STUDENT",
+            status="ACTIVE",
             password_hash=None,
         )
         db = Mock()
