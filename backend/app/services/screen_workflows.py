@@ -8,6 +8,7 @@ from app.models.enrollment import Enrollment
 from app.models.progress import LessonProgress
 from app.models.quiz import Quiz, QuizAttempt
 from app.models.user import User
+from app.repositories import analytics_repo
 from app.services import analytics_service
 from app.schemas.lesson import LessonVideoFields
 from app.services.upload_service import pending_upload_metadata
@@ -70,17 +71,32 @@ def instructor_students(db, instructor_id, course_id=None):
         return []
     rows = db.query(User).join(Enrollment, Enrollment.student_id == User.id).filter(
         Enrollment.course_id.in_(course_ids), User.role == "STUDENT").distinct().all()
+    checkpoint_metrics = analytics_repo.student_course_checkpoint_stats(
+        db, instructor_id, [student.id for student in rows], course_ids,
+    )
     result = []
     for student in rows:
         courses = db.query(Course).join(Enrollment, Enrollment.course_id == Course.id).filter(
             Enrollment.student_id == student.id, Course.instructor_id == instructor_id,
             Course.id.in_(course_ids)).all()
-        values = [round(100 * detail["completed_lessons"] / detail["lesson_count"])
-                  if detail["lesson_count"] else 0
-                  for detail in (completion(db, student.id, course.id) for course in courses)]
-        progress = round(sum(values) / len(values)) if values else 0
+        completion_rows = [completion(db, student.id, course.id) for course in courses]
+        lesson_count = sum(detail["lesson_count"] for detail in completion_rows)
+        completed_count = sum(detail["completed_lessons"] for detail in completion_rows)
+        progress = round(100 * completed_count / lesson_count) if lesson_count else 0
+        student_metrics = [
+            checkpoint_metrics[(student.id, course.id)]
+            for course in courses
+            if (student.id, course.id) in checkpoint_metrics
+        ]
+        checkpoint = checkpoint_summary(student_metrics)
         result.append({"id": student.id, "name": student.name, "email": student.email,
-                       "progress": progress, "status": "COMPLETED" if progress == 100 else "ACTIVE"})
+                       "progress": progress,
+                       "attempt_count": checkpoint["attempt_count"],
+                       "passed_attempts": checkpoint["passed_attempts"],
+                       "pass_rate": checkpoint["pass_rate"],
+                       "last_score": checkpoint["last_score"],
+                       "last_passed": checkpoint["last_passed"],
+                       "status": "COMPLETED" if progress == 100 else "ACTIVE"})
     return result
 
 
@@ -93,13 +109,36 @@ def instructor_student(db, instructor_id, student_id):
     if not courses:
         raise HTTPException(404, "Học viên không thuộc khóa học của bạn.")
     details = [completion(db, student_id, course.id) for course in courses]
+    course_ids = [course.id for course in courses]
+    metrics = analytics_repo.student_course_checkpoint_stats(
+        db, instructor_id, [student_id], course_ids,
+    )
+    course_metrics = [metrics[(student_id, course.id)]
+                      for course in courses
+                      if (student_id, course.id) in metrics]
+    checkpoint = checkpoint_summary(course_metrics)
+    tutor_counts = analytics_repo.student_tutor_session_counts(
+        db, instructor_id, [student_id], course_ids,
+    )
+    total_lessons = sum(detail["lesson_count"] for detail in details)
+    total_completed = sum(detail["completed_lessons"] for detail in details)
     return {"id": student.id, "name": student.name, "email": student.email,
             "courses": [{"id": course.id, "title": course.title,
-                         "progress": detail["progress_percent"]}
+                         "progress": course_progress_percent(detail),
+                         **checkpoint_summary(
+                             [metrics[(student_id, course.id)]]
+                             if (student_id, course.id) in metrics else []
+                         )}
                         for course, detail in zip(courses, details)],
-            "attempt_count": db.query(QuizAttempt).filter(
-                QuizAttempt.student_id == student_id).count(),
-            "average_score": None, "tutor_sessions": 0, "weak_concepts": []}
+            "progress": round(100 * total_completed / total_lessons) if total_lessons else 0,
+            "attempt_count": checkpoint["attempt_count"],
+            "passed_attempts": checkpoint["passed_attempts"],
+            "pass_rate": checkpoint["pass_rate"],
+            "average_score": checkpoint["average_score"],
+            "last_score": checkpoint["last_score"],
+            "last_passed": checkpoint["last_passed"],
+            "tutor_sessions": tutor_counts.get(student_id, 0),
+            "weak_concepts": []}
 
 
 def student_course(db, student_id, course_id):
@@ -130,6 +169,35 @@ def completion(db, student_id, course_id):
         "completed_lessons": sum(l.id in done for l in lessons),
         "average_score": round(sum(scores) / len(scores)) if scores else None,
         "completed": bool(sections and lessons) and passed_sections == len(sections) and all(l.id in done for l in lessons)}
+
+
+def course_progress_percent(detail):
+    """Derive the course progress value from the completion read-model contract."""
+    lesson_count = detail["lesson_count"]
+    return round(100 * detail["completed_lessons"] / lesson_count) if lesson_count else 0
+
+
+def checkpoint_summary(course_metrics):
+    """Combine attempts without conflating checkpoint outcomes with video progress."""
+    attempt_count = sum(item["attempt_count"] for item in course_metrics)
+    passed_attempts = sum(item["passed_attempts"] for item in course_metrics)
+    score_total = sum(
+        item["average_score"] * item["attempt_count"]
+        for item in course_metrics if item["average_score"] is not None
+    )
+    latest = max(
+        (item for item in course_metrics if item.get("latest_at") is not None),
+        key=lambda item: (item["latest_at"], item["latest_attempt_id"]),
+        default=None,
+    )
+    return {
+        "attempt_count": attempt_count,
+        "passed_attempts": passed_attempts,
+        "pass_rate": round(100 * passed_attempts / attempt_count, 2) if attempt_count else None,
+        "average_score": round(score_total / attempt_count, 2) if attempt_count else None,
+        "last_score": latest.get("last_score") if latest else None,
+        "last_passed": latest.get("last_passed") if latest else None,
+    }
 
 
 def history(db, student_id, offset, limit):
