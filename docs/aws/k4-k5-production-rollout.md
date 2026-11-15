@@ -1,8 +1,9 @@
 # K4 + K5 production rollout plan
 
-Scope: account `697589240877`, Region `ap-southeast-1`, database `learncloud`.
-This runbook is preparation only. It does not call AWS/RDS and it keeps both AI
-feature flags disabled until the canary gate.
+Historical rollout preparation only. Static AWS account identifiers and ARNs
+have been removed. No AWS/RDS state was queried during the documentation update;
+all resources and the past readiness/test statements below require fresh
+verification before they can be treated as current.
 
 ## Readiness decision
 
@@ -33,10 +34,11 @@ explicitly waive the stale full-offline API test harness.
 7. Every handled failure goes through K4 `fail`, which records a safe error and retry
    classification before the workflow fails.
 
-The rendered ASL contains exactly these two Lambda ARNs and no unresolved placeholder:
+The historical rendered ASL report referred to these two worker names; current
+ARNs must be taken from the approved environment inventory:
 
-- `arn:aws:lambda:ap-southeast-1:697589240877:function:learncloud-video-pipeline`
-- `arn:aws:lambda:ap-southeast-1:697589240877:function:learncloud-ai-worker`
+- `learncloud-video-pipeline`
+- `learncloud-ai-worker`
 
 ## Production versus the passing E2E stack
 

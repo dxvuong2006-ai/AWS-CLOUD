@@ -1,10 +1,11 @@
 # LearnCloud — triển khai Video Processing Pipeline bằng AWS Console
 
-Trạng thái bộ source: **CODE READY**, **LOCAL TESTED**, **AWS NOT DEPLOYED**.
-Chưa có kết quả kiểm thử AWS trong phiên coding này; không dùng nhãn AWS VERIFIED.
-Agent không đăng nhập AWS, không gọi AWS API thật, không deploy, không chạy migration,
-không sửa PostgreSQL development, không commit/push. `cloud.mp4` chưa có trong project;
-bạn sẽ thêm file này sau. Tests hiện dùng mocks, không transcode video mẫu thật.
+> Runbook được giữ lại từ một snapshot cũ. Các câu khẳng định về endpoint (gồm confirm-upload), trạng thái migration, source, AWS deployment và test là ghi nhận tại thời điểm viết, không phải trạng thái hiện tại. Đối chiếu [API contract hiện tại](../api-contract.md), [source infrastructure](../../infrastructure/) và inventory trước khi dùng. Không có AWS production state nào được xác minh trong lần dọn docs này.
+
+Ghi nhận lúc tài liệu được soạn: tác giả đánh dấu source **CODE READY**, **LOCAL TESTED**,
+**AWS NOT DEPLOYED**; các nhãn này không được kiểm tra lại. Tài liệu cũng ghi phiên làm
+việc khi đó không đăng nhập/gọi AWS, deploy hoặc chạy migration. Không dùng các dòng trên
+làm trạng thái hiện tại. Nội dung test dưới đây là lịch sử và không chứng minh AWS E2E.
 
 Các mục ghi **MANUAL AWS CONSOLE STEP** là việc **bạn tự thao tác** trong Console.
 Lệnh đóng gói dưới đây chỉ tạo file local. Không có lệnh AWS CLI/provisioning.
@@ -32,10 +33,10 @@ flowchart LR
 
 Dispatch duy nhất qua EventBridge: S3 cho upload đầu tiên; outbox relay cho retry chủ động.
 Không cấu hình thêm S3→Lambda transcode hoặc backend→StartExecution.
-Source hiện **không có** `POST /lessons/{id}/confirm-upload`. Khi bật pipeline, backend
-lưu upload intent trước khi trả URL; workflow dùng object S3 đã kiểm tra làm xác nhận.
-Không gọi endpoint chưa có. Nếu C/đội backend bổ sung confirm bắt buộc sau này, phải
-sửa gate và cơ chế chờ/reconciliation trước khi bật, giữ một đường dispatch chung.
+Snapshot lúc viết tài liệu này cho rằng chưa có `confirm-upload` route. Source hiện tại
+đã đăng ký `POST /lessons/{lesson_id}/confirm-upload`; xem [API contract](../api-contract.md).
+Route tồn tại không tự xác minh AWS dispatch/claim behavior; đối chiếu implementation
+hiện tại trước khi chọn cơ chế xác nhận và giữ một đường dispatch duy nhất.
 
 `LocalProcessor` là hàng đợi dispatch-only development, không có FFmpeg worker.
 Không tạo output giả, không tạo AI giả, không tự chuyển REVIEW_REQUIRED.
@@ -78,10 +79,10 @@ phù hợp; không đổi region rời rạc hoặc xin AdministratorAccess đ�
 1. Đã có Lesson DRAFT thuộc Section/Course DRAFT và Instructor sở hữu; migration 0004
    APPROVED đã áp dụng theo thông tin dự án. Không chạy lại 0004 chỉ để test pipeline.
 2. Chủ DB xem xét, backup và **tự quyết định áp dụng**
-   [0005_video_pipeline_ledger.sql](../database/migrations/0005_video_pipeline_ledger.sql).
+   [0005_video_pipeline_ledger.sql](../../database/migrations/0005_video_pipeline_ledger.sql).
    Đây là migration mới **chỉ được chuẩn bị file**, chưa chạy. Nó tạo hai bảng ledger,
    không update Lesson/Course, không tạo sample data. Không có auto-migrate khi khởi động.
-   Đọc [review 0005 và lệnh PowerShell backup/apply/verify](video-pipeline-migration-0005.md),
+   Đọc [review 0005 và lệnh PowerShell backup/apply/verify](../database/video-pipeline-migration-0005.md),
    chạy `database/checks/video_pipeline_preflight.sql` chỉ đọc trước/sau. Bản đã review
    ghi registry 0005 và composite FK upload/lesson; không tự thêm confirmed_at.
 3. Chỉ bật VIDEO_PIPELINE_ENABLED sau khi hai bảng đã tồn tại và app DB user có
@@ -599,7 +600,7 @@ payload dù Include execution data OFF, cần giới hạn quyền xem history.
 2. Dùng API/FE đã có tạo Course DRAFT → Section → Lesson DRAFT thuộc Instructor.
    Không update SQL trạng thái dữ liệu cũ chỉ để ép test. Backend và Lambda cùng DB.
 3. Gọi `POST /lessons/<id>/upload-url`, header identity theo backend hiện tại
-   (development dùng `X-Demo-User`, không coi đây là authentication production), body:
+   dùng bearer access token của identity local phù hợp, body:
    `{"filename":"cloud.mp4","content_type":"video/mp4","file_size":<byte-thật>}`.
    Khi opt-in response vẫn giữ upload_url/object_key/expires_in/method/content_type,
    bổ sung upload_id + required_headers. Không ghi URL trả về vào log hay screenshot.
@@ -607,9 +608,9 @@ payload dù Include execution data OFF, cần giới hạn quyền xem history.
    Body **binary → cloud.mp4** (không multipart/form-data), Headers Content-Type
    video/mp4 và If-None-Match `*` đúng response. Gửi trong thời hạn URL. Không dùng
    S3 Console để thay thế upload qua API vì key/headers phải khớp intent đã cấp.
-5. **Confirm upload:** hiện không gọi API confirm vì endpoint chưa có. Nếu source đội
-   sau này đã triển khai endpoint và gate mới, làm đúng contract mới đã được review,
-   không thêm dispatcher thứ hai. Không nhầm approve học liệu với xác nhận upload.
+5. **Confirm upload:** source hiện tại có route `POST /lessons/{lesson_id}/confirm-upload`.
+   Kiểm tra implementation/response của route và state machine trước khi chạy E2E; nội
+   dung snapshot cũ về việc không gọi API confirm không còn là hướng dẫn hiện hành.
 6. S3 Console: raw object đúng key, size, Last modified. EventBridge rule Monitoring:
    Invocations tăng, FailedInvocations không tăng; event lịch sử không tự replay.
 7. Step Functions: execution mới đi Claim → Submit → Wait/Poll; ghi run ID. Nếu

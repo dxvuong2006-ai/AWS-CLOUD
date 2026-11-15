@@ -1,40 +1,14 @@
-# TÀI LIỆU BÀN GIAO HẠ TẦNG AWS – LEARNCLOUD
+# API Gateway and Lambda notes
 
-**Dự án:** LearnCloud – Learning Management System on AWS  
-**Người phụ trách:** Dũng – Cloud Deployment  
-**Ngày cập nhật:** 09/11/2026  
-**AWS Region:** Singapore (`ap-southeast-1`)
+> Lưu ý lịch sử: bản bàn giao trước có endpoint AWS và giá trị database credential cố định. Các giá trị định danh/endpoint cũ đã được gỡ khỏi tài liệu; credential cũ không được lặp lại. Không dùng bản ghi bàn giao này để xác định cấu hình hiện tại. Xem [quy trình triển khai và xác minh](../aws-deployment.md).
 
----
+> Các ví dụ route/CORS bên dưới là ghi chú lịch sử, không phải xác nhận cấu hình đang chạy. Dùng [OpenAPI hiện tại](../api-contract.md) để tra API source và xác minh route/auth trên API Gateway riêng.
 
-## 1. Thông tin hạ tầng AWS
+Tài liệu dưới đây giữ lại các hướng dẫn cấu hình chung từ runbook cũ. Những phần phụ thuộc tài nguyên AWS, endpoint, user pool, stage hoặc role cụ thể cần được đối chiếu với inventory hiện hành trước khi thao tác.
 
-| Thành phần            | Thông tin bàn giao                 |
-| --------------------- | ---------------------------------- |
-| AWS Region            | `ap-southeast-1`                   |
-| API Gateway           | `learncloud-api-API`               |
-| API Gateway ID        | `lavh5njepc`                       |
-| API Stage             | `default`                          |
-| Lambda Function       | `learncloud-api`                   |
-| Lambda Runtime        | Python 3.12 – x86_64               |
-| Lambda Handler        | `lambda_function.lambda_handler`   |
-| Lambda Execution Role | `LearnCloud-Lambda-Execution-Role` |
-| RDS Instance          | `learncloud-db`                    |
-| Database Engine       | PostgreSQL 16.9                    |
-| Database Name         | `learncloud`                       |
-| S3 Bucket             | `learncloud-videos-mentorcloud`    |
-| Cognito User Pool ID  | `ap-southeast-1_o2Y9UHxoo`         |
-| Cognito App Client ID | `3b8ro7mhcnkdfvk5grr76fn1pe`       |
-| CloudWatch Log Group  | `/aws/lambda/learncloud-api`       |
-| DB_PASSWORD           | mentorcloudrds                     |
+## Runtime inventory
 
-### API Base URL
-
-```text
-https://lavh5njepc.execute-api.ap-southeast-1.amazonaws.com/default
-```
-
-Frontend sử dụng địa chỉ này làm API Base URL.
+Không có inventory production được xác minh trong repository hiện tại. Lấy API base URL, API Gateway routes, Lambda version/alias, Cognito pool/client, RDS metadata và S3 bucket từ nguồn quản lý được nhóm phê duyệt; không đưa password/token vào tài liệu.
 
 Ví dụ các endpoint đã kiểm thử:
 
@@ -55,9 +29,7 @@ POST /lessons/{lesson_id}/upload-url
 
 HTTP API phải xử lý preflight từ trình duyệt trước khi request tới Lambda:
 
-- Allowed origins: `http://localhost:5173`, `http://127.0.0.1:5173` và
-  `https://d1my2q1fj0jxmb.cloudfront.net`. Nếu đổi domain frontend, cập nhật
-  origin production chính xác tại đây và trong `CORS_ALLOWED_ORIGINS` của Lambda.
+- Allowed origins phải khớp chính xác các domain frontend được duyệt cho môi trường; xác minh cấu hình hiện hành trước khi sửa.
 - Allowed methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`.
 - Allowed headers: `authorization`, `content-type`.
 - Không bật credential cookies; frontend gửi Cognito Access Token trong
@@ -102,7 +74,7 @@ khi gọi Lambda.
 Trong thư mục Frontend, tạo hoặc cập nhật file `.env.local`:
 
 ```dotenv
-VITE_API_BASE_URL=https://lavh5njepc.execute-api.ap-southeast-1.amazonaws.com/default
+VITE_API_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 
 VITE_AWS_REGION=ap-southeast-1
 VITE_COGNITO_USER_POOL_ID=<user-pool-id>

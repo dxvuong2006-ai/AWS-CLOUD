@@ -49,4 +49,4 @@ không dùng legacy S3 `Records[0]` hay URL-decode key của schema khác.
 
 Xem [cấu trúc S3 event](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ev-events.html),
 [input transformer](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-transform-target-input.html)
-và [hướng dẫn thao tác](../../docs/aws-video-pipeline-console-setup.md#phan-6--eventbridge).
+và [hướng dẫn thao tác](../../docs/aws/video-pipeline-console-setup.md#phan-6--eventbridge).

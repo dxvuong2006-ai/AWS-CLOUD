@@ -1,4 +1,6 @@
-# Lesson approval: migration chuẩn bị sẵn, chưa áp dụng
+# Lesson approval migration review (historical)
+
+> Ghi chú review lịch sử. Trạng thái migration/DB trong tài liệu này không được kiểm tra lại; xác minh schema và registry của đúng database trước khi vận hành. Không xem câu “chưa áp dụng” là trạng thái hiện tại.
 
 ## Phạm vi và kết quả đối chiếu
 

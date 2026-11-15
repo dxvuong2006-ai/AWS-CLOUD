@@ -1,10 +1,10 @@
-# Video Processing Backend — D, tuần 3, giai đoạn 1
+# Video Processing Backend
 
-> Cập nhật quyết định: người dùng đã chuyển sang phương án bổ sung APPROVED.
-> Migration 0004, model/validation và endpoint approve đã được chuẩn bị;
-> migration **chưa áp dụng**. Xem [hướng dẫn mới](lesson-approval-migration.md).
+> Ghi nhận lịch sử: một thay đổi Lesson approval đã được chuẩn bị;
+> trạng thái migration/DB hiện tại chưa xác minh. Xem [hướng dẫn review](../database/lesson-approval-migration.md).
 > Các nhận xét bên dưới về việc giữ nguyên schema/chặn publish là snapshot
 > của giai đoạn triển khai ban đầu, không phải quyết định hiện tại.
+> Đây là ghi chú lịch sử; kiểm tra route, trạng thái migration và AWS riêng trước khi dựa vào bất kỳ kết luận nào.
 
 ## Kết quả và giới hạn đã thống nhất
 
@@ -24,7 +24,7 @@ worker transcode hoặc workflow AWS. `202 PROCESSING` chỉ nghĩa request loca
 
 ## Thành phần có trước
 
-- Course/Lesson CRUD, role và ownership qua `get_current_user` dùng `X-Demo-User`.
+- Ghi chú snapshot cũ: ví dụ xác thực dùng `X-Demo-User`; không còn là hướng dẫn hiện hành. Backend hiện dùng bearer access token; xem [API contract](../api-contract.md).
 - S3 adapter thật: Presigned PUT, HEAD và Presigned GET SigV4; playback service
   có development raw policy và log lỗi an toàn.
 - Lesson repository và các cột raw/processed key, status, retry_count,
@@ -151,9 +151,9 @@ Backend vẫn cần credentials đọc S3 thật để HEAD raw input. Local bac
 Ví dụ PowerShell khi backend đang chạy, dùng identity hợp lệ:
 
 ```powershell
-Invoke-RestMethod 'http://127.0.0.1:8000/lessons/8/processing-status' -Headers @{ 'X-Demo-User' = '1' }
-Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/lessons/8/retry' -Headers @{ 'X-Demo-User' = '1' }
-Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/courses/2/publish' -Headers @{ 'X-Demo-User' = '1' }
+Invoke-RestMethod 'http://127.0.0.1:8000/lessons/8/processing-status' -Headers @{ Authorization = "Bearer $localAccessToken" }
+Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/lessons/8/retry' -Headers @{ Authorization = "Bearer $localAccessToken" }
+Invoke-RestMethod -Method Post 'http://127.0.0.1:8000/courses/2/publish' -Headers @{ Authorization = "Bearer $localAccessToken" }
 ```
 
 Lesson 8 hiện PUBLISHED, nên retry phải trả 409; không sửa dữ liệu bài này để

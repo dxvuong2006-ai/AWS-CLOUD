@@ -1,165 +1,130 @@
-# LearnCloud — API Contract
+# API contract
 
-**Quy ước:** Dấu `*` = trường bắt buộc theo OpenAPI; các trường không có dấu `*` là tùy chọn. `Bearer` = có khai báo HTTP Bearer trong OpenAPI; `—` = không có khai báo bảo mật cho route đó. “Chưa khai báo schema” nghĩa là OpenAPI không mô tả cấu trúc JSON trả về; không có nghĩa API không trả dữ liệu.
+Nguồn chuẩn là OpenAPI được FastAPI tạo từ `backend/app/main.py`. Mỗi hàng tương ứng một operation đang đăng ký, gồm method, endpoint, mục đích, đầu vào, phản hồi thành công và xác thực. Body liệt kê các trường cấp một; `*` đánh dấu trường bắt buộc. Kiểu phản hồi là schema thành công được OpenAPI khai báo. Có thể xem OpenAPI tại `/openapi.json` hoặc `/docs` khi backend chạy.
 
-## Xác thực (8 API)
+“Bearer bắt buộc” nghĩa là gửi access token qua `Authorization: Bearer <token>`. Route công khai không yêu cầu token. Backend vẫn áp dụng vai trò, ownership, enrollment và trạng thái dữ liệu theo từng operation. JSON object ghi chú “schema chưa khai báo cụ thể” khi route không khai báo response model trong OpenAPI.
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 1 | `POST` | `/auth/register` | Đăng ký tài khoản | Body (`RegisterRequest`): `name*`, `email*`, `password*` | `201` — JSON, chưa khai báo schema | — |
-| 2 | `POST` | `/auth/verify-email` | Xác minh email | Body (`VerifyEmailRequest`): `email*`, `code*` | `200` — JSON, chưa khai báo schema | — |
-| 3 | `POST` | `/auth/resend-verification` | Gửi lại mã xác minh email | Body (`ResendVerificationRequest`): `email*` | `200` — JSON, chưa khai báo schema | — |
-| 4 | `POST` | `/auth/forgot-password` | Yêu cầu đặt lại mật khẩu | Body (`ForgotPasswordRequest`): `email*` | `200` — JSON, chưa khai báo schema | — |
-| 5 | `POST` | `/auth/reset-password` | Đặt lại mật khẩu bằng mã xác minh | Body (`ResetPasswordRequest`): `email*`, `code*`, `password*` | `200` — JSON, chưa khai báo schema | — |
-| 6 | `GET` | `/auth/me` | Xem thông tin tài khoản hiện tại | Không có | `200` — `UserResponse` | Bearer |
-| 7 | `PATCH` | `/auth/me` | Cập nhật hồ sơ cá nhân | Body (`UpdateProfileRequest`): `name*` | `200` — `UserResponse` | Bearer |
-| 8 | `POST` | `/auth/change-password` | Đổi mật khẩu tài khoản | Body (`ChangePasswordRequest`): `current_password*`, `new_password*` | `200` — JSON, chưa khai báo schema | Bearer |
+## Health
 
-## Xác thực nội bộ (8 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/health` | Health Check | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 9 | `POST` | `/auth/local/register` | Đăng ký tài khoản theo cơ chế nội bộ | Body (`RegisterRequest`): `name*`, `email*`, `password*` | `201` — JSON, chưa khai báo schema | — |
-| 10 | `POST` | `/auth/local/verify-email` | Xác minh email theo cơ chế nội bộ | Body (`VerifyEmailRequest`): `email*`, `code*` | `200` — JSON, chưa khai báo schema | — |
-| 11 | `POST` | `/auth/local/resend-verification` | Gửi lại mã xác minh nội bộ | Body (`ResendVerificationRequest`): `email*` | `200` — JSON, chưa khai báo schema | — |
-| 12 | `POST` | `/auth/local/login` | Đăng nhập bằng cơ chế nội bộ | Body (`LoginRequest`): `email*`, `password*` | `200` — JSON, chưa khai báo schema | — |
-| 13 | `POST` | `/auth/local/logout` | Đăng xuất phiên nội bộ | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-| 14 | `POST` | `/auth/local/forgot-password` | Yêu cầu khôi phục mật khẩu nội bộ | Body (`ForgotPasswordRequest`): `email*` | `200` — JSON, chưa khai báo schema | — |
-| 15 | `POST` | `/auth/local/reset-password` | Đặt lại mật khẩu nội bộ | Body (`ResetPasswordRequest`): `email*`, `code*`, `password*` | `200` — JSON, chưa khai báo schema | — |
-| 16 | `POST` | `/auth/local/change-password` | Đổi mật khẩu nội bộ | Body (`ChangePasswordRequest`): `current_password*`, `new_password*` | `200` — JSON, chưa khai báo schema | Bearer |
+## Authentication and profile
 
-## Khóa học (6 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| POST | `/auth/change-password` | Change Password | JSON: ChangePasswordRequest (current_password*: string, new_password*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/auth/forgot-password` | Forgot Password | JSON: ForgotPasswordRequest (email*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/change-password` | Change | JSON: ChangePasswordRequest (current_password*: string, new_password*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/auth/local/forgot-password` | Forgot | JSON: ForgotPasswordRequest (email*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/login` | Login | JSON: LoginRequest (email*: string, password*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/logout` | Logout | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/auth/local/register` | Register | JSON: RegisterRequest (name*: string, email*: string, password*: string) | 201 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/resend-verification` | Resend | JSON: ResendVerificationRequest (email*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/reset-password` | Reset | JSON: ResetPasswordRequest (email*: string, code*: string, password*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/local/verify-email` | Verify Email | JSON: VerifyEmailRequest (email*: string, code*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| GET | `/auth/me` | Me | Không có | 200 UserResponse | Bearer bắt buộc |
+| PATCH | `/auth/me` | Update Profile | JSON: UpdateProfileRequest (name*: string) | 200 UserResponse | Bearer bắt buộc |
+| POST | `/auth/register` | Register | JSON: RegisterRequest (name*: string, email*: string, password*: string) | 201 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/resend-verification` | Resend Verification | JSON: ResendVerificationRequest (email*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/reset-password` | Reset Password | JSON: ResetPasswordRequest (email*: string, code*: string, password*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
+| POST | `/auth/verify-email` | Verify Email | JSON: VerifyEmailRequest (email*: string, code*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Công khai |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 17 | `POST` | `/courses/{course_id}/publish` | Xuất bản khóa học | Path: `course_id*` | `200` — `CourseResponse`; Lỗi: `401`, `403`, `404`, `409` | Bearer |
-| 18 | `GET` | `/courses` | Danh sách khóa học | Không có | `200` — `Array<CourseResponse>` | — |
-| 19 | `POST` | `/courses` | Tạo khóa học | Body (`CourseCreateRequest`): `cover_image`, `title*`, `description`, `learning_objectives` | `201` — `CourseResponse` | Bearer |
-| 20 | `GET` | `/courses/instructor/me` | Danh sách khóa học do tôi giảng dạy | Không có | `200` — `Array<CourseResponse>` | Bearer |
-| 21 | `GET` | `/courses/{course_id}` | Chi tiết khóa học | Path: `course_id*` | `200` — `CourseResponse` | — |
-| 22 | `PATCH` | `/courses/{course_id}` | Cập nhật thông tin khóa học | Path: `course_id*`; Body (`CourseUpdateRequest`): `cover_image`, `title`, `description`, `learning_objectives` | `200` — `CourseResponse` | Bearer |
+## Courses, sections and enrollment
 
-## Chương học (2 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/courses` | List Courses | Không có | 200 array[CourseResponse] | Công khai |
+| POST | `/courses` | Create Course | JSON: CourseCreateRequest (cover_image: string \| null, title*: string, description: string \| null, learning_objectives: array[string]) | 201 CourseResponse | Bearer bắt buộc |
+| GET | `/courses/instructor/me` | List Instructor Courses | Không có | 200 array[CourseResponse] | Bearer bắt buộc |
+| GET | `/courses/{course_id}` | Get Course | course_id* (path, integer) | 200 CourseResponse | Công khai |
+| PATCH | `/courses/{course_id}` | Update Course | course_id* (path, integer), JSON: CourseUpdateRequest (cover_image: string \| null, title: string \| null, description: string \| null, learning_objectives: array[string]) | 200 CourseResponse | Bearer bắt buộc |
+| GET | `/courses/{course_id}/completion` | Completion | course_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/courses/{course_id}/enroll` | Enroll Course | course_id* (path, integer) | 201 EnrollmentResponse | Bearer bắt buộc |
+| POST | `/courses/{course_id}/publish` | Publish Course | course_id* (path, integer) | 200 CourseResponse | Bearer bắt buộc |
+| GET | `/courses/{course_id}/sections` | List Course Sections | course_id* (path, integer) | 200 array[SectionResponse] | Bearer bắt buộc |
+| POST | `/courses/{course_id}/sections` | Create Section | course_id* (path, integer), JSON: SectionCreateRequest (title*: string, position: integer) | 201 SectionResponse | Bearer bắt buộc |
+| GET | `/courses/{course_id}/unlock-status` | Get Course Unlock Status | course_id* (path, integer) | 200 array[object] | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 23 | `POST` | `/courses/{course_id}/sections` | Tạo chương trong khóa học | Path: `course_id*`; Body (`SectionCreateRequest`): `title*`, `position` | `201` — `SectionResponse` | Bearer |
-| 24 | `GET` | `/courses/{course_id}/sections` | Danh sách chương của khóa học | Path: `course_id*` | `200` — `Array<SectionResponse>` | Bearer |
+## Lessons, uploads and video
 
-## Bài học (8 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/lessons/{lesson_id}` | Get Lesson | lesson_id* (path, integer) | 200 LessonResponse | Bearer bắt buộc |
+| PATCH | `/lessons/{lesson_id}` | Update Lesson | lesson_id* (path, integer), JSON: LessonUpdateRequest (title: string \| null, position: integer \| null) | 200 LessonResponse | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/ai-content` | Get Ai Content | lesson_id* (path, integer) | 200 object | Bearer bắt buộc |
+| PATCH | `/lessons/{lesson_id}/ai-content` | Patch Ai Content | lesson_id* (path, integer), JSON: object | 200 ReviewResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/approve` | Approve Ai Content | lesson_id* (path, integer), JSON: DraftApproval (expected_revision*: string) | 200 ReviewResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/confirm-upload` | Confirm Upload | lesson_id* (path, integer), JSON: ConfirmUploadRequest (upload_id*: string) | 200 LessonProcessingStatusResponse | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/content` | Get Lesson Content | lesson_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/flashcards` | Get Lesson Flashcards | lesson_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/flashcards` | Create Flashcard | lesson_id* (path, integer), JSON: FlashcardCreateRequest (front*: string, back*: string, position*: integer) | 201 FlashcardResponse | Bearer bắt buộc |
+| DELETE | `/lessons/{lesson_id}/flashcards/{card_id}` | Delete Flashcard | lesson_id* (path, integer), card_id* (path, integer) | 204 No Content | Bearer bắt buộc |
+| PUT | `/lessons/{lesson_id}/flashcards/{card_id}` | Update Flashcard | lesson_id* (path, integer), card_id* (path, integer), JSON: FlashcardUpdateRequest (front: string \| null, back: string \| null, position: integer \| null, is_approved: boolean \| null) | 200 FlashcardResponse | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/processing-status` | Get Processing Status | lesson_id* (path, integer) | 200 LessonProcessingStatusResponse | Bearer bắt buộc |
+| PUT | `/lessons/{lesson_id}/progress` | Save Lesson Progress | lesson_id* (path, integer), JSON: ProgressUpdateRequest (last_position_seconds*: number, watched_ranges*: array[array[object]], playback_session_id*: string, sequence*: integer, request_id*: string) | 200 object | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/retry` | Retry Lesson | lesson_id* (path, integer) | 202 LessonProcessingStatusResponse | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/review-draft` | Get Draft | lesson_id* (path, integer) | 200 ReviewResponse | Bearer bắt buộc |
+| PUT | `/lessons/{lesson_id}/review-draft` | Update Draft | lesson_id* (path, integer), JSON: DraftUpdate (title*: string, summary*: string, key_concepts*: array[KeyConcept], flashcards*: array[FlashcardDraft], quiz_title*: string, questions*: array[ReviewQuestion], expected_revision*: string) | 200 ReviewResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/review-draft/approvals` | Approve Draft | lesson_id* (path, integer), JSON: DraftApproval (expected_revision*: string) | 200 ReviewResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/review-drafts` | Generate Draft | lesson_id* (path, integer), JSON: DraftGeneration (transcript*: string, num_questions: integer, allow_fallback: boolean) | 201 ReviewResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/upload-url` | Create Upload Url | lesson_id* (path, integer), JSON: UploadUrlRequest (filename*: string, content_type*: string, file_size*: integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/lessons/{lesson_id}/video-url` | Get Lesson Video Url | lesson_id* (path, integer) | 200 LessonVideoUrlResponse | Bearer bắt buộc |
+| POST | `/lessons/{lesson_id}/viewing-sessions` | Start Viewing Session | lesson_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/sections/{section_id}/lessons` | List Lessons | section_id* (path, integer), skip (query, integer), limit (query, integer) | 200 array[LessonResponse] | Bearer bắt buộc |
+| POST | `/sections/{section_id}/lessons` | Create Lesson | section_id* (path, integer), JSON: LessonCreateRequest (title*: string, position: integer) | 201 LessonResponse | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 25 | `GET` | `/lessons/{lesson_id}/content` | Xem nội dung bài học | Path: `lesson_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 26 | `GET` | `/lessons/{lesson_id}/processing-status` | Kiểm tra trạng thái xử lý video/AI | Path: `lesson_id*` | `200` — `LessonProcessingStatusResponse`; Lỗi: `401`, `403`, `404` | Bearer |
-| 27 | `POST` | `/lessons/{lesson_id}/retry` | Yêu cầu xử lý lại bài học lỗi | Path: `lesson_id*` | `202` — `LessonProcessingStatusResponse`; Lỗi: `401`, `403`, `404`, `409`, `502`, `503` | Bearer |
-| 28 | `POST` | `/sections/{section_id}/lessons` | Tạo bài học trong chương | Path: `section_id*`; Body (`LessonCreateRequest`): `title*`, `position` | `201` — `LessonResponse` | Bearer |
-| 29 | `GET` | `/sections/{section_id}/lessons` | Danh sách bài học trong chương | Path: `section_id*`; Query: `skip`=0, `limit`=100 | `200` — `Array<LessonResponse>` | Bearer |
-| 30 | `GET` | `/lessons/{lesson_id}` | Chi tiết bài học | Path: `lesson_id*` | `200` — `LessonResponse` | Bearer |
-| 31 | `PATCH` | `/lessons/{lesson_id}` | Cập nhật thông tin bài học | Path: `lesson_id*`; Body (`LessonUpdateRequest`): `title`, `position` | `200` — `LessonResponse` | Bearer |
-| 32 | `GET` | `/lessons/{lesson_id}/video-url` | Lấy đường dẫn phát video bài học | Path: `lesson_id*` | `200` — `LessonVideoUrlResponse`; Lỗi: `401`, `403`, `404`, `409`, `502` | Bearer |
+## Quiz and checkpoint
 
-## Tải video lên (2 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/quizzes/{quiz_id}/attempts` | Get Quiz Attempt History | quiz_id* (path, integer), limit (query, integer), offset (query, integer) | 200 array[QuizAttemptResultResponse] | Bearer bắt buộc |
+| POST | `/quizzes/{quiz_id}/attempts` | Submit Quiz | quiz_id* (path, integer), JSON: QuizSubmitRequest (request_id*: string, lesson_id: integer \| null, answers: array[QuizAnswerSubmit]) | 200 QuizAttemptResultResponse | Bearer bắt buộc |
+| GET | `/sections/{section_id}/quiz` | Get Section Quiz | section_id* (path, integer), lesson_id (query, integer \| null) | 200 QuizDetailResponse | Bearer bắt buộc |
+| GET | `/student/quizzes/history` | Get Student Quiz History | skip (query, integer), limit (query, integer) | 200 array[QuizHistoryItemResponse] | Bearer bắt buộc |
+| GET | `/students/me/checkpoint-history` | History | offset (query, integer), limit (query, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 33 | `POST` | `/lessons/{lesson_id}/confirm-upload` | Xác nhận video đã tải lên | Path: `lesson_id*`; Body (`ConfirmUploadRequest`): `upload_id*` | `200` — `LessonProcessingStatusResponse` | Bearer |
-| 34 | `POST` | `/lessons/{lesson_id}/upload-url` | Xin URL tạm để tải video lên | Path: `lesson_id*`; Body (`UploadUrlRequest`): `filename*`, `content_type*`, `file_size*` | `200` — JSON, chưa khai báo schema | Bearer |
+## Learning progress and flashcards
 
-## Duyệt nội dung AI (8 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/courses/{course_id}/progress` | Get Course Progress | course_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/students/me/courses` | List My Courses | Không có | 200 array[MyCourseEnrollmentResponse] | Bearer bắt buộc |
+| GET | `/students/me/learning-overview` | Overview | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 35 | `GET` | `/instructor/review-queue` | Danh sách học liệu chờ giảng viên duyệt | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-| 36 | `POST` | `/lessons/{lesson_id}/review-drafts` | Sinh bản nháp nội dung AI để duyệt | Path: `lesson_id*`; Body (`DraftGeneration`): `transcript*`, `num_questions`, `allow_fallback` | `201` — `ReviewResponse` | Bearer |
-| 37 | `GET` | `/lessons/{lesson_id}/review-draft` | Xem bản nháp nội dung AI | Path: `lesson_id*` | `200` — `ReviewResponse` | Bearer |
-| 38 | `PUT` | `/lessons/{lesson_id}/review-draft` | Thay thế bản nháp nội dung AI | Path: `lesson_id*`; Body (`DraftUpdate`): `title*`, `summary*`, `key_concepts*`, `flashcards*`, `quiz_title*`, `questions*`, `expected_revision*` | `200` — `ReviewResponse` | Bearer |
-| 39 | `POST` | `/lessons/{lesson_id}/review-draft/approvals` | Phê duyệt bản nháp AI | Path: `lesson_id*`; Body (`DraftApproval`): `expected_revision*` | `200` — `ReviewResponse` | Bearer |
-| 40 | `GET` | `/lessons/{lesson_id}/ai-content` | Xem nội dung AI của bài học | Path: `lesson_id*` | `200` — JSON object, chưa khai báo cấu trúc | Bearer |
-| 41 | `PATCH` | `/lessons/{lesson_id}/ai-content` | Chỉnh sửa một phần nội dung AI | Path: `lesson_id*`; Body: JSON object (không khai báo trường) | `200` — `ReviewResponse` | Bearer |
-| 42 | `POST` | `/lessons/{lesson_id}/approve` | Phê duyệt nội dung AI của bài học | Path: `lesson_id*`; Body (`DraftApproval`): `expected_revision*` | `200` — `ReviewResponse` | Bearer |
+## Tutor and remediation
 
-## Quiz / Checkpoint (5 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| POST | `/student/remediation` | Start | JSON: Start (attempt_id*: integer, regenerate: boolean) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/student/remediation/{session_id}` | Session | session_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/student/remediation/{session_id}/advance` | Advance | session_id* (path, integer), JSON: Advance (kind*: string, item_id*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/student/remediation/{session_id}/practice` | Practice | session_id* (path, integer), JSON: Answers (answers*: array[string]) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/tutor/remediations` | Remediate Question | JSON: QuestionRemediationRequest (attempt_id*: integer, lesson_id*: integer, question_id*: integer, selected_option*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/tutor/sessions` | Create Session | JSON: TutorSessionCreateRequest (attempt_id*: integer) | 201 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/tutor/sessions/{session_id}/messages` | Send Message | session_id* (path, integer), JSON: TutorMessageCreateRequest (message*: string) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| POST | `/tutor/sessions/{session_id}/practice-attempts` | Submit Practice | session_id* (path, integer), JSON: PracticeSubmission (answers*: array[string]) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 43 | `GET` | `/sections/{section_id}/quiz` | Lấy checkpoint quiz của chương | Path: `section_id*`; Query: `lesson_id` | `200` — `QuizDetailResponse`; Lỗi: `403`, `404` | Bearer |
-| 44 | `POST` | `/quizzes/{quiz_id}/attempts` | Nộp bài quiz / checkpoint | Path: `quiz_id*`; Body (`QuizSubmitRequest`): `request_id*`, `lesson_id`, `answers` | `200` — `QuizAttemptResultResponse`; Lỗi: `403`, `404`, `409` | Bearer |
-| 45 | `GET` | `/quizzes/{quiz_id}/attempts` | Lịch sử các lần làm một quiz | Path: `quiz_id*`; Query: `limit`=20, `offset`=0 | `200` — `Array<QuizAttemptResultResponse>` | Bearer |
-| 46 | `GET` | `/student/quizzes/history` | Lịch sử quiz của học viên | Query: `skip`=0, `limit`=50 | `200` — `Array<QuizHistoryItemResponse>` | Bearer |
-| 47 | `GET` | `/courses/{course_id}/unlock-status` | Trạng thái mở khóa các chương | Path: `course_id*` | `200` — `Array<object>` | Bearer |
+## Instructor reports and analytics
 
-## AI Tutor (4 API)
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/analytics/quizzes/{quiz_id}` | Get Quiz Analytics | quiz_id* (path, integer) | 200 QuizAnalytics | Bearer bắt buộc |
+| GET | `/instructor/courses` | Courses | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/courses/{course_id}` | Course | course_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/courses/{course_id}/analytics` | Get Course Analytics | course_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/dashboard` | Dashboard | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/review-queue` | List Review Queue | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/students` | Students | course_id (query, integer \| null) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/instructor/students/{student_id}` | Student | student_id* (path, integer) | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
 
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 48 | `POST` | `/tutor/sessions` | Tạo phiên AI Tutor | Body (`TutorSessionCreateRequest`): `attempt_id*` | `201` — JSON, chưa khai báo schema | Bearer |
-| 49 | `POST` | `/tutor/sessions/{session_id}/messages` | Gửi câu hỏi cho AI Tutor | Path: `session_id*`; Body (`TutorMessageCreateRequest`): `message*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 50 | `POST` | `/tutor/sessions/{session_id}/practice-attempts` | Nộp bài luyện tập AI Tutor | Path: `session_id*`; Body (`PracticeSubmission`): `answers*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 51 | `POST` | `/tutor/remediations` | Giải thích một câu trả lời sai | Body (`QuestionRemediationRequest`): `attempt_id*`, `lesson_id*`, `question_id*`, `selected_option*` | `200` — JSON, chưa khai báo schema | Bearer |
+## Administration
 
-## Tiến độ học (3 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 52 | `POST` | `/lessons/{lesson_id}/viewing-sessions` | Khởi tạo phiên xem video | Path: `lesson_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 53 | `PUT` | `/lessons/{lesson_id}/progress` | Lưu tiến độ xem video/bài học | Path: `lesson_id*`; Body (`ProgressUpdateRequest`): `last_position_seconds*`, `watched_ranges*`, `playback_session_id*`, `sequence*`, `request_id*` | `200` — JSON object, chưa khai báo cấu trúc | Bearer |
-| 54 | `GET` | `/courses/{course_id}/progress` | Xem tiến độ khóa học | Path: `course_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-
-## Flashcard (4 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 55 | `GET` | `/lessons/{lesson_id}/flashcards` | Danh sách flashcard bài học | Path: `lesson_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 56 | `POST` | `/lessons/{lesson_id}/flashcards` | Tạo flashcard cho bài học | Path: `lesson_id*`; Body (`FlashcardCreateRequest`): `front*`, `back*`, `position*` | `201` — `FlashcardResponse` | Bearer |
-| 57 | `PUT` | `/lessons/{lesson_id}/flashcards/{card_id}` | Cập nhật flashcard | Path: `lesson_id*`, `card_id*`; Body (`FlashcardUpdateRequest`): `front`, `back`, `position`, `is_approved` | `200` — `FlashcardResponse` | Bearer |
-| 58 | `DELETE` | `/lessons/{lesson_id}/flashcards/{card_id}` | Xóa flashcard | Path: `lesson_id*`, `card_id*` | `204` — không có body | Bearer |
-
-## Đăng ký khóa học (2 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 59 | `GET` | `/students/me/courses` | Danh sách khóa học đã đăng ký | Không có | `200` — `Array<MyCourseEnrollmentResponse>` | Bearer |
-| 60 | `POST` | `/courses/{course_id}/enroll` | Đăng ký tham gia khóa học | Path: `course_id*` | `201` — `EnrollmentResponse` | Bearer |
-
-## Thống kê (2 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 61 | `GET` | `/instructor/courses/{course_id}/analytics` | Thống kê học tập của khóa học | Path: `course_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 62 | `GET` | `/analytics/quizzes/{quiz_id}` | Thống kê kết quả của quiz | Path: `quiz_id*` | `200` — `QuizAnalytics` | Bearer |
-
-## Quản trị (5 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 63 | `GET` | `/admin/users` | Danh sách và tìm kiếm tài khoản | Query: `search` | `200` — `Array<UserResponse>` | Bearer |
-| 64 | `POST` | `/admin/users` | Tạo tài khoản bởi quản trị viên | Body (`AdminUserCreateRequest`): `name*`, `email*`, `role*`, `password*` | `201` — `UserResponse` | Bearer |
-| 65 | `PATCH` | `/admin/users/{user_id}` | Cập nhật thông tin/vai trò tài khoản | Path: `user_id*`; Body (`AdminUserUpdateRequest`): `name`, `email`, `role` | `200` — `UserResponse` | Bearer |
-| 66 | `PATCH` | `/admin/users/{user_id}/status` | Bật hoặc khóa tài khoản | Path: `user_id*`; Body (`AdminUserStatusRequest`): `enabled*` | `200` — `UserResponse` | Bearer |
-| 67 | `GET` | `/admin/monitoring/jobs` | Theo dõi công việc xử lý hệ thống | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-
-## Luồng giao diện (12 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 68 | `GET` | `/instructor/courses` | Danh sách khóa học của giảng viên | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-| 69 | `GET` | `/instructor/courses/{course_id}` | Chi tiết khóa học phía giảng viên | Path: `course_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 70 | `GET` | `/instructor/dashboard` | Tổng quan dashboard giảng viên | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-| 71 | `GET` | `/instructor/students` | Danh sách học viên của giảng viên | Query: `course_id` | `200` — JSON, chưa khai báo schema | Bearer |
-| 72 | `GET` | `/instructor/students/{student_id}` | Chi tiết học viên phía giảng viên | Path: `student_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 73 | `GET` | `/students/me/checkpoint-history` | Lịch sử checkpoint của học viên | Query: `offset`=0, `limit`=20 | `200` — JSON, chưa khai báo schema | Bearer |
-| 74 | `GET` | `/courses/{course_id}/completion` | Trạng thái hoàn thành khóa học | Path: `course_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 75 | `POST` | `/student/remediation` | Bắt đầu phiên học bổ trợ | Body (`Start`): `attempt_id*`, `regenerate` | `200` — JSON, chưa khai báo schema | Bearer |
-| 76 | `GET` | `/student/remediation/{session_id}` | Xem phiên học bổ trợ | Path: `session_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 77 | `POST` | `/student/remediation/{session_id}/advance` | Chuyển bước trong phiên bổ trợ | Path: `session_id*`; Body (`Advance`): `kind*`, `item_id*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 78 | `POST` | `/student/remediation/{session_id}/practice` | Nộp bài luyện tập bổ trợ | Path: `session_id*`; Body (`Answers`): `answers*` | `200` — JSON, chưa khai báo schema | Bearer |
-| 79 | `GET` | `/students/me/learning-overview` | Tổng quan học tập của học viên | Không có | `200` — JSON, chưa khai báo schema | Bearer |
-
-## Hệ thống (1 API)
-
-| STT | Method | Endpoint | Nội dung / chức năng | Đầu vào | Phản hồi | Auth |
-|---:|---|---|---|---|---|---|
-| 80 | `GET` | `/health` | Kiểm tra trạng thái Backend | Không có | `200` — JSON, chưa khai báo schema | — |
-
-**Ghi chú về phạm vi:** Đây là hợp đồng HTTP được công bố trong OpenAPI, không phải kết quả chạy thử từng endpoint trên AWS. Cột Auth thể hiện khai báo trong OpenAPI, không thay thế việc kiểm tra phân quyền thực tế.
+| Method | Endpoint | Chức năng | Đầu vào | Phản hồi thành công | Xác thực |
+|---|---|---|---|---|---|
+| GET | `/admin/monitoring/jobs` | List Monitoring Jobs | Không có | 200 JSON object (schema chưa khai báo cụ thể) | Bearer bắt buộc |
+| GET | `/admin/users` | List Users | search (query, string \| null) | 200 array[UserResponse] | Bearer bắt buộc |
+| POST | `/admin/users` | Create User | JSON: AdminUserCreateRequest (name*: string, email*: string, role*: string, password*: string) | 201 UserResponse | Bearer bắt buộc |
+| PATCH | `/admin/users/{user_id}` | Update User | user_id* (path, integer), JSON: AdminUserUpdateRequest (name: string \| null, email: string \| null, role: string \| null) | 200 UserResponse | Bearer bắt buộc |
+| PATCH | `/admin/users/{user_id}/status` | Set User Status | user_id* (path, integer), JSON: AdminUserStatusRequest (enabled*: boolean) | 200 UserResponse | Bearer bắt buộc |

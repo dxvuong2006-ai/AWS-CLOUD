@@ -1,5 +1,7 @@
 # Phát MP4 từ S3 private trên LearnCloud
 
+> Ghi nhận triển khai/test lịch sử, bao gồm lỗi thiếu AWS credentials ở lần kiểm tra được mô tả. Không phải xác nhận playback AWS hiện tại. Source/tests đã thay đổi từ thời điểm ghi; kiểm tra lại cấu hình và test trong môi trường cô lập trước khi dùng.
+
 ## Cập nhật chẩn đoán Lesson 8 sau khi gắn raw key
 
 - Đã xác minh repository đọc `raw_video_key=lessons/8/raw/sample.mp4`,
@@ -129,7 +131,7 @@ endpoint video-url, không cần S3/credentials.
 
 3. Mở `http://127.0.0.1:8000/docs`, chọn
    `GET /lessons/{lesson_id}/video-url`, **Try it out** → `lesson_id=8` →
-   `X-Demo-User=1` (instructor sở hữu course trong DB hiện tại) → **Execute**.
+   Gửi bearer access token của local test identity qua `Authorization` → **Execute**. Ví dụ `X-Demo-User=1` ở bản cũ không còn hợp lệ.
    Với dữ liệu và AWS hợp lệ, kỳ vọng `200` và bốn trường:
    `lesson_id`, `video_url`, `expires_in`, `content_type=video/mp4`.
    Response thành công có `Cache-Control: no-store`.
@@ -138,7 +140,7 @@ endpoint video-url, không cần S3/credentials.
 4. Có thể kiểm tra HTTP/range từ PowerShell, không in URL:
 
    ```powershell
-   $playback = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/lessons/8/video-url' -Headers @{ 'X-Demo-User' = '1' }
+   $playback = Invoke-RestMethod -Uri 'http://127.0.0.1:8000/lessons/8/video-url' -Headers @{ Authorization = "Bearer $localAccessToken" }
    $playback | Select-Object lesson_id, expires_in, content_type
    curl.exe --silent --show-error --range 0-1023 --output NUL --write-out '%{http_code}' $playback.video_url
    Remove-Variable playback
@@ -160,11 +162,10 @@ endpoint video-url, không cần S3/credentials.
    lỗi liên tiếp, sau đó hiển thị nút thử lại. URL chỉ ở React memory, không
    persist vào storage; mỗi request video-url dùng `cache: no-store`.
 
-Dependency nhận diện người dùng hiện tại là `X-Demo-User`, mặc định ID 1.
-Endpoint mới kế thừa đúng dependency và quyền hiện tại: instructor sở hữu
-course hoặc student đã enroll vào course published. Đây vẫn là cơ chế demo,
-chưa phải xác thực JWT cho production; thay đổi này không sửa login/JWT
-hoặc thêm quy tắc unlock mới.
+Snapshot ban đầu của tài liệu ghi dependency `X-Demo-User`, mặc định ID 1.
+Đó là cấu hình lịch sử; source hiện tại dùng bearer access token và backend
+kiểm tra quyền theo implementation hiện tại. Xác minh các yêu cầu AWS/S3 riêng;
+test playback local không chứng minh object AWS có thể phát.
 
 ## Trạng thái và lỗi
 
