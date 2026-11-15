@@ -154,7 +154,7 @@ Cognito chỉ xác minh danh tính/token. Backend vẫn phải kiểm tra quyề
 ### 6.1 Secret
 
 1. Mở **Secrets Manager** → **Store a new secret** → loại **Other type of secret**. Thêm key/value `username` và `password` cho user ứng dụng.
-2. Tạm nhập username `learncloud_app` và password ngẫu nhiên riêng cho ứng dụng. Dùng master account chỉ để bootstrap DB, không dùng master trong Lambda.
+2. Target runtime login `learncloud_app` is a recommended dedicated least-privilege role, not an existing RDS role confirmed in the current review. Do not assume it exists or create it as part of this migration. The current local Backend reads `learncloud_admin` from repository-root `.env`; provision a separate app role and rotate the runtime secret only through a separately reviewed DBA/deployment change.
 3. Secret name `learncloud/prod/database` → lưu. Sau khi bootstrap user/grant trong database, bảo đảm username/password trong secret khớp thông tin user đó.
 
 ### 6.2 DB subnet group và database

@@ -24,7 +24,7 @@
 | Database Name         | `learncloud`                       |
 | S3 Bucket             | `learncloud-videos-mentorcloud`    |
 | Cognito User Pool ID  | `ap-southeast-1_o2Y9UHxoo`         |
-| Cognito App Client ID | `3b8ro7mhcnkdfvk5grr76bn1pe`       |
+| Cognito App Client ID | `3b8ro7mhcnkdfvk5grr76fn1pe`       |
 | CloudWatch Log Group  | `/aws/lambda/learncloud-api`       |
 | DB_PASSWORD           | mentorcloudrds                     |
 
@@ -51,6 +51,50 @@ POST /lessons/{lesson_id}/upload-url
 
 Đây là các route đã được sử dụng trong quá trình kiểm thử; không phải danh sách đầy đủ các API của LearnCloud.
 
+### CORS và Cognito JWT trên HTTP API
+
+HTTP API phải xử lý preflight từ trình duyệt trước khi request tới Lambda:
+
+- Allowed origins: `http://localhost:5173`, `http://127.0.0.1:5173` và
+  `https://d1my2q1fj0jxmb.cloudfront.net`. Nếu đổi domain frontend, cập nhật
+  origin production chính xác tại đây và trong `CORS_ALLOWED_ORIGINS` của Lambda.
+- Allowed methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `HEAD`.
+- Allowed headers: `authorization`, `content-type`.
+- Không bật credential cookies; frontend gửi Cognito Access Token trong
+  `Authorization: Bearer ...`.
+- Route `OPTIONS /{proxy+}` dùng cùng Lambda integration nhưng
+  `Authorization: NONE` để preflight không bị JWT authorizer chặn.
+- Frontend đăng nhập trực tiếp với Cognito; không tạo route `/auth/login` công khai
+  trên API Gateway. Các endpoint đăng ký/xác minh/khôi phục mật khẩu phía backend
+  (`POST /auth/register`, `/auth/verify-email`,
+  `/auth/resend-verification`, `/auth/forgot-password`, `/auth/reset-password`)
+  dùng `Authorization: NONE`. Chúng cần truy cập được trước khi người dùng có
+  access token.
+- Nếu API Gateway còn route `POST /auth/login` từ cấu hình cũ, hãy xóa route đó
+  sau khi deploy backend mới; route đăng nhập không còn thuộc API.
+- `GET /auth/me` và các API nghiệp vụ dùng Cognito JWT authorizer. Gửi Cognito
+  Access Token trong `Authorization: Bearer <access-token>`.
+- User Pool ID, App Client ID và Region trong frontend phải cùng pool/client với
+  Lambda và API Gateway JWT authorizer. App client dùng cho SPA phải là public
+  (không có client secret) và bật `ALLOW_USER_PASSWORD_AUTH`.
+- Đăng nhập frontend dùng Amplify Auth với `USER_PASSWORD_AUTH`; Cognito phát
+  token trực tiếp cho trình duyệt. Backend không gọi `InitiateAuth`, `GetUser`
+  hoặc `AdminListGroupsForUser` cho thao tác xác thực thông thường; `/auth/me`
+  dùng claims đã được API Gateway xác minh và ánh xạ user/role vào PostgreSQL.
+- User phải được tạo/liên kết trong PostgreSQL qua luồng đăng ký-xác minh hoặc
+  quy trình cấp tài khoản quản trị trước lần gọi `/auth/me` đầu tiên; Access Token
+  không mặc định chứa email để backend tự tạo hồ sơ mới.
+- Các API quản trị Cognito và các thao tác đăng ký, xác minh, đổi/khôi phục mật
+  khẩu vẫn gọi Cognito từ Lambda; chúng vẫn cần network path tới Cognito riêng.
+- Các route nghiệp vụ khác tiếp tục dùng Cognito JWT authorizer; không bỏ
+  authorizer khỏi route wildcard.
+
+Sau khi cập nhật cấu hình CORS/route, xác nhận `OPTIONS` trả thành công và có
+`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods` và
+`Access-Control-Allow-Headers`. CORS được cấu hình trên HTTP API; middleware
+FastAPI một mình không thể xử lý preflight nếu Gateway từ chối request trước
+khi gọi Lambda.
+
 ---
 
 ## 2. Cấu hình dành cho Frontend React
@@ -61,9 +105,13 @@ Trong thư mục Frontend, tạo hoặc cập nhật file `.env.local`:
 VITE_API_BASE_URL=https://lavh5njepc.execute-api.ap-southeast-1.amazonaws.com/default
 
 VITE_AWS_REGION=ap-southeast-1
-VITE_COGNITO_USER_POOL_ID=ap-southeast-1_o2Y9UHxoo
-VITE_COGNITO_APP_CLIENT_ID=3b8ro7mhcnkdfvk5grr76bn1pe
+VITE_COGNITO_USER_POOL_ID=<user-pool-id>
+VITE_COGNITO_APP_CLIENT_ID=<public-app-client-id>
 ```
+
+Không tạo App Client có client secret cho ứng dụng trình duyệt. Hãy xác nhận
+`VITE_COGNITO_APP_CLIENT_ID` khớp với client ID trong Lambda và Audience của JWT
+authorizer trước khi build/deploy frontend.
 
 Tên biến phải được đối chiếu với code Frontend thực tế. Nếu dự án đang dùng tên biến khác, giữ nguyên tên mà ứng dụng đọc.
 
@@ -294,6 +342,8 @@ Request Body ví dụ:
 ```
 
 Response bao gồm `upload_url`, `object_key`, `expires_in`, `method` và `content_type`.
+`upload_id` và `required_headers` chỉ có khi backend bật video pipeline; khi chưa
+bật pipeline, frontend vẫn PUT tệp lên Presigned URL với `Content-Type`.
 
 Frontend dùng `PUT` đến `upload_url` với header `Content-Type` phù hợp, không gửi Cognito Token tới S3.
 

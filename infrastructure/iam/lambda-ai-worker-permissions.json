@@ -1,0 +1,70 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:ap-southeast-1:${ACCOUNT_ID}:log-group:/aws/lambda/learncloud-ai-worker:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::learncloud-videos-mentorcloud/lessons/*/processed/*",
+        "arn:aws:s3:::learncloud-videos-mentorcloud/ai-transcripts/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::learncloud-videos-mentorcloud/ai-transcripts/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "transcribe:StartTranscriptionJob",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-southeast-1",
+          "transcribe:OutputBucketName": "learncloud-videos-mentorcloud"
+        },
+        "StringLike": {
+          "transcribe:OutputKey": "ai-transcripts/*/transcript.json"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": "transcribe:GetTranscriptionJob",
+      "Resource": "arn:aws:transcribe:ap-southeast-1:${ACCOUNT_ID}:transcription-job/learncloud-k5-*"
+    },
+    {
+      "Sid": "InvokeNovaMicroInferenceProfile",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+    },
+    {
+      "Sid": "InvokeNovaMicroThroughApprovedProfile",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel"
+      ],
+      "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0",
+      "Condition": {
+        "StringEquals": {
+          "bedrock:InferenceProfileArn": "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/apac.amazon.nova-micro-v1:0"
+        }
+      }
+    }
+  ]
+}

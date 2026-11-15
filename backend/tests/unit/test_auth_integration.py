@@ -7,11 +7,13 @@ os.environ["COGNITO_APP_CLIENT_ID"] = "test-client"
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from botocore.exceptions import ClientError
 import httpx
 from fastapi import Depends, FastAPI
 
 from app.api.auth import router
+from app.config import settings
 from app.dependencies import get_db, require_instructor, require_admin, require_student
 from app.services import auth_service
 
@@ -25,6 +27,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
                 name=role,
                 email=f"{role.lower()}@example.com",
                 role=role,
+                status="ACTIVE",
                 password_hash=None,
                 created_at=None,
             )
@@ -61,37 +64,14 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.token_user.start()
 
-        self.authenticate = patch.object(
-            auth_service,
-            "authenticate",
-            side_effect=lambda db, email, password: {
-                "access_token": "cognito-token-1",
-                "expires_in": 3600,
-            },
-        )
-        self.authenticate.start()
-
-        self.sync_login = patch.object(
-            auth_service,
-            "sync_authenticated_user",
-            side_effect=lambda db, token, email: self.users[1],
-        )
-        self.sync_login.start()
-
     async def asyncTearDown(self):
         await self.client.aclose()
-        self.sync_login.stop()
-        self.authenticate.stop()
         self.token_user.stop()
 
     async def token(self, uid):
-        email = self.users[uid].email
-        response = await self.client.post("/auth/login", json={"email": email, "password": "Password123!"})
-        self.assertEqual(response.status_code, 200)
-        self.assertNotIn("password_hash", response.json()["user"])
         return f"cognito-token-{uid}"
 
-    async def test_login_me_and_role_matrix(self):
+    async def test_access_token_me_and_role_matrix(self):
         role_paths = {
             1: "student",
             2: "instructor",
@@ -106,6 +86,13 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
             for path in ["student", "instructor", "admin"]:
                 result = await self.client.get("/" + path, headers=headers)
                 self.assertEqual(result.status_code, 200 if path == role_path else 403)
+
+    async def test_backend_login_proxy_is_removed(self):
+        response = await self.client.post(
+            "/auth/login",
+            json={"email": "student@example.com", "password": "Password123!"},
+        )
+        self.assertEqual(response.status_code, 404)
 
     async def test_missing_and_invalid_tokens_rejected(self):
         for headers in [
@@ -127,6 +114,60 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CognitoTokenVerificationLoggingTests(unittest.TestCase):
+    def test_access_token_sync_uses_verified_claims_without_cognito_api_calls(self):
+        signing_key = SimpleNamespace(key="test-key")
+        claims = {
+            "token_use": "access",
+            "client_id": "test-client",
+            "iss": "https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_testpool",
+            "sub": "cognito-1",
+        }
+        user = SimpleNamespace(
+            id=1,
+            cognito_sub="cognito-1",
+            name="Student",
+            email="student@example.com",
+            role="STUDENT",
+            status="ACTIVE",
+            password_hash=None,
+        )
+        db = Mock()
+        with patch.object(
+            auth_service.jwt,
+            "PyJWKClient",
+            return_value=SimpleNamespace(
+                get_signing_key_from_jwt=lambda _: signing_key
+            ),
+        ), patch.object(
+            auth_service.jwt,
+            "decode",
+            return_value=claims,
+        ), patch.object(
+            auth_service.auth_repo,
+            "get_by_cognito_sub",
+            return_value=user,
+        ), patch.object(
+            settings,
+            "COGNITO_APP_CLIENT_ID",
+            "test-client",
+        ), patch.object(
+            settings,
+            "COGNITO_REGION",
+            "ap-southeast-1",
+        ), patch.object(
+            settings,
+            "COGNITO_USER_POOL_ID",
+            "ap-southeast-1_testpool",
+        ), patch.object(
+            auth_service,
+            "cognito_client",
+        ) as cognito_client:
+            result = auth_service.user_from_access_token(db, "valid.access.token")
+
+        self.assertIs(result, user)
+        cognito_client.assert_not_called()
+        db.commit.assert_not_called()
+
     def test_signature_error_is_logged_without_token(self):
         token = "sensitive.jwt.token"
         jwk_client = patch.object(
@@ -177,6 +218,108 @@ class CognitoTokenVerificationLoggingTests(unittest.TestCase):
         log_output = "\n".join(captured.output)
         self.assertIn("reason=client_id_mismatch", log_output)
         self.assertNotIn("sensitive.jwt.token", log_output)
+
+
+class CognitoEmailVerificationTests(unittest.TestCase):
+    def test_confirmed_cognito_user_can_finish_local_sync_after_retry(self):
+        email = "student@example.com"
+        cognito = Mock()
+        cognito.confirm_sign_up.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "NotAuthorizedException",
+                    "Message": "User cannot be confirmed. Current status is CONFIRMED.",
+                }
+            },
+            "ConfirmSignUp",
+        )
+        cognito.admin_get_user.return_value = {
+            "Enabled": True,
+            "UserStatus": "CONFIRMED",
+            "UserAttributes": [
+                {"Name": "sub", "Value": "cognito-student"},
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "name", "Value": "Student"},
+            ],
+        }
+        db = Mock()
+        created_user = SimpleNamespace(
+            cognito_sub="cognito-student",
+            email=email,
+            name="Student",
+            password_hash=None,
+        )
+
+        with patch.object(auth_service, "cognito_client", return_value=cognito), patch.object(
+            auth_service.auth_repo,
+            "get_by_cognito_sub",
+            return_value=None,
+        ), patch.object(
+            auth_service.auth_repo,
+            "get_by_email",
+            return_value=None,
+        ), patch.object(
+            auth_service.auth_repo,
+            "create_cognito_user",
+            return_value=created_user,
+        ) as create_user:
+            result = auth_service.verify_email(db, email, "123456")
+
+        self.assertEqual(result, {"message": "Đã xác minh email."})
+        cognito.admin_get_user.assert_called_once_with(
+            UserPoolId=settings.COGNITO_USER_POOL_ID,
+            Username=email,
+        )
+        create_user.assert_called_once_with(
+            db,
+            cognito_sub="cognito-student",
+            name="Student",
+            email=email,
+            role="STUDENT",
+        )
+
+    def test_access_token_profile_sync_uses_get_user_without_admin_iam(self):
+        cognito = Mock()
+        cognito.get_user.return_value = {
+            "UserAttributes": [
+                {"Name": "sub", "Value": "cognito-student"},
+                {"Name": "email", "Value": "student@example.com"},
+                {"Name": "email_verified", "Value": "true"},
+                {"Name": "name", "Value": "Student"},
+            ],
+        }
+
+        with patch.object(auth_service, "cognito_client", return_value=cognito):
+            identity = auth_service._identity_from_verified_claims(
+                {"sub": "cognito-student", "username": "internal-username"},
+                access_token="verified-access-token",
+            )
+
+        self.assertEqual(identity["email"], "student@example.com")
+        cognito.get_user.assert_called_once_with(
+            AccessToken="verified-access-token"
+        )
+        cognito.admin_get_user.assert_not_called()
+
+    def test_confirmation_errors_other_than_already_confirmed_are_not_ignored(self):
+        cognito = Mock()
+        cognito.confirm_sign_up.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "CodeMismatchException",
+                    "Message": "Invalid confirmation code.",
+                }
+            },
+            "ConfirmSignUp",
+        )
+
+        with patch.object(auth_service, "cognito_client", return_value=cognito):
+            with self.assertRaises(auth_service.CognitoAuthError) as raised:
+                auth_service.verify_email(Mock(), "student@example.com", "000000")
+
+        self.assertEqual(raised.exception.code, "CodeMismatchException")
+        cognito.admin_get_user.assert_not_called()
 
 
 if __name__ == "__main__":

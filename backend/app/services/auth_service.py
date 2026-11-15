@@ -9,7 +9,6 @@ from app.config import settings
 from app.repositories import auth_repo
 from app.schemas.auth import RegisterRequest
 from app.utils.logging import get_logger
-import json
 
 
 logger = get_logger(__name__)
@@ -19,16 +18,16 @@ class AuthError(Exception):
     pass
 
 
-class InvalidCredentials(AuthError):
-    pass
-
-
 class InvalidToken(AuthError):
     pass
 
 
 class DuplicateEmail(AuthError):
     pass
+
+
+class IdentityConflict(AuthError):
+    """The Cognito subject cannot be mapped without taking over another row."""
 
 
 class CognitoAuthError(AuthError):
@@ -70,39 +69,6 @@ def _raise_cognito_error(exc):
 
 
 
-def _role_from_groups(claims: dict) -> str:
-    raw = claims.get("cognito:groups") or []
-
-    if isinstance(raw, str):
-        raw = raw.strip()
-
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            parsed = raw.strip("[]").split(",")
-
-        raw = parsed
-
-    if isinstance(raw, str):
-        raw = [raw]
-
-    if not isinstance(raw, (list, tuple, set)):
-        raw = []
-
-    groups = {
-        group.strip().strip('"\'').upper()
-        for group in raw
-        if isinstance(group, str)
-    }
-
-    if "ADMIN" in groups:
-        return "ADMIN"
-
-    if "INSTRUCTOR" in groups:
-        return "INSTRUCTOR"
-
-    return "STUDENT"
-
 def _attributes_from_cognito(response: dict, fallback_email: str | None = None) -> dict:
     attributes = {}
     for item in response.get("UserAttributes", []):
@@ -112,42 +78,137 @@ def _attributes_from_cognito(response: dict, fallback_email: str | None = None) 
     name = attributes.get("name") or attributes.get("email") or email
     if not sub:
         raise InvalidToken()
-    return {"sub": sub, "email": email.lower(), "name": name}
+    return {
+        "sub": sub,
+        "email": email.lower(),
+        "name": name,
+        "email_verified": attributes.get("email_verified", "").lower() == "true",
+        "enabled": response.get("Enabled") is True,
+        "user_status": response.get("UserStatus"),
+    }
 
 
-def sync_cognito_user(db: Session, claims: dict) -> object:
-    sub = claims.get("sub")
-    email = claims.get("email")
-    name = claims.get("name") or claims.get("cognito:username") or email
-    if not isinstance(sub, str) or not sub:
+def _require_provisionable_cognito_identity(identity: dict) -> None:
+    if not identity.get("email"):
+        logger.warning("Cognito profile rejected reason=missing_email")
         raise InvalidToken()
-    if not isinstance(email, str) or not email:
+    if identity.get("enabled") is not True:
+        logger.warning("Cognito profile rejected reason=user_disabled")
+        raise InvalidToken()
+    if identity.get("user_status") != "CONFIRMED":
+        logger.warning("Cognito profile rejected reason=user_status_not_confirmed")
+        raise InvalidToken()
+    if identity.get("email_verified") is not True:
+        logger.warning("Cognito profile rejected reason=email_not_verified")
         raise InvalidToken()
 
-    user = auth_repo.get_by_cognito_sub(db, sub)
-    if user is None:
-        user = auth_repo.get_by_email(db, email.lower())
-    if user is None:
-        user = auth_repo.create_cognito_user(
+
+def _identity_from_verified_claims(
+    claims: dict, access_token: str | None = None
+) -> dict:
+    """Build a canonical identity after the JWT/authorizer has verified claims.
+
+    Cognito access tokens normally omit ``email``. For a subject that has no
+    database profile yet, use its signed username claim to read the attributes
+    once from Cognito. Existing profiles never incur this call.
+    """
+    sub = claims["sub"]
+    username_claim = claims.get("username") or claims.get("cognito:username")
+    if not isinstance(username_claim, str) or not username_claim.strip():
+        logger.warning(
+            "Cognito authorizer user not found "
+            "reason=missing_email_and_username_claims sub_present=true"
+        )
+        raise InvalidToken()
+    try:
+        if access_token:
+            # A verified bearer token can fetch its own profile without an
+            # IAM admin permission. GetUser only returns active access-token
+            # users, so normalize the two fields absent from that response.
+            response = cognito_client().get_user(AccessToken=access_token)
+            response = {
+                **response,
+                "Enabled": True,
+                "UserStatus": "CONFIRMED",
+            }
+        else:
+            # API Gateway authorizer contexts do not include the raw token.
+            response = cognito_client().admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=username_claim.strip(),
+            )
+    except (BotoCoreError, ClientError) as exc:
+        _raise_cognito_error(exc)
+    identity = _attributes_from_cognito(response)
+    if identity["sub"] != sub:
+        logger.warning("Cognito profile rejected reason=subject_mismatch")
+        raise InvalidToken()
+    _require_provisionable_cognito_identity(identity)
+    return identity
+
+
+def ensure_cognito_profile(db: Session, identity: dict):
+    """Return the exact subject's RDS profile, creating it once if absent.
+
+    This operation deliberately never links by email and never updates an
+    existing row's name, email, role, password, or Cognito subject. The retry
+    after an integrity error makes concurrent first requests idempotent.
+    """
+    sub = identity.get("sub")
+    email = identity.get("email")
+    name = identity.get("name")
+    if not isinstance(sub, str) or not sub.strip():
+        raise InvalidToken()
+    if not isinstance(email, str) or not email.strip():
+        raise InvalidToken()
+    sub = sub.strip()
+    email = email.strip().lower()
+    name = name.strip() if isinstance(name, str) and name.strip() else email
+
+    subject_user = auth_repo.get_by_cognito_sub(db, sub)
+    email_user = auth_repo.get_by_email(db, email)
+    if subject_user is not None:
+        if email_user is not None and email_user.id != subject_user.id:
+            logger.warning(
+                "Cognito identity conflict reason=email_owned_by_other_user user_id=%s",
+                subject_user.id,
+            )
+            raise IdentityConflict()
+        # RDS remains authoritative for all mutable profile data and role.
+        return subject_user
+    if email_user is not None:
+        # A concurrent insert can commit between the subject lookup and the
+        # email lookup. Accept the row only when it also has the exact subject;
+        # this is identity equality, not email-based account linking.
+        if email_user.cognito_sub == sub:
+            return email_user
+        logger.warning(
+            "Cognito identity conflict reason=email_match_different_subject user_id=%s",
+            email_user.id,
+        )
+        raise IdentityConflict()
+
+    try:
+        return auth_repo.create_cognito_user(
             db,
             cognito_sub=sub,
             name=name,
-            email=email.lower(),
-            role=_role_from_groups(claims),
+            email=email,
+            # Privileged roles are never bootstrapped from Cognito claims/groups.
+            role="STUDENT",
         )
-    else:
-        if user.cognito_sub != sub:
-            user.cognito_sub = sub
-        if name:
-            user.name = name
-        if email:
-            user.email = email.lower()
-        user.password_hash = None
-        if "cognito:groups" in claims:
-            user.role = _role_from_groups(claims)
-        db.commit()
-        db.refresh(user)
-    return user
+    except auth_repo.EmailAlreadyExists as exc:
+        # Another worker may have won the same first-login insert. Accept only
+        # the exact same subject/email mapping; all other uniqueness races fail.
+        subject_user = auth_repo.get_by_cognito_sub(db, sub)
+        email_user = auth_repo.get_by_email(db, email)
+        if (
+            subject_user is not None
+            and email_user is not None
+            and subject_user.id == email_user.id
+        ):
+            return subject_user
+        raise IdentityConflict() from exc
 
 
 def authorizer_claims_from_event(event: object) -> dict | None:
@@ -167,14 +228,17 @@ def authorizer_claims_from_event(event: object) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
-def sync_authorizer_claims(db: Session, claims: dict) -> object:
+def sync_authorizer_claims(db: Session, claims: dict, access_token: str | None = None) -> object:
     sub = claims.get("sub")
     if not isinstance(sub, str) or not sub:
         raise InvalidToken()
 
     if claims.get("token_use") != "access":
         raise InvalidToken()
-    if settings.COGNITO_APP_CLIENT_ID and claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
+    if (
+        not settings.COGNITO_APP_CLIENT_ID
+        or claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID
+    ):
         raise InvalidToken()
 
     expected_issuer = (
@@ -184,50 +248,18 @@ def sync_authorizer_claims(db: Session, claims: dict) -> object:
     if claims.get("iss") != expected_issuer or not settings.COGNITO_USER_POOL_ID:
         raise InvalidToken()
 
-    email_claim = claims.get("email")
-    email = (
-        email_claim.strip().lower()
-        if isinstance(email_claim, str) and email_claim.strip()
-        else None
-    )
-    name_claim = claims.get("name")
-    name = (
-        name_claim.strip()
-        if isinstance(name_claim, str) and name_claim.strip()
-        else None
-    )
-
     user = auth_repo.get_by_cognito_sub(db, sub)
-    if user is None and email:
-        user = auth_repo.get_by_email(db, email)
-
     if user is None:
-        if not email:
-            logger.warning("Cognito authorizer user not found reason=missing_email_claim sub_present=true")
-            raise InvalidToken()
-        user = auth_repo.create_cognito_user(
-            db,
-            cognito_sub=sub,
-            name=name or email,
-            email=email,
-            role=_role_from_groups(claims) if "cognito:groups" in claims else "STUDENT",
-        )
-    else:
-        if user.cognito_sub != sub:
-            user.cognito_sub = sub
-        if email:
-            user.email = email
-        if name:
-            user.name = name
-        user.password_hash = None
-        logger.info(
-        "Cognito groups diagnostic: type=%s, raw=%r",
-        type(claims.get("cognito:groups")).__name__,
-        claims.get("cognito:groups"),)
-        if "cognito:groups" in claims:
-            user.role = _role_from_groups(claims)
-        db.commit()
-        db.refresh(user)
+        try:
+            user = ensure_cognito_profile(
+                db,
+                _identity_from_verified_claims(claims, access_token=access_token),
+            )
+        except IdentityConflict as exc:
+            raise InvalidToken() from exc
+    # Existing rows are intentionally read-only here. users.role is
+    # authoritative, and stale Cognito groups/profile claims cannot undo an
+    # administrator's changes or overwrite local credentials.
     return user
 
 
@@ -240,6 +272,15 @@ def jwks_url() -> str:
 
 
 def user_from_access_token(db: Session, token: str):
+    # Untrusted header only selects a verifier. Each verifier pins its own
+    # algorithm, key and issuer; a failed verification never falls back.
+    try:
+        local_token = jwt.get_unverified_header(token).get("alg") == "HS256"
+    except jwt.PyJWTError:
+        local_token = False
+    if local_token:
+        from app.services import local_auth_service
+        return local_auth_service.user_from_access_token(db, token)
     try:
         signing_keys = jwt.PyJWKClient(jwks_url(), cache_keys=True, lifespan=3600).get_signing_key_from_jwt(token)
         claims = jwt.decode(
@@ -249,34 +290,21 @@ def user_from_access_token(db: Session, token: str):
             issuer=f"https://cognito-idp.{settings.COGNITO_REGION or settings.AWS_REGION}.amazonaws.com/{settings.COGNITO_USER_POOL_ID}",
             options={"verify_aud": False, "verify_exp": True},
         )
-        if claims.get("token_use") == "access":
-            if claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
-                logger.warning("Cognito access token rejected reason=client_id_mismatch")
-                raise InvalidToken()
-        elif claims.get("token_use") == "id":
-            if claims.get("aud") != settings.COGNITO_APP_CLIENT_ID:
-                logger.warning("Cognito ID token rejected reason=aud_mismatch")
-                raise InvalidToken()
-        else:
+        if claims.get("token_use") != "access":
             logger.warning("Cognito token rejected reason=token_use_missing_or_invalid")
             raise InvalidToken()
+        if claims.get("client_id") != settings.COGNITO_APP_CLIENT_ID:
+            logger.warning("Cognito access token rejected reason=client_id_mismatch")
+            raise InvalidToken()
 
-        if claims.get("token_use") == "access":
-            user = sync_authenticated_user(
-                db,
-                token,
-                fallback_email=claims.get("username")
-                if isinstance(claims.get("username"), str)
-                else "",
-            )
-        else:
-            user = sync_cognito_user(db, claims)
+        user = sync_authorizer_claims(db, claims, access_token=token)
         if not user:
             raise InvalidToken()
         return user
     except InvalidToken:
         raise
-    except (jwt.PyJWTError, ValueError, TypeError, OSError, BotoCoreError, ClientError) as exc:
+    except (jwt.PyJWTError, ValueError, TypeError, OSError, BotoCoreError, ClientError,
+            auth_repo.EmailAlreadyExists) as exc:
         logger.warning(
             "Cognito token verification failed exception_type=%s",
             type(exc).__name__,
@@ -285,7 +313,9 @@ def user_from_access_token(db: Session, token: str):
 
 
 def register_student(db: Session, data: RegisterRequest):
-    del db
+    if auth_repo.get_by_email(db, str(data.email)) is not None:
+        raise CognitoAuthError("Email is already registered. Use its original sign-in method.",
+                               code="EMAIL_EXISTS", status_code=409)
     try:
         response = cognito_client().sign_up(
             ClientId=settings.COGNITO_APP_CLIENT_ID,
@@ -306,77 +336,50 @@ def register_student(db: Session, data: RegisterRequest):
         _raise_cognito_error(exc)
 
 
-def authenticate(db: Session, *, email: str, password: str):
-    del db
-    try:
-        response = cognito_client().initiate_auth(
-            ClientId=settings.COGNITO_APP_CLIENT_ID,
-            AuthFlow="USER_PASSWORD_AUTH",
-            AuthParameters={"USERNAME": email.lower(), "PASSWORD": password},
-        )
-        result = response.get("AuthenticationResult") or {}
-        if not result.get("AccessToken"):
-            raise InvalidCredentials()
-        return {
-            "access_token": result["AccessToken"],
-            "expires_in": result.get("ExpiresIn", 3600),
-        }
-    except (BotoCoreError, ClientError) as exc:
-        _raise_cognito_error(exc)
-
-
-def sync_authenticated_user(db: Session, access_token: str, fallback_email: str) -> object:
-    try:
-        client = cognito_client()
-        response = client.get_user(AccessToken=access_token)
-        identity = _attributes_from_cognito(response, fallback_email=fallback_email)
-        group_response = client.admin_list_groups_for_user(
-            UserPoolId=settings.COGNITO_USER_POOL_ID,
-            Username=response.get("Username") or fallback_email,
-        )
-        claims = {
-            "sub": identity["sub"],
-            "email": identity["email"],
-            "name": identity["name"],
-            "cognito:groups": [
-                item["GroupName"] for item in group_response.get("Groups", [])
-            ],
-        }
-        return sync_cognito_user(db, claims)
-    except (BotoCoreError, ClientError) as exc:
-        _raise_cognito_error(exc)
-
-
 def verify_email(db: Session, email: str, code: str):
     try:
-        cognito_client().confirm_sign_up(
-            ClientId=settings.COGNITO_APP_CLIENT_ID,
-            Username=email.lower(),
-            ConfirmationCode=code,
-        )
-        response = cognito_client().admin_get_user(
-            UserPoolId=settings.COGNITO_USER_POOL_ID,
-            Username=email.lower(),
-        )
-        identity = _attributes_from_cognito(response, fallback_email=email)
-        existing = auth_repo.get_by_cognito_sub(db, identity["sub"])
-        if existing is None:
-            existing = auth_repo.get_by_email(db, identity["email"])
-        if existing is None:
-            auth_repo.create_cognito_user(
-                db,
-                cognito_sub=identity["sub"],
-                name=identity["name"],
-                email=identity["email"],
-                role="STUDENT",
+        client = cognito_client()
+        try:
+            client.confirm_sign_up(
+                ClientId=settings.COGNITO_APP_CLIENT_ID,
+                Username=email.lower(),
+                ConfirmationCode=code,
             )
+        except ClientError as confirm_error:
+            # Confirmation can succeed while the following database write
+            # fails. A retry must repair that partial success, but only after a
+            # read confirms Cognito is already in the expected final state.
+            error_code = confirm_error.response.get("Error", {}).get("Code")
+            if error_code != "NotAuthorizedException":
+                raise
+            response = client.admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=email.lower(),
+            )
+            if response.get("UserStatus") != "CONFIRMED":
+                raise confirm_error
         else:
-            existing.cognito_sub = identity["sub"]
-            existing.name = identity["name"]
-            existing.email = identity["email"]
-            existing.password_hash = None
-            db.commit()
+            response = client.admin_get_user(
+                UserPoolId=settings.COGNITO_USER_POOL_ID,
+                Username=email.lower(),
+            )
+        identity = _attributes_from_cognito(response, fallback_email=email)
+        _require_provisionable_cognito_identity(identity)
+        try:
+            ensure_cognito_profile(db, identity)
+        except IdentityConflict as exc:
+            raise CognitoAuthError(
+                "Email belongs to a different identity. Account linking is not supported.",
+                code="IDENTITY_CONFLICT",
+                status_code=409,
+            ) from exc
         return {"message": "Đã xác minh email."}
+    except InvalidToken as exc:
+        raise CognitoAuthError(
+            "Cognito returned an incomplete identity profile.",
+            code="COGNITO_PROFILE_INVALID",
+            status_code=502,
+        ) from exc
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)
 
@@ -522,5 +525,21 @@ def admin_update_profile(*, cognito_sub: str, email: str, name: str | None = Non
                 Username=email.lower(),
                 UserAttributes=attributes,
             )
+    except (BotoCoreError, ClientError) as exc:
+        _raise_cognito_error(exc)
+
+
+def admin_set_user_enabled(*, cognito_sub: str, enabled: bool):
+    """Enable or disable the Cognito identity linked to the database user."""
+    try:
+        client = cognito_client()
+        params = {
+            "UserPoolId": settings.COGNITO_USER_POOL_ID,
+            "Username": cognito_sub,
+        }
+        if enabled:
+            client.admin_enable_user(**params)
+        else:
+            client.admin_disable_user(**params)
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)

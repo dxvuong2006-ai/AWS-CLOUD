@@ -129,6 +129,12 @@ class PipelineTests(unittest.TestCase):
             patcher = patch("app.services.video_pipeline_service." + name, return_value=value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        section_lock = patch(
+            "app.services.video_pipeline_service.review_repo.lock_section",
+            return_value=None,
+        )
+        section_lock.start()
+        self.addCleanup(section_lock.stop)
         now = datetime.now(timezone.utc)
         self.upload = VideoUpload(id=KEY.split("/")[-1][:-4], lesson_id=8, source_key=KEY,
             content_type="video/mp4", size_bytes=1234, created_at=now-timedelta(seconds=10), expires_at=now+timedelta(minutes=15))
@@ -138,8 +144,24 @@ class PipelineTests(unittest.TestCase):
         self.storage.head_video.return_value = {"ContentLength": 1234, "ContentType": "video/mp4", "ETag": f'"{ETAG}"', "LastModified": now}
         self.mc = Mock()
         self.mc.start.return_value = ProcessingReceipt("unit-job")
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
         self.payload = {"kind": "upload", "bucket": BUCKET, "key": KEY, "etag": ETAG}
+
+    def complete_job(self, run, duration_ms=12050):
+        destination = f"s3://{BUCKET}/{run.output_key.removesuffix('_720p.mp4')}"
+        self.mc.get_job.return_value = {
+            "Status": "COMPLETE",
+            "Settings": {
+                "OutputGroups": [{
+                    "OutputGroupSettings": {
+                        "FileGroupSettings": {"Destination": destination},
+                    },
+                    "Outputs": [{"NameModifier": "_720p"}],
+                }],
+            },
+            "OutputGroupDetails": [{
+                "OutputDetails": [{"DurationInMs": duration_ms}],
+            }],
+        }
 
     def claim(self):
         result = service.claim(self.db, self.payload, OWNER, self.storage)
@@ -153,11 +175,71 @@ class PipelineTests(unittest.TestCase):
     def test_claim_and_duplicate_events_only_one_owner(self):
         run = self.claim()
         self.assertEqual(self.lesson.status, "PROCESSING")
-        self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        with self.assertLogs("app.services.video_pipeline_service", level="INFO") as captured:
+            self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        log_output = " ".join(captured.output)
+        self.assertIn("reason=UPLOAD_ALREADY_CLAIMED", log_output)
+        self.assertNotIn(KEY, log_output)
+        self.assertNotIn(ETAG, log_output)
+        self.assertNotIn(OTHER, log_output)
         self.assertEqual(service.claim(self.db, self.payload, OWNER, self.storage)["run_id"], run.id)
         self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
         self.assertIsNone(self.lesson.processed_video_key)
         self.mc.start.assert_not_called()
+
+    def test_confirmed_uploaded_lesson_with_valid_ledger_and_no_runs_is_claimed(self):
+        """Regression: API confirmation may persist UPLOADED before EventBridge claim."""
+        self.lesson.status = "UPLOADED"
+        self.lesson.raw_video_key = KEY
+
+        run = self.claim()
+
+        self.assertEqual(run.state, "CLAIMED")
+        self.assertEqual(run.upload_id, self.upload.id)
+        self.assertEqual(run.source_etag, ETAG)
+        self.assertEqual(self.lesson.status, "PROCESSING")
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
+        self.storage.head_video.assert_called_once_with(KEY)
+
+    def test_uploaded_lesson_requires_exact_current_unprocessed_generation(self):
+        self.lesson.status = "UPLOADED"
+        for raw_key, processed_key, reason in (
+                (None, None, "UPLOADED_GENERATION_MISMATCH"),
+                (KEY, "lessons/8/processed/existing.mp4", "UPLOADED_GENERATION_MISMATCH"),
+                ("lessons/8/raw/other.mp4", None, "SOURCE_KEY_NOT_CURRENT")):
+            with self.subTest(raw_key=raw_key, processed_key=processed_key):
+                self.lesson.raw_video_key = raw_key
+                self.lesson.processed_video_key = processed_key
+                with self.assertLogs("app.services.video_pipeline_service", level="INFO") as captured:
+                    result = service.claim(self.db, self.payload, OWNER, self.storage)
+                self.assertEqual(result, {"decision": "IGNORE"})
+                self.assertIn(f"reason={reason}", " ".join(captured.output))
+                self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+                self.storage.head_video.assert_not_called()
+
+    def test_duplicate_recorded_upload_is_idempotent_after_course_leaves_draft(self):
+        run = self.claim()
+        self.course.status = "PUBLISHED"
+        self.assertEqual(service.claim(self.db, self.payload, OTHER, self.storage), {"decision": "IGNORE"})
+        self.assertEqual(service.claim(self.db, self.payload, OWNER, self.storage)["run_id"], run.id)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
+        self.assertEqual(self.storage.head_video.call_count, 1)
+
+    def test_new_upload_still_requires_draft_course(self):
+        self.course.status = "PUBLISHED"
+        with self.assertRaisesRegex(service.PipelineError, "COURSE_NOT_DRAFT"):
+            service.claim(self.db, self.payload, OWNER, self.storage)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+        self.assertIsNone(self.lesson.raw_video_key)
+        self.storage.head_video.assert_not_called()
+
+    def test_unissued_upload_is_rejected_before_non_draft_shortcut(self):
+        self.course.status = "PUBLISHED"
+        unissued_key = KEY.replace(self.upload.id, "f" * 32)
+        with self.assertRaisesRegex(service.PipelineError, "UNISSUED_UPLOAD"):
+            service.claim(self.db, {**self.payload, "key": unissued_key}, OTHER, self.storage)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 0)
+        self.storage.head_video.assert_not_called()
 
     def test_two_upload_intents_for_one_lesson_only_first_validated_claim_wins(self):
         other = VideoUpload(id="f"*32, lesson_id=8, source_key=f"lessons/8/raw/{'f'*32}.mp4",
@@ -170,6 +252,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result, {"decision": "IGNORE"})
         self.assertEqual(self.lesson.raw_video_key, KEY)
         self.assertEqual(self.db.query(VideoPipelineRun).one().id, first.id)
+        self.assertEqual(self.storage.head_video.call_count, 1)
+
+    def test_stale_issued_upload_is_ignored_after_course_leaves_draft(self):
+        other = VideoUpload(id="f"*32, lesson_id=8, source_key=f"lessons/8/raw/{'f'*32}.mp4",
+            content_type="video/mp4", size_bytes=1234,
+            created_at=self.upload.created_at, expires_at=self.upload.expires_at)
+        self.db.add(other)
+        self.db.commit()
+        self.claim()
+        self.course.status = "PUBLISHED"
+        result = service.claim(self.db, {**self.payload, "key": other.source_key}, OTHER, self.storage)
+        self.assertEqual(result, {"decision": "IGNORE"})
+        self.assertEqual(self.lesson.raw_video_key, KEY)
+        self.assertEqual(self.db.query(VideoPipelineRun).count(), 1)
         self.assertEqual(self.storage.head_video.call_count, 1)
 
     def test_composite_fk_rejects_upload_from_another_existing_lesson(self):
@@ -262,11 +358,58 @@ class PipelineTests(unittest.TestCase):
             service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.assertIsNone(self.lesson.processed_video_key)
 
+    def test_missing_duration_metadata_does_not_publish_video_output(self):
+        run = self.transcode()
+        self.mc.get_job.return_value = {"Status": "COMPLETE", "InputDetails": [{}]}
+        with self.assertRaisesRegex(service.PipelineError, "OUTPUT_DURATION_UNAVAILABLE"):
+            service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+        self.assertIsNone(self.lesson.processed_video_key)
+
+    def test_matching_output_duration_is_selected_without_assuming_first_output(self):
+        run = self.transcode()
+        destination = f"s3://{BUCKET}/{run.output_key.removesuffix('_720p.mp4')}"
+        self.mc.get_job.return_value = {
+            "Status": "COMPLETE",
+            "Settings": {
+                "OutputGroups": [{
+                    "OutputGroupSettings": {
+                        "FileGroupSettings": {"Destination": destination},
+                    },
+                    "Outputs": [
+                        {"NameModifier": "_thumbnail"},
+                        {"NameModifier": "_720p"},
+                    ],
+                }],
+            },
+            "OutputGroupDetails": [{
+                "OutputDetails": [
+                    {"DurationInMs": 1},
+                    {"DurationInMs": 12050},
+                ],
+            }],
+        }
+        service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+        self.assertEqual(self.lesson.duration_seconds, 13)
+
+    def test_complete_job_saves_duration_for_the_matching_processed_output(self):
+        run = self.transcode()
+        self.complete_job(run, duration_ms=119_000)
+
+        result = service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
+
+        self.assertEqual(result, {"video_ready": True, "ai_status": "PENDING"})
+        self.mc.get_job.assert_called_once_with(run.job_id)
+        self.assertEqual(self.lesson.processed_video_key, run.output_key)
+        self.assertEqual(self.lesson.duration_seconds, 119)
+        self.assertEqual(run.state, "VIDEO_READY")
+
     def test_video_ready_keeps_processing_and_ai_fields_empty(self):
         run = self.transcode()
+        self.complete_job(run)
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
         self.assertEqual(run.state, "VIDEO_READY")
         self.assertEqual(self.lesson.processed_video_key, run.output_key)
+        self.assertEqual(self.lesson.duration_seconds, 13)
         self.assertEqual(self.lesson.status, "PROCESSING")
         for proof in ({"completed": True, "run_id": run.id}, {"completed": False, "run_id": run.id}):
             with self.assertRaises(Exception):
@@ -275,12 +418,28 @@ class PipelineTests(unittest.TestCase):
 
     def test_ai_review_requires_current_proof_and_persisted_content(self):
         run = self.transcode()
+        self.complete_job(run)
         service.verify_output(self.db, run.id, OWNER, self.storage, self.mc)
-        self.lesson.transcript_json = {"segments": [{"text": "real worker fixture"}]}
+        self.lesson.transcript_json = {
+            "run_id": run.id,
+            "job_id": f"learncloud-k5-{run.id}",
+            "source": "aws_transcribe",
+            "text": "real worker fixture",
+            "segments": [{"text": "real worker fixture"}],
+        }
         self.lesson.summary, self.lesson.key_concepts_json = "worker fixture", ["concept"]
         with self.assertRaises(service.PipelineError):
             service.finalize_ai(self.db, run.id, OWNER, {"completed": True, "run_id": "stale"})
-        service.finalize_ai(self.db, run.id, OWNER, {"completed": True, "run_id": run.id})
+        quiz = SimpleNamespace(id=10, is_approved=False)
+        with (
+            patch.object(service.review_repo, "get_quiz", return_value=quiz),
+            patch.object(service.review_repo, "get_questions", return_value=[object()]),
+            patch.object(service.review_repo, "get_flashcards", return_value=[object()]),
+        ):
+            service.finalize_ai(
+                self.db, run.id, OWNER,
+                {"completed": True, "run_id": run.id},
+            )
         self.assertEqual(self.lesson.status, "REVIEW_REQUIRED")
         self.assertEqual(self.course.status, "DRAFT")
         self.assertEqual(service.finalize_ai(self.db, run.id, OWNER, {}), {"status": "REVIEW_REQUIRED"})
@@ -312,7 +471,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(service.fail(self.db, run.id, OWNER), {"recorded": False})
         self.assertEqual(self.lesson.status, "PROCESSING")
         service.submit(self.db, queued.id, OTHER, self.storage, self.mc)
-        self.mc.get_job.return_value = {"Status": "COMPLETE"}
+        self.complete_job(queued)
         service.verify_output(self.db, queued.id, OTHER, self.storage, self.mc)
         newer_key = self.lesson.processed_video_key
         with self.assertRaises(service.PipelineError):
@@ -421,26 +580,36 @@ class PipelineTests(unittest.TestCase):
 
 
 class UploadCompatibilityTests(unittest.TestCase):
-    def test_legacy_upload_shape_and_no_ledger_when_disabled(self):
+    def reservation(self, enabled, fail=False):
         db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
+        storage.has_raw_video_objects.return_value = False
+        db.query.return_value.filter_by.return_value.populate_existing.return_value.limit.return_value.all.return_value = []
         storage.generate_upload_url.return_value = "opaque-test-url"
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", False):
-            result = UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
-        self.assertEqual(set(result), {"upload_url", "object_key", "expires_in", "method", "content_type"})
-        db.add.assert_not_called()
-        db.commit.assert_not_called()
+        if fail:
+            storage.generate_upload_url.side_effect = RuntimeError("signer unavailable")
+        lesson = SimpleNamespace(id=8, status="DRAFT", retry_count=0, raw_video_key=None, processed_video_key=None)
+        with patch.object(settings,"VIDEO_PIPELINE_ENABLED",enabled), \
+             patch.object(UploadService,"_lock",return_value=(lesson,SimpleNamespace(status="DRAFT"))), \
+             patch("app.services.upload_service.ledger_available",return_value=True):
+            if fail:
+                with self.assertRaises(RuntimeError):
+                    UploadService(storage).create_upload_url(db,8,1,"cloud.mp4","video/mp4",100)
+                result = None
+            else:
+                result = UploadService(storage).create_upload_url(db,8,1,"cloud.mp4","video/mp4",100)
+        return db, storage, lesson, result
+
+    def test_ledger_and_conditional_put_also_required_when_pipeline_disabled(self):
+        db, storage, lesson, result = self.reservation(False)
+        db.add.assert_called_once()
+        db.commit.assert_called_once()
+        self.assertEqual(result["required_headers"]["If-None-Match"],"*")
+        self.assertEqual(source_identity(result["object_key"])[1],result["upload_id"])
+        self.assertEqual(lesson.status,"DRAFT")
+        self.assertIsNone(lesson.raw_video_key)
 
     def test_opt_in_upload_registers_intent_before_commit_and_returns_required_headers(self):
-        db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
-        lesson = SimpleNamespace(id=8, section_id=4, status="DRAFT", retry_count=0)
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", True), \
-             patch("app.repositories.lessons_repo.get_by_id", return_value=lesson), \
-             patch("app.repositories.lessons_repo.get_section", return_value=SimpleNamespace(course_id=2)), \
-             patch("app.repositories.courses_repo.lock_by_id", return_value=SimpleNamespace(status="DRAFT", instructor_id=1)), \
-             patch("app.repositories.lessons_repo.lock_by_id", return_value=lesson):
-            result = UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
+        db, storage, lesson, result = self.reservation(True)
         db.add.assert_called_once()
         db.commit.assert_called_once()
         self.assertEqual(result["required_headers"]["If-None-Match"], "*")
@@ -448,17 +617,7 @@ class UploadCompatibilityTests(unittest.TestCase):
         self.assertEqual(lesson.status, "DRAFT")
 
     def test_opt_in_signer_failure_rolls_back_intent(self):
-        db, storage = Mock(), Mock()
-        db.execute.return_value.first.return_value = SimpleNamespace(id=8)
-        storage.generate_upload_url.side_effect = RuntimeError("signer unavailable")
-        lesson = SimpleNamespace(id=8, section_id=4, status="DRAFT", retry_count=0)
-        with patch.object(settings, "VIDEO_PIPELINE_ENABLED", True), \
-             patch("app.repositories.lessons_repo.get_by_id", return_value=lesson), \
-             patch("app.repositories.lessons_repo.get_section", return_value=SimpleNamespace(course_id=2)), \
-             patch("app.repositories.courses_repo.lock_by_id", return_value=SimpleNamespace(status="DRAFT", instructor_id=1)), \
-             patch("app.repositories.lessons_repo.lock_by_id", return_value=lesson):
-            with self.assertRaises(RuntimeError):
-                UploadService(storage).create_upload_url(db, 8, 1, "cloud.mp4", "video/mp4", 100)
+        db, storage, lesson, result = self.reservation(True,fail=True)
         db.commit.assert_not_called()
         db.rollback.assert_called_once()
 
@@ -474,9 +633,97 @@ class InfrastructureTests(unittest.TestCase):
             self.assertTrue(all(t in states for t in targets), name)
             self.assertFalse(state.get("End") and "Next" in state)
         self.assertNotIn("Retry", states["SubmitMediaConvert"])
+        claim_choices = {
+            choice["StringEquals"]: choice["Next"]
+            for choice in states["ClaimDecision"]["Choices"]
+        }
+        self.assertEqual(claim_choices, {
+            "START": "InitPolls",
+            "IGNORE": "DuplicateIgnored",
+        })
+        self.assertEqual(states["ClaimDecision"]["Default"], "InvalidUpload")
         self.assertEqual(states["AIEnabled"]["Default"], "VideoReadyAIPending")
+        for state_name in (
+            "StartAITranscription", "PollAITranscription", "GenerateAIContent",
+        ):
+            state = states[state_name]
+            self.assertEqual(state["Parameters"]["FunctionName"], "${AI_WORKER_ARN}")
+            self.assertIn("AIWorkerTemporaryError", state["Retry"][0]["ErrorEquals"])
+        self.assertEqual(
+            states["StartAITranscription"]["Parameters"]["Payload"]["action"],
+            "start_transcription",
+        )
+        self.assertEqual(
+            states["PollAITranscription"]["Parameters"]["Payload"]["action"],
+            "poll_transcription",
+        )
+        self.assertEqual(
+            states["GenerateAIContent"]["Parameters"]["Payload"]["action"],
+            "generate_content",
+        )
+        self.assertGreater(states["GenerateAIContent"]["TimeoutSeconds"], 600)
+        self.assertEqual(
+            states["ValidateAIAndRequireReview"]["Parameters"]["FunctionName"],
+            "${PIPELINE_LAMBDA_ARN}",
+        )
         self.assertEqual(states["VideoReadyAIPending"]["Type"], "Succeed")
         self.assertEqual(states["PipelineFailed"]["Type"], "Fail")
+
+    def test_k5_config_is_disabled_and_uses_least_privilege_templates(self):
+        env = json.loads((ROOT / "infrastructure/lambda/ai-worker-env.example.json").read_text())
+        self.assertEqual(env["Variables"]["AI_WORKER_ENABLED"], "false")
+        self.assertEqual(env["Variables"]["VIDEO_AI_ENABLED"], "false")
+        self.assertEqual(env["Variables"]["AWS_REGION"], "ap-southeast-1")
+        function = json.loads(
+            (ROOT / "infrastructure/lambda/ai-worker-function.example.json").read_text()
+        )
+        self.assertEqual(function["Runtime"], "python3.12")
+        self.assertEqual(function["Architectures"], ["x86_64"])
+        self.assertEqual(function["Handler"], "ai_worker_handler.handler")
+        policy = json.loads(
+            (ROOT / "infrastructure/iam/lambda-ai-worker-permissions.json").read_text()
+        )
+        actions = set()
+        for statement in policy["Statement"]:
+            value = statement["Action"]
+            actions.update(value if isinstance(value, list) else [value])
+        self.assertTrue({
+            "transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob",
+            "bedrock:InvokeModel", "s3:GetObject", "s3:PutObject",
+            "logs:CreateLogStream", "logs:PutLogEvents",
+        }.issubset(actions))
+        self.assertFalse(any(action.endswith(":*") for action in actions))
+        start = next(
+            statement for statement in policy["Statement"]
+            if statement["Action"] == "transcribe:StartTranscriptionJob"
+        )
+        self.assertEqual(start["Resource"], "*")
+        self.assertEqual(
+            start["Condition"]["StringEquals"]["transcribe:OutputBucketName"],
+            "learncloud-videos-mentorcloud",
+        )
+        self.assertEqual(
+            start["Condition"]["StringLike"]["transcribe:OutputKey"],
+            "ai-transcripts/*/transcript.json",
+        )
+        bedrock = [
+            statement for statement in policy["Statement"]
+            if statement["Action"] == ["bedrock:InvokeModel"]
+        ]
+        profile_arn = (
+            "arn:aws:bedrock:ap-southeast-1:${ACCOUNT_ID}:inference-profile/"
+            "apac.amazon.nova-micro-v1:0"
+        )
+        self.assertEqual(bedrock[0]["Resource"], profile_arn)
+        self.assertEqual(
+            bedrock[1]["Resource"],
+            "arn:aws:bedrock:*::foundation-model/amazon.nova-micro-v1:0",
+        )
+        self.assertEqual(
+            bedrock[1]["Condition"]["StringEquals"]
+            ["bedrock:InferenceProfileArn"],
+            profile_arn,
+        )
 
     def test_all_json_files_parse_and_raw_filter_excludes_processed(self):
         from fnmatch import fnmatchcase

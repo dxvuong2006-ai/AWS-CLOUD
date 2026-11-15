@@ -1,0 +1,40 @@
+{
+  "FunctionName": "learncloud-ai-worker",
+  "Runtime": "python3.12",
+  "Architectures": [
+    "x86_64"
+  ],
+  "Handler": "ai_worker_handler.handler",
+  "Role": "arn:aws:iam::${ACCOUNT_ID}:role/learncloud-ai-worker-role",
+  "Timeout": 600,
+  "MemorySize": 1024,
+  "EphemeralStorage": {
+    "Size": 512
+  },
+  "VpcConfig": {
+    "SubnetIds": [
+      "${PRIVATE_SUBNET_A}",
+      "${PRIVATE_SUBNET_B}"
+    ],
+    "SecurityGroupIds": [
+      "${AI_WORKER_SECURITY_GROUP}"
+    ]
+  },
+  "Environment": {
+    "Variables": {
+      "AI_WORKER_ENABLED": "false",
+      "VIDEO_AI_ENABLED": "false",
+      "APP_ENV": "production",
+      "AWS_REGION": "ap-southeast-1",
+      "S3_BUCKET": "learncloud-videos-mentorcloud",
+      "TRANSCRIBE_OUTPUT_BUCKET": "learncloud-videos-mentorcloud",
+      "TRANSCRIBE_OUTPUT_PREFIX": "ai-transcripts",
+      "TRANSCRIBE_LANGUAGE_CODE": "vi-VN",
+      "AI_TRANSCRIPT_MAX_BYTES": "2000000",
+      "AI_TRANSCRIPT_MAX_CHARACTERS": "400000",
+      "BEDROCK_MODEL_ID": "apac.amazon.nova-micro-v1:0",
+      "AI_QUIZ_QUESTION_COUNT": "3",
+      "DATABASE_URL": "<inject-with-approved-secret-process>"
+    }
+  }
+}

@@ -15,10 +15,33 @@ sau vào `schema_migrations`:
 | `0001` | LearnCloud core schema. |
 | `0002` | Flashcard, approval state và các constraint/trigger integrity. |
 
-Repository hiện **không có** file `0003_reconcile_legacy_schema.sql` từng được
-nhắc trong tài liệu. Không coi `0003` là đã áp dụng hoặc tự tạo version giả.
+Repository có `0003_reconcile_legacy_schema.sql`. Bốn file lịch sử cùng dùng version
+`0004`; không được dùng runner theo version cho tới khi đã chọn kế hoạch reconcile
+phù hợp với registry/schema đích. `0010_reconcile_0004_consistency.sql` hội tụ DDL
+Backend cần nhưng không sửa bản ghi lịch sử `0004`.
 `V1__add_password_hash_to_users.sql` là script legacy riêng, không theo bộ chạy
 version bốn chữ số bên dưới.
+
+`V3__add_tutor_remediation_fields.sql` là migration lịch sử kiểu Flyway nên
+runner PowerShell bên dưới bỏ qua tên file này. `0006_screen_workflows.sql` bổ
+sung `workflow_state`, còn `0012_reconcile_tutor_remediation_columns.sql` là
+migration numbered hiện hành để hội tụ đủ ba cột TutorSession trên cả database
+bootstrap mới và database nâng cấp cũ.
+
+`0013_sync_progress_completion_on_duration_change.sql` đồng bộ các cờ
+`lesson_progress.completed` đã tồn tại và cài trigger để tính lại khi
+`lessons.duration_seconds` thay đổi. Migration giữ ngưỡng 10% và đặt cờ sai khi
+duration là `NULL` hoặc `0`.
+
+`0014_secure_progress_duration_trigger.sql` secures the 0013 trigger for K4:
+the Lambda runtime may update `lessons.duration_seconds` but receives no direct
+access to `lesson_progress`. It retains the existing trusted function owner
+`learncloud_admin`, uses a fixed schema-qualified body and safe `search_path`,
+and does not create or transfer roles. The owner may have broader rights than
+the trigger needs, so keep it trusted and the function body static. Review the
+migration preflight and run
+`backend/tests/integration/test_progress_trigger_permissions_postgres.py` on an
+isolated PostgreSQL 16 database before considering it for deployment.
 
 `0004_remove_approved_lesson_status.sql` loại `APPROVED` khỏi CHECK Lesson và
 đổi dữ liệu `APPROVED` còn sót thành `PUBLISHED`. Script chưa được tự áp dụng.
@@ -114,9 +137,21 @@ Chạy từ root repository. Script chỉ chạy các file chưa có version tro
 ```powershell
 $psql = @("exec", "-i", "learncloud-db", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-U", "learncloud", "-d", "learncloud")
 
-Get-ChildItem .\database\migrations -Filter "[0-9][0-9][0-9][0-9]_*.sql" |
-  Where-Object { $_.Name -notlike "*.down.sql" } |
-  Sort-Object Name |
+$migrationFiles = Get-ChildItem .\database\migrations -File |
+  Where-Object { $_.Name -match '^\d{4}_.+\.sql$' -and $_.Name -notlike "*.down.sql" } |
+  Sort-Object Name
+
+$duplicateVersions = $migrationFiles |
+  Group-Object { $_.Name.Substring(0, 4) } |
+  Where-Object Count -gt 1
+if ($duplicateVersions) {
+  $details = ($duplicateVersions | ForEach-Object {
+    "$($_.Name): $($_.Group.Name -join ', ')"
+  }) -join '; '
+  throw "Duplicate migration versions require an explicit reviewed plan: $details"
+}
+
+$migrationFiles |
   ForEach-Object {
     $version = $_.Name.Substring(0, 4)
     $applied = docker @psql -tAc "SELECT 1 FROM schema_migrations WHERE version = '$version'"
@@ -134,6 +169,12 @@ docker exec learncloud-db psql -U learncloud -d learncloud -c "SELECT version, d
 ```
 
 Chạy script lần thứ hai không được áp dụng thêm migration nào.
+
+`0015_user_account_status.sql` requires the canonical 0014 registry row and the
+confirmed `learncloud_admin` LOGIN used by the current local Backend configuration.
+It grants only missing SELECT/UPDATE privileges on `users.status`; it does not
+create roles or grant user-table access to video/AI workers. This source change
+does not apply the migration.
 
 ## 5. Rollback và phục hồi
 

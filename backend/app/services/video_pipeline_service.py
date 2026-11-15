@@ -1,21 +1,23 @@
 """Internal pipeline service. Never invoked automatically at import/startup.
 
 All claims use PostgreSQL row locks and a durable ledger. No DB schema creation.
-S3 EventBridge is the sole initial-upload dispatcher; confirmation is the verified
-S3 write itself, not an unimplemented confirm-upload endpoint.
+S3 EventBridge is the sole initial-upload dispatcher. API confirmation may attach
+verified RAW metadata but never starts a workflow or advances its generation.
 """
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
+import math
 import re
 
 from app.adapters.video.base import ProcessingReceipt, ProcessorDispatchError, VideoProcessingRequest
 from app.adapters.video.mediaconvert import MediaConvertError, output_key, source_identity
 from app.config import settings
 from app.models.video_pipeline import VideoPipelineRun, VideoUpload
-from app.repositories import courses_repo, lessons_repo, video_pipeline_repo as repo
-from app.services.review_service import validate_review_content
+from app.repositories import (
+    courses_repo, lessons_repo, review_repo, video_pipeline_repo as repo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,7 @@ def register_upload(db, *, upload_id, lesson_id, key, content_type, size_bytes):
     db.flush()
 
 
-def _lock_lesson(db, lesson_id):
+def _lock_lesson_and_course(db, lesson_id):
     lesson = lessons_repo.get_by_id(db, lesson_id)
     if lesson is None:
         raise PipelineError("LESSON_NOT_FOUND")
@@ -54,7 +56,14 @@ def _lock_lesson(db, lesson_id):
         raise PipelineError("SECTION_NOT_FOUND")
     course = courses_repo.lock_by_id(db, section.course_id)
     lesson = lessons_repo.lock_by_id(db, lesson_id)
-    if course is None or lesson is None or course.status != "DRAFT":
+    if course is None or lesson is None:
+        raise PipelineError("COURSE_NOT_DRAFT")
+    return lesson, course
+
+
+def _lock_lesson(db, lesson_id):
+    lesson, course = _lock_lesson_and_course(db, lesson_id)
+    if course.status != "DRAFT":
         raise PipelineError("COURSE_NOT_DRAFT")
     return lesson
 
@@ -94,12 +103,79 @@ def _view(run):
     return {"decision": "START", "run_id": run.id, "ai_enabled": settings.VIDEO_AI_ENABLED}
 
 
+def _ignore(reason, *, lesson_id, run_id=None):
+    """Return the stable duplicate response and log only safe identifiers."""
+    logger.info(
+        "video_pipeline_claim_ignored reason=%s lesson_id=%s run_id=%s",
+        reason,
+        lesson_id,
+        run_id or "none",
+    )
+    return {"decision": "IGNORE"}
+
+
 def _clear_previous_content(lesson):
     # New generation must never inherit AI approval evidence from an older run.
     lesson.processed_video_key = None
     lesson.transcript_json = None
     lesson.summary = None
     lesson.key_concepts_json = []
+
+
+def _output_key(path: str) -> str:
+    if path.startswith("s3://"):
+        path = path.split("/", 3)[-1]
+    return path.lstrip("/")
+
+
+def _output_path(destination: str, name_modifier: str) -> str:
+    destination = destination.rstrip("/")
+    if destination.lower().endswith(".mp4"):
+        return f"{destination[:-4]}{name_modifier}.mp4"
+    return f"{destination}{name_modifier}.mp4"
+
+
+def _duration_seconds_from_job(job, expected_output_key: str) -> int | None:
+    """Find the matching MediaConvert output duration, conservatively."""
+    if not isinstance(job, dict):
+        return None
+    settings = job.get("Settings")
+    output_groups = settings.get("OutputGroups") if isinstance(settings, dict) else None
+    detail_groups = job.get("OutputGroupDetails")
+    if not isinstance(output_groups, list) or not isinstance(detail_groups, list):
+        return None
+
+    duration_ms = None
+    expected_output_key = _output_key(expected_output_key)
+    for group, details in zip(output_groups, detail_groups):
+        if not isinstance(group, dict) or not isinstance(details, dict):
+            continue
+        group_settings = group.get("OutputGroupSettings")
+        file_settings = (
+            group_settings.get("FileGroupSettings")
+            if isinstance(group_settings, dict)
+            else None
+        )
+        destination = file_settings.get("Destination") if isinstance(file_settings, dict) else None
+        outputs = group.get("Outputs")
+        output_details = details.get("OutputDetails")
+        if not isinstance(destination, str) or not isinstance(outputs, list) or not isinstance(output_details, list):
+            continue
+        for output, output_detail in zip(outputs, output_details):
+            if not isinstance(output, dict) or not isinstance(output_detail, dict):
+                continue
+            candidate = _output_path(destination, output.get("NameModifier", ""))
+            if _output_key(candidate) == expected_output_key:
+                duration_ms = output_detail.get("DurationInMs")
+                break
+        if duration_ms is not None:
+            break
+
+    if isinstance(duration_ms, bool) or not isinstance(duration_ms, (int, float)):
+        return None
+    if not math.isfinite(duration_ms) or duration_ms <= 0:
+        return None
+    return max(1, math.ceil(duration_ms / 1000))
 
 
 def claim(db, payload, execution_arn, storage):
@@ -112,16 +188,38 @@ def claim(db, payload, execution_arn, storage):
         raise PipelineError("EVENT_IDENTITY_MISMATCH")
     if payload.get("kind") not in {"upload", "retry"}:
         raise PipelineError("INVALID_EVENT_KIND")
-    lesson = _lock_lesson(db, lesson_id)
+    # Lock first so the idempotency decision is serialized with publication,
+    # retries and competing upload claims.  Do not require DRAFT until after
+    # the issued-upload and existing-run checks: a duplicate delivery must not
+    # turn a previously accepted upload into COURSE_NOT_DRAFT.
+    lesson, course = _lock_lesson_and_course(db, lesson_id)
     upload = repo.get_upload(db, key)
     if upload is None or upload.id != upload_id or upload.lesson_id != lesson_id:
         raise PipelineError("UNISSUED_UPLOAD")
     if payload["kind"] == "upload":
         run = repo.run_for_attempt(db, upload.id, 0)
         if run is not None:
-            return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
-        if lesson.status != "DRAFT" or lesson.retry_count != 0:
-            return {"decision": "IGNORE"}
+            return _view(run) if run.execution_arn == execution_arn else _ignore(
+                "UPLOAD_ALREADY_CLAIMED", lesson_id=lesson_id, run_id=run.id,
+            )
+        if lesson.status not in {"DRAFT", "UPLOADED"}:
+            return _ignore("INITIAL_LESSON_STATE", lesson_id=lesson_id)
+        if lesson.retry_count != 0:
+            return _ignore("INITIAL_ATTEMPT_MISMATCH", lesson_id=lesson_id)
+        if lesson.raw_video_key not in (None, "", key):
+            return _ignore("SOURCE_KEY_NOT_CURRENT", lesson_id=lesson_id)
+        if lesson.processed_video_key and lesson.raw_video_key != key:
+            return _ignore("PROCESSED_SOURCE_CONFLICT", lesson_id=lesson_id)
+        # UPLOADED is written by confirm-upload when the API Lambda does not
+        # dispatch the pipeline itself. Accept it only as an exact, confirmed
+        # generation: the issued ledger key must already be attached and no
+        # processed output may exist. DRAFT retains its existing event-first
+        # behavior where raw_video_key may still be empty.
+        if lesson.status == "UPLOADED" and (
+                lesson.raw_video_key != key or lesson.processed_video_key):
+            return _ignore("UPLOADED_GENERATION_MISMATCH", lesson_id=lesson_id)
+        if course.status != "DRAFT":
+            raise PipelineError("COURSE_NOT_DRAFT")
         etag = _etag(payload.get("etag"))
         try:
             etag = _head_source(storage, upload, etag=etag, initial=True)
@@ -147,11 +245,19 @@ def claim(db, payload, execution_arn, storage):
         run = repo.get_run(db, payload.get("run_id"))
         if (run is None or run.upload_id != upload.id or run.lesson_id != lesson_id
                 or lesson.raw_video_key != key or run.attempt != lesson.retry_count):
-            return {"decision": "IGNORE"}
+            return _ignore(
+                "RETRY_IDENTITY_MISMATCH",
+                lesson_id=lesson_id,
+                run_id=getattr(run, "id", None),
+            )
         if run.execution_arn:
-            return _view(run) if run.execution_arn == execution_arn else {"decision": "IGNORE"}
+            return _view(run) if run.execution_arn == execution_arn else _ignore(
+                "RETRY_ALREADY_CLAIMED", lesson_id=lesson_id, run_id=run.id,
+            )
         if lesson.status != "PROCESSING" or run.state != "QUEUED":
-            return {"decision": "IGNORE"}
+            return _ignore("RETRY_STATE_MISMATCH", lesson_id=lesson_id, run_id=run.id)
+        if course.status != "DRAFT":
+            raise PipelineError("COURSE_NOT_DRAFT")
         try:
             # A failed initial validation is not confirmation. Check original S3
             # write time again on retry; delayed delivery is fine, an expired write
@@ -242,8 +348,12 @@ def poll(db, run_id, execution_arn, mediaconvert):
 
 def verify_output(db, run_id, execution_arn, storage, mediaconvert):
     run, lesson, upload = _owned(db, run_id, execution_arn)
-    if not run.job_id or mediaconvert.get_job(run.job_id).get("Status") != "COMPLETE":
+    job = mediaconvert.get_job(run.job_id) if run.job_id else {}
+    if job.get("Status") != "COMPLETE":
         raise PipelineError("JOB_NOT_COMPLETE")
+    duration_seconds = _duration_seconds_from_job(job, run.output_key)
+    if duration_seconds is None:
+        raise PipelineError("OUTPUT_DURATION_UNAVAILABLE")
     _head_source(storage, upload, etag=run.source_etag)
     metadata = storage.head_video(run.output_key)
     if not isinstance(metadata.get("ContentLength"), int) or metadata["ContentLength"] <= 0:
@@ -254,6 +364,7 @@ def verify_output(db, run_id, execution_arn, storage, mediaconvert):
     run.state = "VIDEO_READY"
     run.safe_to_retry = True
     lesson.processed_video_key = run.output_key
+    lesson.duration_seconds = duration_seconds
     db.commit()
     return {"video_ready": True, "ai_status": "PENDING"}
 
@@ -266,12 +377,36 @@ def finalize_ai(db, run_id, execution_arn, proof):
                 and lesson.processed_video_key == completed.output_key
                 and lesson.status in {"REVIEW_REQUIRED", "PUBLISHED"}):
             return {"status": "REVIEW_REQUIRED"}  # previous finalization committed; no mutation
+    # Serialize the proof check with instructor review writes.  K5 persistence
+    # and Review use the same section -> course -> lesson lock order.
+    pending = repo.get_run(db, run_id) if isinstance(run_id, str) else None
+    if pending is not None and pending.execution_arn == execution_arn:
+        review_repo.lock_section(db, pending.lesson_id)
     run, lesson, _ = _owned(db, run_id, execution_arn)
     if (run.state != "VIDEO_READY" or not isinstance(proof, dict)
             or proof.get("completed") is not True or proof.get("run_id") != run_id
             or lesson.processed_video_key != run.output_key):
         raise PipelineError("AI_NOT_COMPLETE")
-    validate_review_content(lesson)
+    transcript = lesson.transcript_json
+    quiz = review_repo.get_quiz(db, lesson.section_id)
+    if (
+        not isinstance(transcript, dict)
+        or transcript.get("run_id") != run.id
+        or transcript.get("job_id") != f"learncloud-k5-{run.id}"
+        or transcript.get("source") != "aws_transcribe"
+        or not isinstance(transcript.get("text"), str)
+        or not transcript["text"].strip()
+        or not isinstance(transcript.get("segments"), list)
+        or not isinstance(lesson.summary, str)
+        or not lesson.summary.strip()
+        or not isinstance(lesson.key_concepts_json, list)
+        or not lesson.key_concepts_json
+        or quiz is None
+        or quiz.is_approved is not False
+        or not review_repo.get_questions(db, quiz.id)
+        or not review_repo.get_flashcards(db, lesson.id)
+    ):
+        raise PipelineError("AI_NOT_COMPLETE")
     run.state = "COMPLETE"
     lesson.status = "REVIEW_REQUIRED"
     lesson.error_message = None

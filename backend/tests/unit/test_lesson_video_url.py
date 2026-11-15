@@ -12,13 +12,14 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 import boto3
 import httpx
+from fastapi import HTTPException, Request
 from botocore.config import Config
 from botocore.exceptions import EndpointConnectionError, NoCredentialsError, ProfileNotFound, SSLError
 from botocore.stub import Stubber
 
 from app.config import Settings, settings
 from app import config
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
 from app.main import app
 
 
@@ -28,12 +29,23 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.stack.close)
         self.user = SimpleNamespace(id=1, role="INSTRUCTOR")
         self.db = Mock()
+        self.db.info = {"upload_ledger_available": True}
         self.db.query.return_value.filter.return_value.first.return_value = self.user
+        self.db.query.return_value.filter_by.return_value.populate_existing.return_value.limit.return_value.all.return_value = []
+        self.db.query.return_value.filter.return_value.populate_existing.return_value.limit.return_value.all.return_value = []
         app.dependency_overrides[get_db] = lambda: self.db
+        def current_user(request: Request):
+            demo_user = request.headers.get("X-Demo-User")
+            if demo_user == "invalid":
+                raise HTTPException(status_code=400, detail="Invalid demo user")
+            if demo_user == "999999":
+                raise HTTPException(status_code=401, detail="Authentication required")
+            return self.user
+        app.dependency_overrides[get_current_user] = current_user
         self.addCleanup(app.dependency_overrides.clear)
         self.lesson = SimpleNamespace(
             id=8, section_id=4, raw_video_key="lessons/8/raw/test video.mp4",
-            processed_video_key=None,
+            processed_video_key=None, status="PUBLISHED", retry_count=0,
         )
         self.course = SimpleNamespace(id=2, instructor_id=1, status="PUBLISHED")
         self.repo = {}
@@ -46,6 +58,15 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
             self.repo[name] = self.stack.enter_context(patch(
                 f"app.repositories.lessons_repo.{name}", return_value=value
             ))
+        self.stack.enter_context(patch(
+            "app.services.unlock_service.assert_section_unlocked"
+        ))
+        self.stack.enter_context(patch(
+            "app.repositories.courses_repo.lock_by_id", return_value=self.course
+        ))
+        self.stack.enter_context(patch(
+            "app.repositories.lessons_repo.lock_by_id", return_value=self.lesson
+        ))
         self.stack.enter_context(patch.object(settings, "APP_ENV", "development"))
         self.stack.enter_context(patch.object(settings, "ALLOW_RAW_VIDEO_PLAYBACK", True))
         self.stack.enter_context(patch.object(settings, "VIDEO_URL_EXPIRES_IN", 900))
@@ -304,6 +325,14 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(unquote(urlsplit(url).path), "/lessons/8/raw/upload-test.mp4")
 
     async def test_upload_api_still_returns_sigv4_put(self):
+        self.course.status = "DRAFT"
+        self.lesson.status = "DRAFT"
+        self.lesson.raw_video_key = None
+        self.stub.add_response("list_objects_v2", {"IsTruncated": False}, {
+            "Bucket": settings.S3_BUCKET,
+            "Prefix": "lessons/8/raw/",
+            "MaxKeys": 2,
+        })
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post("/lessons/8/upload-url", json={
                 "filename": "input.mp4", "content_type": "video/mp4", "file_size": 1024,
@@ -314,7 +343,7 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["content_type"], "video/mp4")
         self.assertTrue(payload["object_key"].startswith("lessons/8/raw/"))
         self.assertEqual(parse_qs(urlsplit(payload["upload_url"]).query)["X-Amz-Algorithm"], ["AWS4-HMAC-SHA256"])
-        self.assertEqual(self.db.execute.call_args.args[1], {"lesson_id": 8, "instructor_id": 1})
+        self.db.query.assert_called()
 
     async def test_upload_api_still_requires_instructor(self):
         self.user.role = "STUDENT"
@@ -329,7 +358,7 @@ class LessonVideoUrlTests(unittest.IsolatedAsyncioTestCase):
         response = await self.get("/openapi.json")
         operation = response.json()["paths"]["/lessons/{lesson_id}/video-url"]["get"]
         self.assertIn("200", operation["responses"])
-        self.assertTrue(any(p["name"] == "X-Demo-User" for p in operation["parameters"]))
+        self.assertIn({"HTTPBearer": []}, operation["security"])
         schema = response.json()["components"]["schemas"]["LessonVideoUrlResponse"]
         self.assertEqual(set(schema["required"]), {"lesson_id", "video_url", "expires_in", "content_type"})
 

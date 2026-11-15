@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.section import Section
-from app.repositories import courses_repo, sections_repo
+from app.repositories import courses_repo, lessons_repo, sections_repo
 
 
 class CourseNotFoundError(Exception):
@@ -44,6 +44,12 @@ def list_sections_for_course(
         raise CourseNotFoundError("Course not found.")
 
     is_owner = role == "INSTRUCTOR" and course.instructor_id == user_id
+    if role == "INSTRUCTOR" and not is_owner:
+        raise CourseAccessDeniedError("You do not own this course.")
+    if role == "STUDENT" and not lessons_repo.has_enrollment(
+        db, student_id=user_id, course_id=course.id
+    ):
+        raise CourseAccessDeniedError("You are not enrolled in this course.")
     if not is_owner and str(course.status).upper() != "PUBLISHED":
         # Hide draft courses from non-owners.
         raise CourseNotFoundError("Course not found.")

@@ -20,7 +20,7 @@ export default function CheckpointHistory({ quizId, refreshKey }) {
     <h2>Lịch sử làm bài</h2>
     {loading ? <p>Đang tải lịch sử...</p> : error ? <p role="alert">Không tải được lịch sử. <button onClick={() => setRetry(v => v + 1)}>Thử lại</button></p>
       : !rows.length ? <p>Chưa có lượt làm ở trang này.</p> : <ul>{rows.map(row => <li key={row.id}>
-        <Link to={`/checkpoint-results/${encodeURIComponent(quizId)}/${encodeURIComponent(row.id)}`}>Lượt {row.attempt_number}: {row.score_percent}% · {row.passed ? "Đạt" : "Chưa đạt"}</Link>
+        <Link className={`checkpoint-history-link ${row.passed ? "is-passed" : "is-failed"}`} to={`/checkpoint-results/${encodeURIComponent(quizId)}/${encodeURIComponent(row.id)}`}>Lượt {row.attempt_number}: {row.score_percent}% · <span>{row.passed ? "Đạt" : "Chưa đạt"}</span></Link>
       </li>)}</ul>}
     <div className="checkpoint-actions">
       <button className="btn-secondary" disabled={loading || offset === 0} onClick={() => setOffset(v => Math.max(0, v - 20))}>Trang trước</button>

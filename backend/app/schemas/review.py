@@ -73,7 +73,9 @@ class DraftContent(ReviewDTO):
     title: Title
     summary: Text
     key_concepts: list[KeyConcept] = Field(min_length=1)
-    flashcards: list[FlashcardDraft] = Field(default_factory=list)
+    # Required on full PUTs so an omitted field can never be mistaken for an
+    # intentional delete. PATCH merges omitted fields before validation.
+    flashcards: list[FlashcardDraft]
     quiz_title: Title
     questions: list[ReviewQuestion] = Field(min_length=1)
 

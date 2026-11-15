@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
+sys.path.insert(0, str(root.parent))  # ai_pipeline is a repository-root package.
 os.environ.update({
     "DATABASE_URL": "sqlite:///:memory:",
     "JWT_SECRET_KEY": "offline-unit-test-placeholder-000000000000",

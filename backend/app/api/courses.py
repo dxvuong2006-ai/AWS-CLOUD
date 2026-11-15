@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_instructor
-from app.schemas.course import CourseCreateRequest, CourseResponse, CourseUpdateRequest
+from app.schemas.course import CourseCreateRequest, CourseResponse, CourseUpdateRequest, CourseLessonResponse
+from app.services.upload_service import pending_upload_metadata
 from app.services import course_service
 from app.repositories import courses_repo, sections_repo
 from sqlalchemy import func, select
@@ -66,10 +67,11 @@ def list_instructor_courses(
                     "course_id": section.course_id,
                     "title": section.title,
                     "position": section.position,
-                    "lessons": list(db.scalars(
+                    "lessons": [CourseLessonResponse.model_validate(lesson).model_copy(
+                        update=pending_upload_metadata(db, lesson)) for lesson in db.scalars(
                         select(Lesson).where(Lesson.section_id == section.id)
                         .order_by(Lesson.position.asc(), Lesson.id.asc())
-                    ).all()),
+                    ).all()],
                 }
                 for section in db.scalars(
                     select(Section).where(Section.course_id == course.id)

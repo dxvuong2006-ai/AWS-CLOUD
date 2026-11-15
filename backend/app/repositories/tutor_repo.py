@@ -56,15 +56,18 @@ def get_lesson(db, lesson_id):
     return db.query(Lesson).filter(Lesson.id == lesson_id).first()
 
 
-def save_session(db, session, explanation):
+def save_session(db, session, explanation, commit=True):
     """Lưu phiên và lời giải trong một giao dịch."""
     try:
         db.add(session)
         db.flush()
         db.add(TutorMessage(session_id=session.id, role="ASSISTANT",
                             content=explanation))
-        db.commit()
-        db.refresh(session)
+        if commit:
+            db.commit()
+            db.refresh(session)
+        else:
+            db.flush()
         return session
     except Exception:
         db.rollback()
@@ -123,4 +126,21 @@ def question_failure_rates(db, course_id):
                 QuizAttempt.quiz_id == Question.quiz_id)
         .group_by(Question.id, Question.question, Question.topic)
         .all()
+    )
+
+
+def get_published_section_lessons(db, lesson_id):
+    """Return timestamped Tutor context from all published lessons in a section."""
+    section_id = db.query(Lesson.section_id).filter(
+        Lesson.id == lesson_id,
+    ).scalar()
+    if section_id is None:
+        return []
+    return (
+        db.query(Lesson)
+        .filter(
+            Lesson.section_id == section_id,
+            Lesson.status == "PUBLISHED",
+        )
+        .order_by(Lesson.position, Lesson.id).all()
     )

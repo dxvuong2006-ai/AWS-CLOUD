@@ -11,7 +11,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:browser": "node tests/browser-smoke.cjs"
+    "test:browser": "node tests/browser-smoke.cjs",
+    "test:auth-browser": "node tests/dual-auth-browser.cjs"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
   },
   "homepage": "https://github.com/dxvuong2006-ai/AWS-CLOUD#readme",
   "dependencies": {
+    "aws-amplify": "^6.22.2",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4"

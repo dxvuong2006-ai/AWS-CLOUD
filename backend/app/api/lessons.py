@@ -11,8 +11,10 @@ from app.schemas.lesson import (
     LessonProcessingStatusResponse,
 )
 from app.services import lesson_service, processing_service
+from app.services.unlock_service import SectionLockedError
 from app.models.course import Course
 from app.models.section import Section
+from app.services.upload_service import pending_upload_metadata
 
 router = APIRouter(tags=["Lessons"])
 
@@ -74,6 +76,8 @@ def _raise_service_error(exc: Exception) -> None:
         raise HTTPException(status_code=403, detail="Lesson is not available.")
     if isinstance(exc, lesson_service.LessonAccessDeniedError):
         raise HTTPException(status_code=403, detail=str(exc))
+    if isinstance(exc, SectionLockedError):
+        raise HTTPException(status_code=403, detail=str(exc))
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=422, detail=str(exc))
     raise exc
@@ -114,12 +118,13 @@ def get_lesson(
     user: User = Depends(get_current_user),
 ):
     try:
-        return lesson_service.get_lesson_for_user(
+        lesson = lesson_service.get_lesson_for_user(
             db,
             lesson_id,
             user_id=user.id,
             user_role=user.role,
         )
+        return LessonResponse.model_validate(lesson).model_copy(update=pending_upload_metadata(db, lesson))
     except (
         lesson_service.LessonNotFoundError,
         lesson_service.SectionNotFoundError,
@@ -127,6 +132,7 @@ def get_lesson(
         lesson_service.CourseOwnershipError,
         lesson_service.PublishedCourseRequiredError,
         lesson_service.LessonAccessDeniedError,
+        SectionLockedError,
     ) as exc:
         _raise_service_error(exc)
 
@@ -162,6 +168,7 @@ def get_lesson_content(
         lesson_service.CourseNotFoundError,
         lesson_service.PublishedCourseRequiredError,
         lesson_service.LessonAccessDeniedError,
+        SectionLockedError,
     ) as exc:
         _raise_service_error(exc)
 
@@ -195,6 +202,7 @@ def get_lesson_video_url(
         lesson_service.CourseOwnershipError,
         lesson_service.PublishedCourseRequiredError,
         lesson_service.LessonAccessDeniedError,
+        SectionLockedError,
     ) as exc:
         _raise_service_error(exc)
 
@@ -212,7 +220,7 @@ def list_lessons(
     user: User = Depends(get_current_user),
 ):
     try:
-        return lesson_service.list_lessons_for_section(
+        rows = lesson_service.list_lessons_for_section(
             db,
             section_id,
             user_id=user.id,
@@ -220,12 +228,14 @@ def list_lessons(
             skip=skip,
             limit=limit,
         )
+        return [LessonResponse.model_validate(row).model_copy(update=pending_upload_metadata(db, row)) for row in rows]
     except (
         lesson_service.SectionNotFoundError,
         lesson_service.CourseNotFoundError,
         lesson_service.CourseOwnershipError,
         lesson_service.PublishedCourseRequiredError,
         lesson_service.LessonAccessDeniedError,
+        SectionLockedError,
     ) as exc:
         _raise_service_error(exc)
 

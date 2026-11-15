@@ -71,7 +71,7 @@ def test_analytics_counts(db_session, learning_data):
 
 
 
-def test_tutor_and_analytics_endpoints(db_session, learning_data):
+def test_tutor_and_analytics_endpoints(db_session, learning_data, monkeypatch):
     """Kiểm tra route, quyền sở hữu và payload từ phía HTTP."""
     from fastapi.testclient import TestClient
     from app.dependencies import get_db, get_current_user
@@ -79,6 +79,7 @@ def test_tutor_and_analytics_endpoints(db_session, learning_data):
     from app.models.user import User
 
     student, course, attempt = learning_data
+    monkeypatch.delenv("TUTOR_USE_BEDROCK", raising=False)
     instructor = User(name="Instructor", email="week4@example.test",
                       role="INSTRUCTOR")
     db_session.add(instructor)
@@ -99,6 +100,16 @@ def test_tutor_and_analytics_endpoints(db_session, learning_data):
     app.dependency_overrides[get_current_user] = user_override
     try:
         with TestClient(app) as client:
+            response = client.post("/student/remediation", json={
+                "attempt_id": attempt.id,
+                "regenerate": False,
+            })
+            assert response.status_code == 200
+            remediation = response.json()
+            assert remediation["attempt_id"] == attempt.id
+            assert remediation["errors"]
+            assert remediation["practice_questions"]
+
             response = client.post("/tutor/sessions",
                                    json={"attempt_id": attempt.id})
             assert response.status_code == 201
@@ -111,6 +122,16 @@ def test_tutor_and_analytics_endpoints(db_session, learning_data):
                 json={"answers": ["máy chủ"]},
             )
             assert response.json()["remediation_completed"]
+            question = db_session.query(Question).one()
+            lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+            response = client.post("/tutor/remediations", json={
+                "attempt_id": attempt.id,
+                "lesson_id": lesson.id,
+                "question_id": question.id,
+                "selected_option": "bánh",
+            })
+            assert response.status_code == 200
+            assert "correct_answer" not in response.json()["practice_question"]
             assert client.get(
                 f"/instructor/courses/{course.id}/analytics"
             ).status_code == 403
@@ -196,11 +217,20 @@ def test_timestamp_grounding_and_off_topic(db_session, learning_data):
         {"start": 12, "end": 25, "text": "Cloud cung cấp máy chủ."},
         {"start": 28, "end": 35, "text": "AWS là nhà cung cấp."},
     ]}
+    db_session.add(Lesson(
+        section_id=lesson.section_id, title="Lambda", position=2,
+        status="PUBLISHED", transcript_json={"segments": [{
+            "start": 40, "end": 50, "text": "Lambda xử lý sự kiện.",
+        }]},
+    ))
     db_session.commit()
     session = tutor_service.create_session(db_session, student.id, attempt.id)
     result = tutor_service.send_message(
         db_session, student.id, session["id"], "Cloud cung cấp gì?")
     assert "[00:00:12 - 00:00:25]" in result["message"]
+    result = tutor_service.send_message(
+        db_session, student.id, session["id"], "Lambda xử lý gì?")
+    assert "[00:00:40 - 00:00:50]" in result["message"]
     result = tutor_service.send_message(
         db_session, student.id, session["id"], "khủng long tuyệt chủng?")
     assert "Không tìm thấy" in result["message"]
@@ -225,3 +255,66 @@ def test_weak_concepts_rate_and_topic(db_session, learning_data):
     assert weak["incorrect_count"] == 1
     assert weak["answer_count"] == 2
     assert weak["failure_rate"] == 50.0
+
+
+def test_remediate_question_offline_and_check_owner(
+    db_session, learning_data, monkeypatch,
+):
+    """Use grounded fallback and never expose the practice answer."""
+    from app.schemas.tutor import QuestionRemediationRequest
+
+    monkeypatch.delenv("TUTOR_USE_BEDROCK", raising=False)
+    student, _, attempt = learning_data
+    lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+    question = db_session.query(Question).one()
+    payload = QuestionRemediationRequest(
+        attempt_id=attempt.id,
+        lesson_id=lesson.id,
+        question_id=question.id,
+        selected_option="bánh",
+    )
+    result = tutor_service.remediate_question(
+        db_session, student.id, payload,
+    )
+    assert "bánh" in result["explanation"]
+    assert "correct_answer" not in result["practice_question"]
+    with pytest.raises(tutor_service.TutorError) as caught:
+        tutor_service.remediate_question(db_session, 99999, payload)
+    assert caught.value.code == 403
+
+
+def test_remediate_question_ai_success(db_session, learning_data):
+    """Accept schema-valid AI remediation while hiding its answer key."""
+    import json
+    from app.schemas.tutor import QuestionRemediationRequest
+
+    student, _, attempt = learning_data
+    lesson = db_session.query(Lesson).filter_by(title="Cloud").one()
+    question = db_session.query(Question).one()
+    payload = QuestionRemediationRequest(
+        attempt_id=attempt.id,
+        lesson_id=lesson.id,
+        question_id=question.id,
+        selected_option="bánh",
+    )
+    answer = json.dumps({
+        "explanation": "Bánh không phải dịch vụ tính toán.",
+        "practice_questions": [{
+            "question": "Dịch vụ nào?",
+            "options": ["Cloud", "Bánh"],
+            "correct_answer": "Cloud",
+            "explanation": "Cloud cung cấp tài nguyên.",
+        }],
+    })
+    result = tutor_service.remediate_question(
+        db_session, student.id, payload, ai_client=lambda prompt: answer,
+    )
+    assert result["explanation"] == "Bánh không phải dịch vụ tính toán."
+    assert result["practice_question"]["options"] == ["Cloud", "Bánh"]
+    assert "correct_answer" not in result["practice_question"]
+
+
+def test_tutor_remediation_route_is_registered():
+    from app.main import app
+
+    assert "/tutor/remediations" in app.openapi()["paths"]

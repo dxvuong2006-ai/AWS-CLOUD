@@ -14,7 +14,7 @@ export default function SubmitConfirmDialog({
         aria-labelledby="submit-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="submit-warning-icon" aria-hidden="true">⚠</span><h2 id="submit-title">Nộp bài?</h2>
+        <span className="submit-warning-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="m12 3 9 17H3L12 3Z" /><path d="M12 9v5m0 2v1" /></svg></span><h2 id="submit-title">Nộp bài?</h2>
         {unanswered > 0 ? (
           <p>
             Bạn đã trả lời {total - unanswered} / {total} câu. Còn <strong className="quiz-warn">{unanswered} câu</strong> chưa trả lời.

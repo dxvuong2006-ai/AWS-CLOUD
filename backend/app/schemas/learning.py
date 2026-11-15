@@ -1,4 +1,6 @@
 """Student learning wire contract. Runtime endpoints remain a separate implementation."""
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -30,6 +32,12 @@ class WatchedRangesRequest(BaseModel):
             if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
                 raise ValueError("Each watched range must have finite 0 <= start < end")
         return self
+
+
+class ProgressUpdateRequest(WatchedRangesRequest):
+    playback_session_id: UUID
+    sequence: int = Field(ge=1)
+    request_id: UUID
 
 
 class StudentLessonProgress(BaseModel):

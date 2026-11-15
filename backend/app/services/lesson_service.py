@@ -40,6 +40,7 @@ def _log_video_storage_error(exc, *, lesson_id: int, storage) -> None:
         exc_info=False,
     )
 from app.repositories import lessons_repo, review_repo
+from app.services import unlock_service
 
 
 class LessonNotFoundError(Exception):
@@ -178,7 +179,9 @@ def create_lesson(
     )
 
 # kiểm tra quyền truy cập lesson
-def _check_lesson_access(db: Session, course, user_id: int, user_role: str) -> None:
+def _check_lesson_access(
+    db: Session, course, *, section_id: int, user_id: int, user_role: str
+) -> None:
     role = user_role.upper()
     if role == "INSTRUCTOR":
         if course.instructor_id != user_id:
@@ -194,6 +197,12 @@ def _check_lesson_access(db: Session, course, user_id: int, user_role: str) -> N
         db, student_id=user_id, course_id=course.id
     ):
         raise LessonAccessDeniedError("You are not enrolled in this course.")
+    unlock_service.assert_section_unlocked(
+        db,
+        student_id=user_id,
+        course_id=course.id,
+        section_id=section_id,
+    )
 
 # lấy lesson cho người dùng
 def get_lesson_for_user(
@@ -204,7 +213,9 @@ def get_lesson_for_user(
         raise LessonNotFoundError("Lesson not found.")
 
     _, course = _get_section_and_course(db, lesson.section_id)
-    _check_lesson_access(db, course, user_id, user_role)
+    _check_lesson_access(
+        db, course, section_id=lesson.section_id, user_id=user_id, user_role=user_role
+    )
 
     if user_role.upper() == "STUDENT" and lesson.status not in (
         "PUBLISHED",
@@ -224,7 +235,9 @@ def get_lesson_for_management(
         return lesson, course
     if user_role.upper() != "INSTRUCTOR":
         raise LessonAccessDeniedError("Instructor role required.")
-    _check_lesson_access(db, course, user_id, user_role)
+    _check_lesson_access(
+        db, course, section_id=lesson.section_id, user_id=user_id, user_role=user_role
+    )
     return lesson, course
 
 # cập nhật lesson
@@ -262,7 +275,9 @@ def list_lessons_for_section(
     limit: int = 100,
 ) -> list[Lesson]:
     _, course = _get_section_and_course(db, section_id)
-    _check_lesson_access(db, course, user_id, user_role)
+    _check_lesson_access(
+        db, course, section_id=section_id, user_id=user_id, user_role=user_role
+    )
     if user_role.upper() == "STUDENT":
         return review_repo.list_visible_lessons(
             db, section_id, skip=skip, limit=limit,

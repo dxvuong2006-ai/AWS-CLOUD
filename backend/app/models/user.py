@@ -10,6 +10,10 @@ class User(Base):
             "role IN ('STUDENT', 'INSTRUCTOR', 'ADMIN')",
             name="ck_users_role",
         ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'INACTIVE')",
+            name="ck_users_status",
+        ),
     )
 
     id = Column(Integer, primary_key=True)
@@ -21,6 +25,11 @@ class User(Base):
         nullable=False,
         default="STUDENT",
         server_default=text("'STUDENT'"),
+    )
+    status = Column(
+        String(20),
+        nullable=False,
+        server_default=text("'ACTIVE'"),
     )
     password_hash = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

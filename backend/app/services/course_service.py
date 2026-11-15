@@ -1,11 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import OperationalError
 
-from app.repositories import courses_repo, lessons_repo, sections_repo
+from app.repositories import courses_repo, lessons_repo, review_repo, sections_repo
 from app.schemas.course import CourseCreateRequest, CourseUpdateRequest
 from app.utils.errors import ConflictError, ForbiddenError, NotFoundError
 from app.lesson_states import LessonStatus
-from app.services.review_service import validate_review_content
+from app.services.review_service import validate_review_content, validate_review_materials
 
 # Tạo khóa học mới
 def create_course(
@@ -42,7 +42,10 @@ def get_course_detail(db: Session, course_id: int):
             "course_id": section.course_id,
             "title": section.title,
             "position": section.position,
-            "lessons": lessons_repo.get_by_section(db, section.id),
+            "lessons": [
+                lesson for lesson in lessons_repo.get_by_section(db, section.id)
+                if lesson.status == LessonStatus.PUBLISHED.value
+            ],
         }
         for section in sections
     ]
@@ -68,6 +71,7 @@ def update_course(
         "title",
         "description",
         "learning_objectives",
+        "cover_image",
     }
     update_data = {
         key: value
@@ -105,6 +109,8 @@ def publish_course(db: Session, course_id: int, *, instructor_id: int):
             raise ConflictError("Every lesson must be explicitly approved before publishing.", code="LESSON_APPROVAL_REQUIRED")
         for lesson in lessons:
             validate_review_content(lesson)
+            quiz = review_repo.get_quiz(db, lesson.section_id)
+            validate_review_materials(db, lesson, quiz, require_approved=True)
         courses_repo.mark_published(db, course, lessons)
         db.commit()
         return course

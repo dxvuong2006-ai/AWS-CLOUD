@@ -428,29 +428,29 @@
   }
 }
 @media (max-width: 700px) {
-  .login-screen {
-    grid-template-columns: 1fr;
-  }
-  .login-brand-panel {
-    padding: 90px 28px 32px;
-  }
-  .login-brand {
-    top: 24px;
-    left: 28px;
-  }
-  .login-brand-copy {
-    transform: none;
-  }
-  .login-brand-copy h2 {
-    font-size: 28px;
-  }
-  .login-form-panel {
-    padding: 40px 24px 48px;
-  }
-  .login-form-content h1 {
-    font-size: 27px;
-  }
-  .account-code-slots {
-    gap: 8px;
-  }
+  .login-screen { grid-template-columns: 1fr; }
+  .login-brand-panel { padding: 90px 28px 32px; }
+  .login-brand { top: 24px; left: 28px; }
+  .login-brand-copy { transform: none; }
+  .login-brand-copy h2 { font-size: 28px; }
+  .login-form-panel { padding: 40px 24px 48px; }
+  .login-form-content h1 { font-size: 27px; }
+  .account-code-slots { gap: 8px; }
 }
+/* Screen 02/06: accessible password presentation control. */
+.account-password-toggle {
+  position: absolute; inset: 5px 8px auto auto;
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; background: transparent; color: #8d9bc1; cursor: pointer;
+}
+.account-password-toggle .account-password-icon { position: static; width: 18px; height: 18px; }
+.account-form .account-countdown { color: #65769c; }
+.account-form .account-resend > span:first-child { color: #2850ef; }
+.account-verify .account-email-edit { text-align: center; margin-bottom: 0; }
+.account-verify .account-email-edit summary { margin-inline: auto; }
+.account-verify .account-email-edit[open] { text-align: left; }
+.account-code:focus-within .account-code-slots span { border-color: #c7d0ff; }
+.account-code:focus-within .account-code-slots .is-current { border-color: #3453ff; box-shadow: 0 0 0 1px #3453ff; }
+.login-form-content .account-sr-only { margin: 0; }
+.login-form-content .login-notice { text-align: left; }
+.login-form-content .login-notice-success { border: 1px solid #c7e8d7; }

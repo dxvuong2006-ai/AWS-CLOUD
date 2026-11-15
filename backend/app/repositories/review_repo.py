@@ -154,6 +154,7 @@ def has_attempts(db: Session, quiz_id: int) -> bool:
 
 def replace_content(
     db: Session, lesson: Lesson, quiz: Quiz | None, content: DraftContent,
+    *, set_review_status: bool = True,
 ) -> Quiz:
     """Lưu nội dung hợp lệ và đưa cả bài học, quiz về chờ duyệt.
 
@@ -162,6 +163,8 @@ def replace_content(
         lesson: Bài học đích.
         quiz: Quiz hiện tại hoặc None.
         content: DraftContent đã kiểm tra.
+        set_review_status: False cho K5 worker; pipeline finalize mới được chốt
+            REVIEW_REQUIRED. Các luồng review thủ công giữ mặc định True.
 
     Returns:
         Quiz đã flush, chưa commit.
@@ -179,7 +182,8 @@ def replace_content(
     lesson.key_concepts_json = [
         item.model_dump() for item in content.key_concepts
     ]
-    lesson.status = "REVIEW_REQUIRED"
+    if set_review_status:
+        lesson.status = "REVIEW_REQUIRED"
     db.query(Flashcard).filter(
         Flashcard.lesson_id == lesson.id,
     ).delete(synchronize_session=False)
@@ -188,10 +192,12 @@ def replace_content(
             lesson_id=lesson.id,
             front=item.front,
             back=item.back,
-            position=item.position,
+            # The array order is canonical. Never trust stale or duplicate
+            # client positions when replacing the complete list.
+            position=position,
             is_approved=False,
         )
-        for item in content.flashcards
+        for position, item in enumerate(content.flashcards, 1)
     ])
     quiz.title = content.quiz_title
     quiz.is_approved = False

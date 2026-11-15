@@ -74,6 +74,7 @@ VIDEO_PIPELINE_ENABLED=false; không có URL/API public cho các Lambda nội b�
 | learncloud-video-pipeline | video_pipeline_handler.handler | claim/submit/poll/verify/finalize_ai/fail; reconcile do operator gọi |
 | learncloud-video-relay | video_pipeline_handler.relay_handler | đọc QUEUED outbox, PutEvents retry; không StartExecution |
 | learncloud-video-recovery | video_pipeline_handler.recovery_handler | ghi FAILED cho owner của execution terminal |
+| learncloud-ai-worker | ai_worker_handler.handler | start/poll Transcribe; generate và lưu draft K5; không publish |
 
 Services/repositories trong backend là nơi cập nhật DB; handler chỉ điều phối và
 sanitize exceptions. Migration 0005 chỉ là file chuẩn bị, không tự chạy khi boot.
@@ -85,6 +86,11 @@ Reserved concurrency lab: pipeline 2, relay 1, recovery 1 nếu quota cho phép;
 
 Package source bằng `backend/scripts/build_video_pipeline_package.py` sau khi chuẩn bị
 dependencies Linux. Không dùng `.venv` Windows hay copy code dài vào Console.
+
+K5 dùng `backend/scripts/build_ai_worker_package.py`; ZIP phải chứa `app/`,
+`ai_pipeline/`, `ai_worker_handler.py` và dependencies Linux Python 3.12 x86_64.
+Giữ `AI_WORKER_ENABLED=false` và `VIDEO_AI_ENABLED=false` cho tới khi role, VPC,
+S3 output, Bedrock model access và State Machine ARN đã được kiểm tra ở non-production.
 Environment, packaging, VPC, IAM và thao tác upload ZIP:
 [hướng dẫn Console](../../docs/aws-video-pipeline-console-setup.md#phan-4--lambda).
 

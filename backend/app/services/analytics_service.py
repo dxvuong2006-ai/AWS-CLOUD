@@ -37,3 +37,58 @@ def get_course_analytics(db, course_id, instructor_id):
             {"question_id": row.id, "question": row.question,
              "incorrect_count": row.incorrect_count} for row in errors],
     }
+
+
+def get_quiz_analytics(db, quiz_id, instructor_id):
+    """Aggregate attempts for a quiz owned by the requesting instructor."""
+    from sqlalchemy import Integer, func
+    from app.models.quiz import Question, QuizAnswer, QuizAttempt
+    from app.repositories import quizzes_repo
+
+    quiz = quizzes_repo.get_quiz_by_id(db, quiz_id)
+    if quiz is None:
+        return None
+    section = quizzes_repo.get_section_by_id(db, quiz.section_id)
+    if (
+        section is None
+        or analytics_repo.course_for_owner(
+            db, section.course_id, instructor_id,
+        ) is None
+    ):
+        return None
+    total, passed, average = db.query(
+        func.count(QuizAttempt.id),
+        func.sum(QuizAttempt.passed.cast(Integer)),
+        func.avg(QuizAttempt.score),
+    ).filter(QuizAttempt.quiz_id == quiz_id).one()
+    missed = (
+        db.query(
+            Question.id, Question.question,
+            func.count(QuizAnswer.id).label("incorrect_count"),
+        )
+        .join(QuizAnswer, QuizAnswer.question_id == Question.id)
+        .join(QuizAttempt, QuizAttempt.id == QuizAnswer.attempt_id)
+        .filter(
+            Question.quiz_id == quiz_id,
+            QuizAttempt.quiz_id == quiz_id,
+            QuizAnswer.is_correct.is_(False),
+        )
+        .group_by(Question.id, Question.question)
+        .order_by(func.count(QuizAnswer.id).desc(), Question.id)
+        .limit(10).all()
+    )
+    total = int(total or 0)
+    return {
+        "quiz_id": quiz_id,
+        "attempt_count": total,
+        "average_score": float(average) if average is not None else None,
+        "pass_rate": round(100 * int(passed or 0) / total, 2) if total else 0.0,
+        "frequently_missed_questions": [
+            {
+                "question_id": row.id,
+                "question": row.question,
+                "incorrect_count": row.incorrect_count,
+            }
+            for row in missed
+        ],
+    }

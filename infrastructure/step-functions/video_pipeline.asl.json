@@ -1,5 +1,5 @@
 {
-  "Comment": "CODE READY / AWS NOT DEPLOYED. Standard workflow; Lambda CreateJob + bounded GetJob polling; no unsupported .sync assumption. Replace both ARN placeholders. No automatic submit retry.",
+  "Comment": "PRODUCTION TEMPLATE: K4 MediaConvert, optional K5 Transcribe/Bedrock, then K4 finalize_ai. Standard workflow with ledger ownership, bounded polling, and no automatic submit retry. Replace both ARN placeholders before deployment.",
   "StartAt": "Claim",
   "TimeoutSeconds": 7200,
   "States": {
@@ -45,9 +45,14 @@
           "Variable": "$.decision",
           "StringEquals": "START",
           "Next": "InitPolls"
+        },
+        {
+          "Variable": "$.decision",
+          "StringEquals": "IGNORE",
+          "Next": "DuplicateIgnored"
         }
       ],
-      "Default": "DuplicateIgnored"
+      "Default": "InvalidUpload"
     },
     "InitPolls": {
       "Type": "Pass",
@@ -199,10 +204,169 @@
         {
           "Variable": "$.ai_enabled",
           "BooleanEquals": true,
-          "Next": "GenerateAIContent"
+          "Next": "StartAITranscription"
         }
       ],
       "Default": "VideoReadyAIPending"
+    },
+    "StartAITranscription": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AI_WORKER_ARN}",
+        "Payload": {
+          "action": "start_transcription",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id"
+        }
+      },
+      "TimeoutSeconds": 60,
+      "ResultPath": "$.transcription",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "AIWorkerTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "StartTranscriptionStatus"
+    },
+    "StartTranscriptionStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "COMPLETED",
+          "Next": "GenerateAIContent"
+        },
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "IN_PROGRESS",
+          "Next": "InitAIPolls"
+        },
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "QUEUED",
+          "Next": "InitAIPolls"
+        }
+      ],
+      "Default": "RecordFailure"
+    },
+    "InitAIPolls": {
+      "Type": "Pass",
+      "Result": {
+        "value": 0
+      },
+      "ResultPath": "$.ai_polls",
+      "Next": "WaitForTranscription"
+    },
+    "WaitForTranscription": {
+      "Type": "Wait",
+      "Seconds": 15,
+      "Next": "PollAITranscription"
+    },
+    "PollAITranscription": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${AI_WORKER_ARN}",
+        "Payload": {
+          "action": "poll_transcription",
+          "run_id.$": "$.run_id",
+          "execution_arn.$": "$$.Execution.Id",
+          "job_id.$": "$.transcription.Payload.job_id"
+        }
+      },
+      "TimeoutSeconds": 30,
+      "ResultPath": "$.transcription",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "AIWorkerTemporaryError"
+          ],
+          "IntervalSeconds": 2,
+          "BackoffRate": 2,
+          "MaxAttempts": 3
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.failure",
+          "Next": "RecordFailure"
+        }
+      ],
+      "Next": "TranscriptionStatus"
+    },
+    "TranscriptionStatus": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "COMPLETED",
+          "Next": "GenerateAIContent"
+        },
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "IN_PROGRESS",
+          "Next": "IncrementAIPolls"
+        },
+        {
+          "Variable": "$.transcription.Payload.status",
+          "StringEquals": "QUEUED",
+          "Next": "IncrementAIPolls"
+        }
+      ],
+      "Default": "RecordFailure"
+    },
+    "IncrementAIPolls": {
+      "Type": "Pass",
+      "Parameters": {
+        "value.$": "States.MathAdd($.ai_polls.value, 1)"
+      },
+      "ResultPath": "$.ai_polls",
+      "Next": "AIPollLimit"
+    },
+    "AIPollLimit": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.ai_polls.value",
+          "NumericGreaterThanEquals": 120,
+          "Next": "AITranscriptionTimedOut"
+        }
+      ],
+      "Default": "WaitForTranscription"
+    },
+    "AITranscriptionTimedOut": {
+      "Type": "Pass",
+      "Result": {
+        "error": "TRANSCRIPTION_TIMEOUT"
+      },
+      "ResultPath": "$.failure",
+      "Next": "RecordFailure"
     },
     "GenerateAIContent": {
       "Type": "Task",
@@ -210,12 +374,28 @@
       "Parameters": {
         "FunctionName": "${AI_WORKER_ARN}",
         "Payload": {
+          "action": "generate_content",
           "run_id.$": "$.run_id",
-          "execution_arn.$": "$$.Execution.Id"
+          "execution_arn.$": "$$.Execution.Id",
+          "job_id.$": "$.transcription.Payload.job_id"
         }
       },
-      "TimeoutSeconds": 900,
+      "TimeoutSeconds": 620,
       "ResultPath": "$.last",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "AIWorkerTemporaryError"
+          ],
+          "IntervalSeconds": 5,
+          "BackoffRate": 2,
+          "MaxAttempts": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": [

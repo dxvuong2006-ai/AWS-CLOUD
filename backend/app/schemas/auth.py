@@ -20,13 +20,6 @@ class RegisterRequest(BaseModel):
         return value
 
 
-class LoginRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    email: EmailStr
-    password: str
-
-
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,14 +27,14 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: Literal["STUDENT", "INSTRUCTOR", "ADMIN"]
+    status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
     created_at: datetime | None = None
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
-    expires_in: int
-    user: UserResponse
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -57,6 +50,11 @@ class AdminUserUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
     role: Literal["STUDENT", "INSTRUCTOR", "ADMIN"] | None = None
+
+
+class AdminUserStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 class UpdateProfileRequest(BaseModel):

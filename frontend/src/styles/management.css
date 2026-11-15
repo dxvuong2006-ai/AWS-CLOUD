@@ -4,6 +4,7 @@
 .management-subtitle { margin: 6px 0 22px; color: #64748b; }
 .management-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
 .management-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.management-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .management-card { border: 1px solid #e2e6ee; border-radius: 14px; background: #fff; padding: 20px; }
 .management-kpi-label { color: #64748b; font-size: 13px; }
 .management-kpi-value { margin-top: 8px; font-size: 26px; font-weight: 750; }
@@ -34,12 +35,155 @@
 .review-panel { border: 1px solid #e2e6ee; border-radius: 14px; background: #fff; padding: 20px; }
 .review-panel pre, .review-panel p { white-space: pre-wrap; line-height: 1.7; }
 .review-row { padding: 10px 0; border-bottom: 1px solid #edf0f5; }
+.review-edit-card { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid #edf0f5; }
+.review-edit-card label { display: grid; gap: 6px; color: #334155; font-weight: 650; }
+.review-edit-card input, .review-edit-card textarea, .review-edit-card select { width: 100%; border: 1px solid #dde3ed; border-radius: 10px; padding: 10px 12px; font: inherit; }
+.review-edit-card textarea { min-height: 72px; resize: vertical; }
+.review-question-options { display: grid; gap: 9px; margin: 0; padding: 12px; border: 1px solid #e2e6ee; border-radius: 10px; }
+.review-question-options legend { padding: 0 5px; color: #334155; font-weight: 650; }
+.review-question-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.review-delete { justify-self: start; border: 0; background: transparent; cursor: pointer; }
+.workflow-modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #0f172a77; }
+.workflow-modal { width: min(550px, 100%); padding: 30px; border-radius: 20px; background: #fff; box-shadow: 0 25px 60px #0f172a33; }
+.workflow-modal h2 { margin: 0 0 8px; }
+.workflow-modal p { color: #64748b; }
+.approval-checklist { margin: 22px 0; }
+.approval-checklist > div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
+.admin-success-page .success-card { width: min(620px, 100%); margin: 140px auto 0; text-align: center; }
+.success-icon { display: grid; place-items: center; width: 70px; height: 70px; margin: 0 auto 18px; border-radius: 50%; background: #e8f7ef; color: #157347; font-size: 34px; font-weight: 800; }
+.success-card h2 { margin: 0 0 6px; font-size: 24px; }
+.success-card > p { color: #64748b; }
+.created-account { margin: 24px 0; padding: 0 18px; border-radius: 14px; background: #eef1f5; text-align: left; }
+.created-account > div { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid #dfe5ef; }
+.created-account > div:last-child { border-bottom: 0; }
+.created-account span { color: #64748b; }
+.created-account strong { text-align: right; }
+.confirm-check { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-weight: 650; }
+.report-detail-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin-top: 18px; }
+.report-list { margin-top: 18px; }
+.report-list .spec-card-heading input { width: min(300px, 100%); height: 40px; border: 1px solid #dde3ed; border-radius: 10px; padding: 8px 12px; }
+.report-row { display: grid; grid-template-columns: minmax(0, 1fr) 80px 150px; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #edf0f5; }
+.report-row small { grid-column: 1 / -1; color: #64748b; }
+.report-row:last-child { border-bottom: 0; }
+.report-row progress { width: 140px; }
+.management-card small { color: #64748b; }
+.management-alert, .management-notice { margin: 0 0 18px; padding: 11px 14px; border-radius: 10px; }
+.management-alert { color: #b3261e; background: #fdeeee; }
+.management-notice { color: #157347; background: #e8f7ef; }
+.admin-edit-layout, .profile-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .85fr); gap: 22px; }
+.admin-edit-page .management-form, .profile-card { max-width: none; }
+.admin-create-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, .75fr); gap: 22px; }
+.admin-create-form { max-width: none; gap: 18px; }
+.admin-create-form input { width: 100%; }
+.password-generator { display: flex; align-items: center; gap: 10px; padding-right: 12px; border: 1px solid #dde3ed; border-radius: 10px; background: #fff; }
+.password-generator input { border: 0; outline: 0; }
+.password-generator button { flex: none; border: 0; background: transparent; color: #3453d9; font-weight: 700; cursor: pointer; }
+.role-selector { border: 0; padding: 0; margin: 0; }
+.role-selector legend { padding: 0; margin-bottom: 8px; color: #334155; font-weight: 650; }
+.role-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.role-option { display: flex !important; grid-template-columns: auto 1fr; align-items: flex-start; gap: 12px; min-height: 92px; padding: 16px; border: 1px solid #dde3ed; border-radius: 12px; cursor: pointer; }
+.role-option.selected { border-color: #3453d9; background: #eef2ff; box-shadow: inset 0 0 0 1px #3453d9; }
+.role-option input { width: 18px; height: 18px; margin: 1px 0 0; accent-color: #3453d9; }
+.role-option strong { display: block; font-weight: 600; }
+.role-option small { display: block; }
+.role-option small { margin-top: 6px; color: #64748b; font-weight: 400; line-height: 1.35; }
+.create-notes { align-self: start; }
+.create-notes h2 { margin: 0 0 4px; font-size: 17px; }
+.create-notes p { padding: 14px 0; margin: 0; border-bottom: 1px solid #edf0f5; color: #334155; line-height: 1.45; }
+.create-notes p:last-child { border-bottom: 0; }
+.input-with-badge { position: relative; }
+.input-with-badge input { padding-right: 100px; }
+.input-with-badge span { position: absolute; right: 12px; top: 10px; border-radius: 999px; padding: 4px 10px; background: #eef1f5; color: #64748b; font-size: 12px; font-weight: 700; }
+.account-status-toggle { display: flex !important; justify-content: space-between; align-items: center; padding: 17px 18px; border: 1px solid #dde3ed; border-radius: 12px; }
+.account-status-toggle small { display: block; font-weight: 400; }
+.account-status-toggle input { width: 44px; height: 24px; accent-color: #3453d9; }
+.admin-other-actions { align-self: start; display: grid; gap: 13px; }
+.admin-other-actions h2 { margin: 0 0 4px; font-size: 17px; }
+.btn-danger-outline { border: 1px solid #f2b8b5; border-radius: 10px; background: #fff; color: #b3261e; padding: 10px 16px; cursor: pointer; }
+.roles-layout, .monitoring-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .75fr); gap: 22px; }
+.permission-table { padding: 18px 24px; }
+.permission-head, .permission-row { display: grid; grid-template-columns: minmax(240px, 1fr) repeat(3, 92px); align-items: center; gap: 8px; }
+.permission-head { padding-bottom: 12px; color: #94a3b8; font-size: 12px; font-weight: 700; }
+.permission-row { min-height: 51px; border-top: 1px solid #edf0f5; font-size: 14px; }
+.permission-yes { color: #0f4e8c; font-weight: 800; text-align: center; }
+.permission-no { color: #cbd5e1; text-align: center; }
+.role-guide h2 { margin-top: 0; font-size: 17px; }
+.role-guide-row, .warning-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 0; border-bottom: 1px solid #edf0f5; }
+.role-guide-row strong, .role-guide-row small, .warning-row strong, .warning-row small { display: block; }
+.role-guide-row small, .warning-row small { margin-top: 4px; color: #64748b; }
+.role-pill { display: inline-flex; white-space: nowrap; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
+.role-pill.student { color: #3453d9; background: #eef2ff; }
+.role-pill.instructor { color: #a5600a; background: #fff4df; }
+.role-pill.admin { color: #8d3c2a; background: #fcebea; }
+.role-guide-note { margin: 22px 0 0; color: #64748b; }
+.data-badge { padding: 6px 12px; border-radius: 999px; background: #eef1f5; color: #64748b; font-size: 12px; font-weight: 700; }
+.monitoring-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 22px; }
+.monitoring-kpis .management-kpi-value { font-size: 32px; }
+.monitoring-table-wrap { border: 0; }
+.link-button { border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
+.status-chip.info { background: #eef2ff; color: #3453d9; }
+.warnings-card h2 { margin-top: 0; font-size: 17px; }
+.monitoring-dialog { width: min(620px, 100%); padding: 30px; border-radius: 20px; background: #fff; box-shadow: 0 25px 60px #0f172a33; }
+.dialog-heading { display: flex; justify-content: space-between; gap: 15px; align-items: start; }
+.dialog-heading h2 { margin: 0; }
+.dialog-heading p { margin: 6px 0 0; color: #64748b; }
+.monitoring-dialog pre { margin: 20px 0 24px; padding: 18px; border-radius: 13px; background: #0f172a; color: #e2e8f0; line-height: 1.8; white-space: pre-wrap; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.account-profile { max-width: none; }
+.profile-card { display: grid; gap: 16px; }
+.profile-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
+.profile-heading h2 { margin: 0 0 8px; font-size: 19px; }
+.profile-avatar { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; background: #eef1f5; color: #334155; font-size: 20px; font-weight: 750; }
+.forbidden-page { max-width: none; min-height: calc(100vh - 40px); display: grid; place-items: center; }
+.forbidden-card { width: min(570px, 100%); padding: 50px 35px; border: 1px solid #e2e6ee; border-radius: 16px; background: #fff; text-align: center; }
+.forbidden-card h1 { margin: 20px 0 8px; }
+.forbidden-card p { margin: 0 auto 28px; max-width: 430px; color: #64748b; line-height: 1.6; }
+.forbidden-icon { display: grid; place-items: center; width: 70px; height: 70px; margin: auto; border-radius: 50%; background: #fdeeee; color: #b3261e; font-size: 30px; }
 @media (max-width: 1000px) {
-  .management-grid, .management-grid.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .management-grid, .management-grid.three, .management-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-layout { grid-template-columns: 1fr; }
+  .report-detail-grid { grid-template-columns: 1fr; }
+  .roles-layout, .monitoring-layout, .admin-edit-layout, .profile-layout, .admin-create-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .management-page { padding: 24px 18px; }
-  .management-grid, .management-grid.three { grid-template-columns: 1fr; }
+  .management-grid, .management-grid.three, .management-grid.four { grid-template-columns: 1fr; }
   .management-toolbar { flex-direction: column; }
+  .report-row { grid-template-columns: 1fr; }
+  .monitoring-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .permission-head, .permission-row { grid-template-columns: minmax(180px, 1fr) repeat(3, 55px); }
+  .permission-table { padding: 14px 10px; overflow-x: auto; }
+  .role-options { grid-template-columns: 1fr; }
+  .password-generator { align-items: stretch; flex-direction: column; padding: 0; }
+  .password-generator button { padding: 0 12px 10px; text-align: left; }
+}
+
+/* Thao tác xuất bản và chọn khóa học của giảng viên. */
+.management-page .course-publish-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 48px; padding: 12px 20px; border: 1px solid #3448d8;
+  border-radius: 12px; background: linear-gradient(135deg, #4557ed, #3042cb);
+  color: #fff; font: inherit; font-weight: 650;
+  box-shadow: 0 4px 12px #3448d826; cursor: pointer;
+}
+.management-page .course-publish-button span { font-size: 21px; line-height: 1; }
+.management-page .course-publish-button:hover:not(:disabled) { background: #3042cb; box-shadow: 0 6px 16px #3448d838; }
+.management-page .course-publish-button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.management-page .page-head select[aria-label="Chọn khóa học"] {
+  appearance: none; min-width: 220px; max-width: 340px; min-height: 46px;
+  padding: 12px 42px 12px 16px; border: 1px solid #dce2f1; border-radius: 12px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%23556688' stroke-width='1.8' viewBox='0 0 24 24'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  color: #172d50; font: inherit; font-size: 14px; font-weight: 600;
+  text-overflow: ellipsis; box-shadow: 0 2px 5px #18345a05; cursor: pointer;
+}
+.management-page .page-head select[aria-label="Chọn khóa học"]:hover:not(:disabled) { border-color: #8795e8; }
+.management-page .page-head select[aria-label="Chọn khóa học"]:disabled { opacity: .6; cursor: not-allowed; }
+.management-page .course-publish-button:focus-visible,
+.management-page .page-head select[aria-label="Chọn khóa học"]:focus-visible {
+  outline: 3px solid #a9b4ff; outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .management-page .page-head select[aria-label="Chọn khóa học"] { width: 100%; min-width: 0; max-width: 100%; }
 }

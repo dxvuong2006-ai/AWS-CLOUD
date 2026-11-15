@@ -194,11 +194,17 @@ async def _handle_validation_error(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
     """422 - giữ nguyên danh sách lỗi của FastAPI trong ``detail``."""
+    errors = exc.errors()
+    if request.url.path.startswith("/auth/"):
+        # Pydantic includes the rejected input by default. Never echo passwords,
+        # OTP values or arbitrary auth payloads in a validation response.
+        errors = [{key: value for key, value in error.items() if key not in {"input", "ctx"}}
+                  for error in errors]
     return error_response(
         request,
         422,
         "VALIDATION_ERROR",
-        exc.errors(),
+        errors,
     )
 
 
