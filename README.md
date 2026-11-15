@@ -1,21 +1,25 @@
 # LearnCloud
 
-LearnCloud is a video-first learning platform. The repository contains a React/Vite frontend, a FastAPI backend, PostgreSQL schema/migrations, and an AI/video pipeline with local and AWS-oriented adapters.
+LearnCloud là nền tảng học trực tuyến lấy video làm trung tâm, tích hợp trí tuệ nhân tạo (AI) để hỗ trợ quá trình học tập. Dự án bao gồm Frontend React/Vite, Backend FastAPI, cơ sở dữ liệu PostgreSQL cùng hệ thống xử lý video và sinh nội dung AI, hỗ trợ chạy trên môi trường local và AWS.
 
-## Repository map
+## 1. Cấu trúc dự án
 
-| Path | Purpose |
+| Thư mục | Chức năng |
 |---|---|
-| `frontend/` | React/Vite app, authentication/API integration and browser tests. |
-| `backend/` | FastAPI routes, services, repositories, adapters and tests. |
-| `ai_pipeline/` | Transcript/content processors, schemas, fixtures and tests. |
-| `database/` | PostgreSQL bootstrap, migrations, checks and fixtures. |
-| `infrastructure/` | AWS templates, Lambda builders and deployment examples. |
-| `docs/` | Maintained project, setup and operations documentation. |
+| `frontend/` | Giao diện React/Vite, tích hợp xác thực, API và kiểm thử trình duyệt. |
+| `backend/` | FastAPI, các API, services, repositories, adapters và bộ kiểm thử. |
+| `ai_pipeline/` | Xử lý transcript, sinh nội dung AI, schemas, dữ liệu mẫu và kiểm thử. |
+| `database/` | Khởi tạo PostgreSQL, migrations, scripts kiểm tra và dữ liệu mẫu. |
+| `infrastructure/` | Cấu hình AWS, đóng gói Lambda và các ví dụ triển khai. |
+| `docs/` | Tài liệu dự án, hướng dẫn cài đặt, triển khai và vận hành. |
 
-## Start locally
+## 2. Chạy dự án trên máy local
 
-See [local setup](docs/local-setup.md) for dependencies, database options and auth configuration. The backend requires `DATABASE_URL`; frontend `VITE_*` settings are public browser configuration and must not contain secrets.
+Xem [hướng dẫn cài đặt](docs/local-setup.md) để biết các yêu cầu về môi trường, cấu hình cơ sở dữ liệu và xác thực.
+
+Backend cần biến môi trường `DATABASE_URL` để kết nối PostgreSQL. Các biến `VITE_*` của Frontend được sử dụng trong trình duyệt, vì vậy không được chứa thông tin bí mật.
+
+**Bước 1: Cài đặt môi trường và dependencies**
 
 ```powershell
 Copy-Item .env.example .env
@@ -26,18 +30,43 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Run the backend in a second terminal from the repository root:
+**Bước 2: Khởi chạy Backend**
+
+Mở Terminal thứ hai tại thư mục gốc của dự án:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
-## Documentation
+## 3. Tài liệu dự án
 
-Start at [docs/README.md](docs/README.md) for the document map and evidence conventions. The principal references are [requirements](docs/requirements.md), [architecture](docs/architecture.md), [API contract](docs/api-contract.md), [database](docs/database.md), [AWS deployment](docs/aws-deployment.md) and [demo script](docs/demo-script.md).
+Xem [docs/README.md](docs/README.md) để tra cứu danh sách tài liệu và quy ước xác minh thông tin.
 
-## Evidence and safety
+Các tài liệu chính:
 
-Source/configuration presence is not proof of runtime behavior. The [saved backend regression report](docs/operations/backend-regression-report.md) records 463 passed, 0 failed and 69 PostgreSQL-gated skipped cases in its reported offline run; skipped cases are not counted as passing PostgreSQL tests. Current AWS production state has not been verified during the documentation cleanup.
+- [Yêu cầu hệ thống](docs/requirements.md)
+- [Kiến trúc hệ thống](docs/architecture.md)
+- [Danh sách và đặc tả API](docs/api-contract.md)
+- [Cơ sở dữ liệu](docs/database.md)
+- [Hướng dẫn triển khai AWS](docs/aws-deployment.md)
+- [Kịch bản demo](docs/demo-script.md)
 
-Do not commit `.env`, credentials, tokens, passwords, private keys or presigned URLs. Do not apply migrations or deploy based only on repository examples. Review [migration history and safeguards](database/migrations/README.md) before using SQL.
+## 4. Kiểm thử và lưu ý bảo mật
+
+Sự tồn tại của source code hoặc cấu hình không đồng nghĩa với việc chức năng đã hoạt động thành công trên môi trường thực tế.
+
+[Báo cáo kiểm thử Backend](docs/operations/backend-regression-report.md) ghi nhận kết quả của lần kiểm thử offline được lưu:
+
+- **463 tests PASS**
+- **0 tests FAIL**
+- **69 tests SKIP** do yêu cầu môi trường PostgreSQL riêng.
+
+Các trường hợp SKIP chưa được xác minh trên PostgreSQL và không được tính là kiểm thử thành công.
+
+Trạng thái triển khai AWS Production chưa được xác minh trong quá trình dọn dẹp tài liệu.
+
+**Lưu ý bảo mật:**
+
+- Không commit `.env`, credentials, tokens, mật khẩu, private keys hoặc presigned URLs lên GitHub.
+- Không chạy migrations hoặc triển khai AWS chỉ dựa trên các cấu hình ví dụ trong repository.
+- Kiểm tra [lịch sử migration và các biện pháp an toàn](database/migrations/README.md) trước khi thực thi SQL.
