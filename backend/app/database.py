@@ -46,6 +46,14 @@ def migrate_local_quiz_attempts():
                         "JSON NOT NULL DEFAULT '[]' "
                         "CHECK (json_type(learning_objectives) = 'array')"
                     )
+            user_columns = {
+                row[1] for row in connection.exec_driver_sql('PRAGMA table_info("users")')
+            }
+            if user_columns and "status" not in user_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE users ADD COLUMN status VARCHAR(20) "
+                    "NOT NULL DEFAULT 'ACTIVE'"
+                )
             columns = {
                 row[1] for row in connection.exec_driver_sql(
                     'PRAGMA table_info("quiz_attempts")'

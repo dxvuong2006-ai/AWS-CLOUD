@@ -170,6 +170,12 @@ docker exec learncloud-db psql -U learncloud -d learncloud -c "SELECT version, d
 
 Chạy script lần thứ hai không được áp dụng thêm migration nào.
 
+`0015_user_account_status.sql` requires the canonical 0014 registry row and the
+confirmed `learncloud_admin` LOGIN used by the current local Backend configuration.
+It grants only missing SELECT/UPDATE privileges on `users.status`; it does not
+create roles or grant user-table access to video/AI workers. This source change
+does not apply the migration.
+
 ## 5. Rollback và phục hồi
 
 - **Local:** nếu không cần giữ dữ liệu, `docker compose down -v`, dựng lại

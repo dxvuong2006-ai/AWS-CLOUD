@@ -59,6 +59,7 @@ ARN của một User Pool cụ thể:
 - `cognito-idp:AdminAddUserToGroup`;
 - `cognito-idp:AdminRemoveUserFromGroup`;
 - `cognito-idp:AdminUpdateUserAttributes`.
+- `cognito-idp:AdminDisableUser` and `cognito-idp:AdminEnableUser` for the admin account status endpoint.
 
 Nếu tách admin routes sang Lambda khác, Lambda auth thông thường chỉ cần
 `AdminGetUser`; năm quyền ghi thuộc Lambda admin. `SignUp`, `ConfirmSignUp`,

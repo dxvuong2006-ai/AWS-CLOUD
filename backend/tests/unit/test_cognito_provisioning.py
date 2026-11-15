@@ -439,6 +439,8 @@ def test_cognito_iam_policy_exactly_covers_admin_api_calls():
         "admin_add_user_to_group": "cognito-idp:AdminAddUserToGroup",
         "admin_remove_user_from_group": "cognito-idp:AdminRemoveUserFromGroup",
         "admin_update_user_attributes": "cognito-idp:AdminUpdateUserAttributes",
+        "admin_disable_user": "cognito-idp:AdminDisableUser",
+        "admin_enable_user": "cognito-idp:AdminEnableUser",
     }
     called_admin_methods = set(re.findall(r"\.((?:admin_)[a-z_]+)\(", source))
     policy_actions = {

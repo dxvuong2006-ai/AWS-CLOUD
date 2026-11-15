@@ -336,6 +336,139 @@ def test_failed_role_sync_rolls_back_database_role(security):
     assert security.db.get(User, 1).role == "INSTRUCTOR"
 
 
+def test_admin_can_disable_and_enable_user_and_response_shows_status(security, monkeypatch):
+    sync = Mock()
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "INACTIVE"
+    sync.assert_called_once_with(email="user2@example.com", enabled=False)
+
+    sync.reset_mock()
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": True}
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ACTIVE"
+    sync.assert_called_once_with(email="user2@example.com", enabled=True)
+
+
+def test_non_admin_cannot_change_account_status(security, monkeypatch):
+    sync = Mock()
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    response = security.client.patch(
+        "/admin/users/1/status", headers=security.headers(2), json={"enabled": False}
+    )
+    assert response.status_code == 403
+    assert security.db.get(User, 1).status == "ACTIVE"
+    sync.assert_not_called()
+
+
+def test_admin_cannot_disable_self_or_remove_last_active_admin(security, monkeypatch):
+    sync = Mock()
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    self_lock = security.client.patch(
+        "/admin/users/4/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert self_lock.status_code == 409
+    security.db.get(User, 3).role = "ADMIN"
+    security.db.commit()
+    disable_other_admin = security.client.patch(
+        "/admin/users/3/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert disable_other_admin.status_code == 200
+    assert security.db.get(User, 3).status == "INACTIVE"
+    last_admin_demotion = security.client.patch(
+        "/admin/users/4", headers=security.headers(4), json={"role": "STUDENT"}
+    )
+    assert last_admin_demotion.status_code == 409
+    assert security.db.get(User, 4).role == "ADMIN"
+    sync.assert_called_once_with(email="user3@example.com", enabled=False)
+
+
+def test_disabled_account_cannot_reuse_an_unexpired_access_token(security):
+    security.db.get(User, 2).status = "INACTIVE"
+    security.db.commit()
+    response = security.client.get("/auth/me", headers=security.headers(2))
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Account is disabled"
+
+
+def test_cognito_disable_failure_leaves_rds_unchanged(security, monkeypatch):
+    sync = Mock(side_effect=[auth_service.CognitoAuthError("Cognito unavailable", status_code=503), None])
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert response.status_code == 503
+    assert security.db.get(User, 2).status == "ACTIVE"
+    assert [call.kwargs["enabled"] for call in sync.call_args_list] == [False, True]
+
+
+@pytest.mark.parametrize(("enabled", "operation"), [
+    (False, "admin_disable_user"), (True, "admin_enable_user"),
+])
+def test_cognito_status_service_calls_expected_admin_operation(monkeypatch, enabled, operation):
+    client = Mock()
+    monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
+    monkeypatch.setattr(settings, "COGNITO_USER_POOL_ID", "test-pool")
+    auth_service.admin_set_user_enabled(email="Example@Email.com", enabled=enabled)
+    getattr(client, operation).assert_called_once_with(
+        UserPoolId="test-pool", Username="example@email.com"
+    )
+
+
+def test_cognito_failure_and_failed_restore_reports_possible_drift(security, monkeypatch):
+    sync = Mock(side_effect=[auth_service.CognitoAuthError("timeout", status_code=503),
+                             auth_service.CognitoAuthError("restore failed", status_code=503)])
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "ACCOUNT_SYNC_INCONSISTENT"
+    assert security.db.get(User, 2).status == "ACTIVE"
+    assert sync.call_count == 2
+
+
+def test_database_failure_compensates_cognito_status(security, monkeypatch):
+    sync = Mock()
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    original_commit = security.db.commit
+    failed = False
+
+    def fail_once():
+        nonlocal failed
+        if not failed:
+            failed = True
+            raise RuntimeError("simulated database failure")
+        original_commit()
+
+    monkeypatch.setattr(security.db, "commit", fail_once)
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert response.status_code == 500
+    assert security.db.get(User, 2).status == "ACTIVE"
+    assert [call.kwargs["enabled"] for call in sync.call_args_list] == [False, True]
+
+
+def test_failed_cognito_compensation_reports_possible_drift(security, monkeypatch):
+    sync = Mock(side_effect=[None, auth_service.CognitoAuthError("rollback failed", status_code=503)])
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+    original_commit = security.db.commit
+    monkeypatch.setattr(security.db, "commit", lambda: (_ for _ in ()).throw(RuntimeError("db")))
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "ACCOUNT_SYNC_INCONSISTENT"
+    assert security.db.get(User, 2).status == "ACTIVE"
+    assert sync.call_count == 2
+
+
 @pytest.mark.parametrize("changes", [{"exp": 0}, {"iss": "wrong"},
                                      {"client_id": "wrong"}, {"token_use": "id"}])
 def test_invalid_jwt_still_rejected(security, changes):

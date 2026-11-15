@@ -527,3 +527,16 @@ def admin_update_profile(*, cognito_sub: str, email: str, name: str | None = Non
             )
     except (BotoCoreError, ClientError) as exc:
         _raise_cognito_error(exc)
+
+
+def admin_set_user_enabled(*, email: str, enabled: bool):
+    """Enable or disable a Cognito account using the configured admin pool."""
+    try:
+        client = cognito_client()
+        params = {"UserPoolId": settings.COGNITO_USER_POOL_ID, "Username": email.lower()}
+        if enabled:
+            client.admin_enable_user(**params)
+        else:
+            client.admin_disable_user(**params)
+    except (BotoCoreError, ClientError) as exc:
+        _raise_cognito_error(exc)

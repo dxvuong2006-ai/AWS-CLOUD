@@ -11,6 +11,13 @@ Schema dùng khóa chính `SERIAL` (`INTEGER`) và thời gian `TIMESTAMPTZ` the
 Điều này là trạng thái hiện tại của code, dù một số tài liệu kiến trúc cũ từng
 đề cập UUID.
 
+Account state is stored in `users.status` as `ACTIVE` or `INACTIVE` (migration
+`0015_user_account_status.sql`). The backend checks this value on every
+authenticated request and coordinates admin changes with Cognito. Migration 0015
+requires registry version 0014 and the confirmed `learncloud_admin` LOGIN used by
+the current local Backend configuration. It grants only missing status-column
+SELECT/UPDATE privileges; it does not create a role or grant access to worker roles.
+
 ## 2. Quan hệ chính
 
 ```text

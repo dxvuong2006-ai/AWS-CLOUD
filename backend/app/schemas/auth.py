@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: Literal["STUDENT", "INSTRUCTOR", "ADMIN"]
+    status: Literal["ACTIVE", "INACTIVE"] = "ACTIVE"
     created_at: datetime | None = None
 
 
@@ -49,6 +50,11 @@ class AdminUserUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
     role: Literal["STUDENT", "INSTRUCTOR", "ADMIN"] | None = None
+
+
+class AdminUserStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 class UpdateProfileRequest(BaseModel):

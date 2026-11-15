@@ -96,6 +96,7 @@
 | 54 | Admin | GET | `/admin/users` | Admin | MISSING | P1 |
 | 55 | Admin | POST | `/admin/users` | Admin | MISSING | P1 |
 | 56 | Admin | PATCH | `/admin/users/{user_id}` | Admin | MISSING | P1 |
+| 59 | Admin | PATCH | `/admin/users/{user_id}/status` | Active Admin | ROUTE (source; unverified in AWS) | P1 |
 | 57 | Admin | POST | `/admin/users/{user_id}/reset-password` | Admin | MISSING | P1 |
 | 58 | Admin | GET | `/admin/operations/summary` | Admin | PROPOSED | P2 |
 | 59 | Admin | GET | `/admin/operations/jobs` | Admin | PROPOSED | P2 |
@@ -737,6 +738,10 @@ Session/message response **mục tiêu** cần cho screens 23–25: `session_id`
 | **DECISION** | `POST /courses/{id}/unpublish` | 31,33 | Huy + Hùng | Chốt ảnh hưởng Student/enrollment/progress |
 
 **Không bổ sung FastAPI endpoints không cần thiết:** OTP signup, resend OTP, forgot/reset/change password nếu Cognito đảm trách; `PUT {presigned_s3_url}` do S3 nhận; `GET /admin/roles` nếu matrix có thể là cấu hình tĩnh; modal xác nhận là UI state.
+
+### Admin account status (implemented in source)
+
+`PATCH /admin/users/{user_id}/status` accepts `{ "enabled": true|false }` and returns the user with `status: "ACTIVE"|"INACTIVE"`. It is ADMIN-only. Cognito is updated before the RDS status; an RDS write failure triggers a compensating Cognito update. If compensation fails, the API returns `502` with `ACCOUNT_SYNC_INCONSISTENT`, which requires reconciliation. The endpoint refuses self-disable and disabling the last active ADMIN. Existing authenticated API requests also reject an INACTIVE RDS account. Migration `0015_user_account_status.sql` adds the persisted status; it has not been applied to any database by this change.
 
 ---
 

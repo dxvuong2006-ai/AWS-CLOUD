@@ -1,7 +1,8 @@
 import "../styles/management.css";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { listAdminUsers, createAdminUser, updateAdminUser } from "../api/admin.api";
+import { listAdminUsers, createAdminUser, updateAdminUser, setAdminUserEnabled } from "../api/admin.api";
+import { useAuth } from "../context/AuthContext";
 
 const PERMISSIONS = [
   ["Xem và đăng ký khóa học đã publish", true, true, true],
@@ -20,6 +21,7 @@ function generateTemporaryPassword() {
 }
 
 export default function AdminUsersPage() {
+  const { user: currentUser } = useAuth();
   const location=useLocation();
   const navigate=useNavigate();
   const {userId}=useParams();
@@ -34,12 +36,14 @@ export default function AdminUsersPage() {
   const editing=users.find(user=>String(user.id)===String(userId));
   const [form,setForm]=useState({name:"",email:"",role:"INSTRUCTOR",password:generateTemporaryPassword(),active:true});
   const [notice,setNotice]=useState("");
+  const [pendingStatus,setPendingStatus]=useState(null);
+  const [statusBusy,setStatusBusy]=useState(false);
   useEffect(()=>{listAdminUsers().then(setUsers).catch(e=>setError(e.detail||e.message));},[]);
   useEffect(()=>{
     setShowForm(location.pathname.endsWith("/new") || Boolean(userId));
   },[location.pathname,userId]);
   useEffect(()=>{
-    if(editing)setForm({name:editing.name,email:editing.email,role:editing.role,password:"",active:editing.status !== "INACTIVE"});
+    if(editing)setForm({name:editing.name,email:editing.email,role:editing.role,password:""});
   },[editing?.id]);
   async function save(event, confirmedAdmin = false){
     event.preventDefault();
@@ -54,6 +58,17 @@ export default function AdminUsersPage() {
       setShowForm(false);
       setNotice("Đã lưu thay đổi.");
     }catch(e){setError(e.detail||e.message);}
+  }
+  async function changeStatus(enabled){
+    if(!editing) return;
+    setStatusBusy(true); setError("");
+    try{
+      const updated = await setAdminUserEnabled(editing.id,enabled);
+      setUsers((current)=>current.map((account)=>account.id === updated.id ? updated : account));
+      setNotice(enabled ? "T\u00e0i kho\u1ea3n \u0111\u00e3 \u0111\u01b0\u1ee3c m\u1edf kh\u00f3a." : "T\u00e0i kho\u1ea3n \u0111\u00e3 b\u1ecb kh\u00f3a.");
+      setPendingStatus(null);
+    }catch(e){setError(e.detail||e.message);}
+    finally{setStatusBusy(false);}
   }
   if (isSuccess) {
     const account = location.state?.account || created;
@@ -73,10 +88,11 @@ export default function AdminUsersPage() {
           <label>Họ và tên<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required maxLength={255} /></label>
           <label>Email<div className="input-with-badge"><input type="email" value={form.email} readOnly /><span>Không đổi</span></div></label>
           <label>Vai trò<select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="INSTRUCTOR">Giảng viên</option><option value="ADMIN">Quản trị viên</option></select></label>
-          <label className="account-status-toggle"><span><strong>Trạng thái hoạt động</strong><small>Tắt để khóa tài khoản</small></span><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})} /></label>
+          <label className="account-status-toggle"><span><strong>Tr&#x1ea1;ng th&#x00e1;i ho&#x1ea1;t &#x0111;&#x1ed9;ng</strong><small>{editing.status === "INACTIVE" ? "T\u1eaft \u0111\u1ec3 m\u1edf kh\u00f3a t\u00e0i kho\u1ea3n" : "B\u1eadt cho ph\u00e9p \u0111\u0103ng nh\u1eadp"}</small></span><input type="checkbox" checked={editing.status !== "INACTIVE"} disabled={statusBusy || String(currentUser?.id) === String(editing.id)} onChange={()=>editing.status === "INACTIVE" ? changeStatus(true) : setPendingStatus(false)} /></label>
         </form>
-        <section className="management-card admin-other-actions"><h2>Thao tác khác</h2><button className="btn-secondary" type="button" onClick={()=>setNotice("Đặt lại mật khẩu chưa được kết nối với API quản trị.")}>↻ &nbsp;Đặt lại mật khẩu</button><button className="btn-danger-outline" type="button" onClick={()=>setNotice("Khóa tài khoản chưa được kết nối với API quản trị.")}>♙ &nbsp;Khóa tài khoản</button></section>
+        <section className="management-card admin-other-actions"><h2>Thao t&#x00e1;c kh&#x00e1;c</h2><button className="btn-secondary" type="button" onClick={()=>setNotice("Đặt lại mật khẩu chưa được kết nối với API quản trị.")}>&#x21bb; &nbsp;&#x0110;&#x1eb7;t l&#x1ea1;i m&#x1ead;t kh&#x1ea9;u</button><button className="btn-danger-outline" type="button" disabled={statusBusy || (String(currentUser?.id) === String(editing.id) && editing.status === "ACTIVE")} onClick={()=>editing.status === "INACTIVE" ? changeStatus(true) : setPendingStatus(false)}>{editing.status === "INACTIVE" ? "Mở khóa tài khoản" : "Khóa tài khoản"}</button></section>
       </div>
+      {pendingStatus === false && <div className="workflow-modal-backdrop"><section className="workflow-modal" role="dialog" aria-modal="true" aria-labelledby="disable-account-title"><h2 id="disable-account-title">Kh&#x00f3;a t&#x00e0;i kho&#x1ea3;n n&#x00e0;y?</h2><p>{editing.name} s&#x1ebd kh&#x00f4;ng th&#x1ec3; &#x0111;&#x0103;ng nh&#x1ead;p ho&#x1eb7;c s&#x1eed; d&#x1ee5;ng LearnCloud cho &#x0111;&#x1ebf;n khi &#x0111;&#x01b0;&#x1ee3;c m&#x1edf; kh&#x00f3;a.</p><div className="management-actions"><button className="btn-secondary" disabled={statusBusy} onClick={()=>setPendingStatus(null)}>H&#x1ee7;y</button><button className="btn-danger-outline" disabled={statusBusy} onClick={()=>changeStatus(false)}>{statusBusy ? "Đang xử lý…" : "Xác nhận khóa"}</button></div></section></div>}
     </div>;
   }
   if (showForm) {
@@ -106,7 +122,7 @@ export default function AdminUsersPage() {
     {error&&<p role="alert">{error}</p>}
     {isRoles?<div className="roles-layout"><section className="management-card permission-table"><div className="permission-head"><span>Quyền</span><span>Học viên</span><span>Giảng viên</span><span>Quản trị viên</span></div>{PERMISSIONS.map(([label,...values])=><div className="permission-row" key={label}><span>{label}</span>{values.map((allowed,index)=><span key={index} className={allowed?"permission-yes":"permission-no"}>{allowed?"✓":"—"}</span>)}</div>)}</section><section className="management-card role-guide"><h2>Cách cấp vai trò</h2>{[["Học viên","Họ tên, email, mật khẩu","Tự đăng ký","student"],["Giảng viên","Họ tên, email, mật khẩu, role INSTRUCTOR","Admin tạo","instructor"],["Quản trị viên","Họ tên, email, mật khẩu, role ADMIN","Admin cấp","admin"]].map(([title,detail,source,kind])=><div className="role-guide-row" key={title}><div><strong>{title}</strong><small>{detail}</small></div><span className={`role-pill ${kind}`}>• &nbsp;{source}</span></div>)}<p className="role-guide-note">ⓘ &nbsp; Vai trò cố định theo hệ thống, chỉ xem.</p></section></div>:<>
       <div className="management-toolbar"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Tìm tài khoản..." /></div>
-      {!showForm&&<div className="management-table-wrap"><table className="management-table"><thead><tr><th>Tài khoản</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody>{filtered.map(user=><tr key={user.id}><td><strong>{user.name}</strong></td><td>{user.email}</td><td>{user.role==="STUDENT"?"Học viên":user.role==="INSTRUCTOR"?"Giảng viên":"Quản trị viên"}</td><td><span className="status-chip success">Hoạt động</span></td><td><Link className="management-link" to={`/admin/users/${user.id}/edit`}>Sửa</Link></td></tr>)}</tbody></table></div>}
+      {!showForm&&<div className="management-table-wrap"><table className="management-table"><thead><tr><th>Tài khoản</th><th>Email</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody>{filtered.map(user=><tr key={user.id}><td><strong>{user.name}</strong></td><td>{user.email}</td><td>{user.role==="STUDENT"?"Học viên":user.role==="INSTRUCTOR"?"Giảng viên":"Quản trị viên"}</td><td><span className={`status-chip ${user.status === "INACTIVE" ? "error" : "success"}`}>{user.status === "INACTIVE" ? "\u0110\u00e3 kh\u00f3a" : "Ho\u1ea1t \u0111\u1ed9ng"}</span></td><td><Link className="management-link" to={`/admin/users/${user.id}/edit`}>Sửa</Link></td></tr>)}</tbody></table></div>}
     </>}
     {confirmAdmin&&<div className="workflow-modal-backdrop"><section className="workflow-modal" role="dialog" aria-modal="true"><h2>Cấp quyền Quản trị viên?</h2><p>Tài khoản này sẽ quản lý được mọi tài khoản, vai trò và giám sát hệ thống.</p><label className="confirm-check"><input type="checkbox" defaultChecked /> Tôi hiểu và muốn cấp quyền này</label><div className="management-actions"><button className="btn-secondary" onClick={()=>setConfirmAdmin(false)}>Hủy</button><button className="btn-primary" onClick={async()=>{setConfirmAdmin(false); await save({ preventDefault(){} }, true);}}>Xác nhận cấp quyền</button></div></section></div>}
   </div>;

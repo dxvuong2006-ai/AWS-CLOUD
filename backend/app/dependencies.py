@@ -33,10 +33,13 @@ def get_current_user(
     claims = auth_service.authorizer_claims_from_event(event)
     if claims is not None:
         try:
-            return auth_service.sync_authorizer_claims(
+            user = auth_service.sync_authorizer_claims(
                 db, claims,
                 access_token=credentials.credentials if credentials else None,
             )
+            if user.status != "ACTIVE":
+                raise HTTPException(status_code=403, detail="Account is disabled")
+            return user
         except auth_service.CognitoAuthError as exc:
             raise HTTPException(
                 status_code=exc.status_code,
@@ -50,7 +53,10 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Authentication required",
                             headers={"WWW-Authenticate": "Bearer"})
     try:
-        return auth_service.user_from_access_token(db, credentials.credentials)
+        user = auth_service.user_from_access_token(db, credentials.credentials)
+        if user.status != "ACTIVE":
+            raise HTTPException(status_code=403, detail="Account is disabled")
+        return user
     except auth_service.InvalidToken as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token",
                             headers={"WWW-Authenticate": "Bearer"}) from exc
