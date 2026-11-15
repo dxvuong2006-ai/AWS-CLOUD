@@ -1,4 +1,4 @@
-# Video Processing Backend
+# Backend xử lý video
 
 > Ghi nhận lịch sử: một thay đổi Lesson approval đã được chuẩn bị;
 > trạng thái migration/DB hiện tại chưa xác minh. Xem [hướng dẫn review](../database/lesson-approval-migration.md).
@@ -109,7 +109,7 @@ khi nhận lại cùng lệnh publish. Nội dung rỗng/sai trạng thái/đang
 Không triển khai lần submit đầu tiên DRAFT/UPLOADED → PROCESSING; cần thống nhất
 EventBridge hay confirm-upload ở giai đoạn sau. Không tự approve bằng local adapter.
 
-## Transaction, concurrency và local dispatch
+## Transaction, xử lý đồng thời và dispatch local
 
 - Retry/publish khóa theo thứ tự Course → Lesson; publish còn khóa section trước
   danh sách Lesson. Repository dùng `FOR UPDATE NOWAIT` và `populate_existing`
@@ -185,7 +185,7 @@ local queue dùng thư mục tạm thật, không tạo AWS resource.
   Test publish với APPROVED là **unit fixture cho logic tương lai**, không phải
   tuyên bố schema hiện tại đã hỗ trợ approval.
 
-## File thay đổi
+## File đã thay đổi
 
 | Nhóm | File |
 | --- | --- |

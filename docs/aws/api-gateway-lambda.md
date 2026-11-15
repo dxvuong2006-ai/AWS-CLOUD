@@ -1,4 +1,4 @@
-# API Gateway and Lambda notes
+# Ghi chú API Gateway và Lambda
 
 > Lưu ý lịch sử: bản bàn giao trước có endpoint AWS và giá trị database credential cố định. Các giá trị định danh/endpoint cũ đã được gỡ khỏi tài liệu; credential cũ không được lặp lại. Không dùng bản ghi bàn giao này để xác định cấu hình hiện tại. Xem [quy trình triển khai và xác minh](../aws-deployment.md).
 
@@ -6,7 +6,7 @@
 
 Tài liệu dưới đây giữ lại các hướng dẫn cấu hình chung từ runbook cũ. Những phần phụ thuộc tài nguyên AWS, endpoint, user pool, stage hoặc role cụ thể cần được đối chiếu với inventory hiện hành trước khi thao tác.
 
-## Runtime inventory
+## Kiểm kê runtime
 
 Không có inventory production được xác minh trong repository hiện tại. Lấy API base URL, API Gateway routes, Lambda version/alias, Cognito pool/client, RDS metadata và S3 bucket từ nguồn quản lý được nhóm phê duyệt; không đưa password/token vào tài liệu.
 

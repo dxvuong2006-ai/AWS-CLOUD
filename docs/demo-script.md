@@ -1,19 +1,19 @@
-# Local demonstration
+# Kịch bản demo local
 
-This is a 3–5 minute local demo. It demonstrates the running app and the API interface without relying on an AWS account or claiming unverified production behavior.
+Thời lượng 3–5 phút. Kịch bản minh họa ứng dụng và API local, không phụ thuộc AWS và không khẳng định các chức năng production chưa được xác minh đang hoạt động.
 
-## Preparation
+## Chuẩn bị
 
-Follow [local setup](local-setup.md), configure a local database/auth mode, and start backend and frontend. Use disposable local data only. Do not project secrets, access tokens or presigned URLs.
+Làm theo [hướng dẫn thiết lập local](local-setup.md), cấu hình database/auth local rồi khởi động backend và frontend. Chỉ dùng dữ liệu local có thể bỏ. Không trình chiếu secret, access token hoặc presigned URL.
 
-## Demo flow
+## Trình tự demo
 
-1. Open `http://127.0.0.1:8000/health` and show the local API responds. This confirms only the local backend process.
-2. Open `http://127.0.0.1:8000/docs` and show that the live FastAPI OpenAPI is the current API reference.
-3. Open `http://localhost:5173` and navigate a flow supported by the local configuration. State whether the page is connected to the local backend or explicitly running in mock mode.
-4. If database-backed interaction is prepared, use only a disposable seeded/local test account and show one covered flow. Do not imply an AWS integration or PostgreSQL concurrency gate passed based on SQLite/offline tests.
-5. Close by distinguishing current evidence: source and offline tests are available; PostgreSQL-gated suites and current AWS deployment state remain unverified as summarized in [requirements](requirements.md) and the [regression report](operations/backend-regression-report.md).
+1. Mở `http://127.0.0.1:8000/health` và cho thấy API local phản hồi. Kết quả này chỉ xác nhận tiến trình backend local.
+2. Mở `http://127.0.0.1:8000/docs` để cho thấy OpenAPI runtime của FastAPI là API reference hiện tại.
+3. Mở `http://localhost:5173` và đi qua luồng phù hợp với cấu hình local. Nói rõ frontend đang kết nối backend local hay chạy ở mock mode.
+4. Nếu đã chuẩn bị thao tác có lưu database, chỉ dùng tài khoản test/seed local có thể bỏ và trình bày một luồng đã được kiểm thử. Không nói rằng SQLite/offline test chứng minh tích hợp AWS hoặc PostgreSQL concurrency gate đã pass.
+5. Kết thúc bằng cách nêu rõ bằng chứng hiện có: source và offline test; các suite có PostgreSQL gate và trạng thái triển khai AWS hiện tại vẫn chưa xác minh, như ghi trong [yêu cầu](requirements.md) và [báo cáo regression](operations/backend-regression-report.md).
 
-## Stop and cleanup
+## Dừng và dọn môi trường
 
-Stop Uvicorn/Vite with `Ctrl+C`. Stop local services with `docker compose stop` if they were started. Preserve the Compose volume unless its owner explicitly chooses to remove local data.
+Dừng Uvicorn/Vite bằng `Ctrl+C`. Nếu đã khởi động dịch vụ local, dừng bằng `docker compose stop`. Giữ lại Compose volume trừ khi chủ sở hữu dữ liệu chủ động chọn xóa dữ liệu local.

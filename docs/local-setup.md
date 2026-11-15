@@ -1,16 +1,16 @@
-# Local setup
+# Thiết lập môi trường local
 
-These steps target a developer machine and isolated local data. They do not deploy or contact AWS. Do not point tests or migration commands at RDS.
+Các bước này dành cho máy phát triển và dữ liệu local được cô lập. Chúng không deploy hoặc kết nối AWS. Không trỏ test hay migration command tới RDS.
 
-## Requirements
+## Yêu cầu
 
-- Python 3.11+ and pip.
-- Node.js/npm compatible with `frontend/package-lock.json`.
-- Docker Desktop only when local PostgreSQL/Mailpit are needed.
+- Python 3.11 trở lên và pip.
+- Node.js/npm tương thích với `frontend/package-lock.json`.
+- Chỉ cần Docker Desktop nếu muốn chạy PostgreSQL/Mailpit local.
 
 ## Backend
 
-From repository root in PowerShell:
+Mở PowerShell tại thư mục gốc repository:
 
 ```powershell
 Copy-Item .env.example .env
@@ -18,19 +18,19 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
 ```
 
-Set `DATABASE_URL` to a local database or an isolated SQLite test database and set development-only secrets as required by `backend/app/config.py`. Do not copy production environment files. The backend fails to start if `DATABASE_URL` is empty.
+Đặt `DATABASE_URL` trỏ tới database local hoặc SQLite test cô lập; cấu hình secret chỉ dành cho development theo yêu cầu trong `backend/app/config.py`. Không sao chép file môi trường production. Backend không khởi động nếu `DATABASE_URL` rỗng.
 
-Run from repository root:
+Khởi động backend từ thư mục gốc:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/docs` for the runtime OpenAPI interface and `http://127.0.0.1:8000/health` for the health route.
+Mở `http://127.0.0.1:8000/docs` để xem OpenAPI runtime hoặc `http://127.0.0.1:8000/health` để gọi health route.
 
 ## Frontend
 
-In a second terminal:
+Mở terminal thứ hai:
 
 ```powershell
 Set-Location .\frontend
@@ -38,24 +38,24 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Vite serves the app at `http://localhost:5173` by default. Use `frontend/.env.example` as the variable reference. Any `VITE_*` value is exposed to the browser bundle; never put secrets there.
+Vite mặc định phục vụ ứng dụng tại `http://localhost:5173`. Dùng `frontend/.env.example` để xem tên biến cấu hình. Mọi biến `VITE_*` đều được đưa vào bundle trình duyệt; không đặt secret tại đây.
 
-## Optional local services
+## Dịch vụ local tùy chọn
 
-`docker-compose.yml` defines PostgreSQL 16 on host port `5434` and Mailpit on `1025`/`8025`. Start only when needed:
+`docker-compose.yml` định nghĩa PostgreSQL 16 tại host port `5434` và Mailpit tại `1025`/`8025`. Chỉ khởi động khi cần:
 
 ```powershell
 docker compose up -d learncloud-db mailpit
 ```
 
-For a new local database, review `database/migrations/README.md` and the duplicate historical migration versions before applying schema/migrations. Compose's persistent volume may contain local data; do not use `down -v` as routine cleanup.
+Với database local mới, đọc `database/migrations/README.md` và lưu ý các version migration lịch sử bị trùng trước khi áp dụng schema/migration. Compose volume có thể chứa dữ liệu local; không dùng `down -v` để dọn thường xuyên.
 
-## Tests and limits
+## Kiểm thử và giới hạn
 
-Backend tests have explicit PostgreSQL gates; see [the saved regression report](operations/backend-regression-report.md). It records 463 passing and 69 skipped cases in an offline SQLite-configured run. The skipped PostgreSQL cases remain unverified until run against their isolated test databases.
+Backend có PostgreSQL gate rõ ràng; xem [báo cáo regression đã lưu](operations/backend-regression-report.md). Báo cáo ghi nhận 463 pass và 69 skip trong lượt chạy offline với SQLite. Các case PostgreSQL bị skip vẫn chưa được xác minh cho tới khi chạy trên database test riêng.
 
-Frontend commands are `npm.cmd test`, `npm.cmd run build`, `npm.cmd run test:browser` and `npm.cmd run test:auth-browser` from `frontend/`. AI pipeline checks are in `ai_pipeline/tests/`; inspect `ai_pipeline/README.md` for the exact local invocation. No test suite is run by these setup instructions automatically.
+Frontend có các lệnh `npm.cmd test`, `npm.cmd run build`, `npm.cmd run test:browser`, `npm.cmd run test:auth-browser` từ thư mục `frontend/`. AI pipeline có test trong `ai_pipeline/tests/`; xem `ai_pipeline/README.md` để biết lệnh local chính xác. Hướng dẫn này không tự chạy test suite.
 
-## Authentication and safety
+## Xác thực và an toàn
 
-Backend auth uses bearer access tokens. Local auth is a separately gated development/test option; it is not an AWS/Cognito substitute for production. Use seeded/local test accounts only. Do not bypass auth with old `X-Demo-User` instructions found in archived notes. Keep `.env`, `frontend/.env`, tokens and test passwords out of Git.
+Backend dùng bearer access token. Local auth là chế độ riêng, phải bật rõ ràng cho development/test; không thay thế Cognito/AWS trong production. Chỉ dùng tài khoản seed/test local. Không dùng các hướng dẫn `X-Demo-User` cũ trong ghi chú lưu trữ để bỏ qua xác thực. Không commit `.env`, `frontend/.env`, token hay mật khẩu test lên Git.

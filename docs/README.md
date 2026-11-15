@@ -1,4 +1,4 @@
-# LearnCloud documentation
+# Tài liệu LearnCloud
 
 Tài liệu này là điểm vào cho nhóm bảo trì và bàn giao LearnCloud. Tài liệu mô tả source và cấu hình trong repository; source không chứng minh một tài nguyên AWS đang chạy. Báo cáo kiểm thử ghi rõ phạm vi, kết quả, skip và giới hạn xác minh. Trạng thái AWS production hiện chưa được kiểm tra trong đợt dọn tài liệu này.
 

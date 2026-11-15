@@ -1,10 +1,10 @@
-# Cognito/RDS identity reconciliation
+# Đối soát danh tính Cognito/RDS
 
 Tài liệu này là kế hoạch vận hành, không phải migration. Thay đổi code trong đợt
 audit này không kết nối RDS/Cognito production và không tự chạy `INSERT`,
 `UPDATE`, `DELETE`.
 
-## Kết luận audit
+## Kết luận rà soát
 
 - Frontend đăng nhập trực tiếp bằng Cognito `USER_PASSWORD_AUTH`; backend không
   có endpoint `/auth/login` cho Cognito. Sau đăng nhập, frontend dùng access token
@@ -26,7 +26,7 @@ audit này không kết nối RDS/Cognito production và không tự chạy `INS
   group. Muốn tự động hoá đầy đủ về sau cần provisioning request/outbox có ID
   riêng và trạng thái review, không được coi email là khóa idempotency.
 
-## Chính sách provisioning sau sửa
+## Chính sách cấp profile sau khi sửa
 
 1. Tìm profile theo exact `cognito_sub`.
 2. Nếu đã có, trả row hiện tại và không cập nhật `name`, `email`, `role`,
@@ -69,7 +69,7 @@ không thêm chúng vào execution-role policy. JWKS HTTPS read cũng không ph�
 action. Thay placeholders `AWS_REGION`, `ACCOUNT_ID`, `COGNITO_USER_POOL_ID` khi
 review/deploy; không dùng resource `*`.
 
-## Kế hoạch reconciliation production
+## Kế hoạch đối soát production
 
 Trước khi ghi dữ liệu, operator cần xuất hai snapshot chỉ đọc: Cognito gồm
 `Username`, `sub`, `email`, `email_verified`, `UserStatus`, `Enabled`; RDS gồm
@@ -122,7 +122,7 @@ transaction có backup và kiểm tra precondition. Không đổi role, không �
 không ghi đè profile. Nếu chưa đủ bằng chứng, giữ nguyên xung đột và từ chối đăng
 nhập là kết quả an toàn.
 
-## Kiểm tra sau reconciliation
+## Kiểm tra sau đối soát
 
 Chỉ dùng truy vấn `SELECT` để xác nhận:
 

@@ -38,7 +38,7 @@ Luồng đã triển khai: LearningPage lấy metadata như trước, sau đó g
 thực hiện `HeadObject`, rồi tạo Presigned GET bằng boto3 với Signature V4.
 Frontend truyền `video_url` qua prop `src` của HTML5 VideoPlayer.
 
-## File thay đổi
+## Các file đã thay đổi
 
 | File | Thay đổi |
 | --- | --- |

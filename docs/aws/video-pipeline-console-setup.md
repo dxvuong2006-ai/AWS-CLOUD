@@ -160,9 +160,9 @@ Không dùng AWS account ID/ARN ví dụ để chạy. Không sửa `.env` hiệ
 
 <a id="phan-2--iam-roles-va-policies"></a>
 
-## Phần 2 — IAM Roles và Policies
+## Phần 2 — IAM role và policy
 
-### 2.1. Cách tạo policy và role trong Console
+### 2.1. Cách tạo policy và role trên Console
 
 **MANUAL AWS CONSOLE STEP:** trên thanh tìm kiếm dịch vụ nhập **IAM** → IAM →
 **Policies → Create policy → JSON**. Dán nội dung file permissions đã thay placeholder,
@@ -288,7 +288,7 @@ chưa áp dụng policy/chưa bật pipeline. Đây là dependency triển khai 
 
 ## Phần 4 — Lambda
 
-### 4.1. Tạo deployment package local
+### 4.1. Tạo package triển khai tại local
 
 ZIP phải chứa `app/`, `video_pipeline_handler.py` và dependencies tại **root**.
 Chọn Python 3.12, x86_64 nên cần wheels Linux CPython 3.12, không lấy `.venv` Windows.
@@ -307,7 +307,7 @@ Mở ZIP kiểm tra layout và dung lượng. Lambda direct ZIP upload giới h�
 nếu vượt, người dùng tự upload ZIP lên một bucket artifact riêng bằng S3 Console rồi
 chọn S3 location trong Lambda. Không dùng prefix raw video làm nơi chứa artifact.
 
-### 4.2. Tạo ba functions
+### 4.2. Tạo ba Lambda function
 
 **MANUAL AWS CONSOLE STEP:** tìm **Lambda → Functions → Create function → Author from
 scratch**, nhập tên theo bảng, Runtime Python 3.12, Architecture x86_64. Permissions →
@@ -325,7 +325,7 @@ Edit để đặt handler. Không tạo Function URL hoặc API Gateway public c
 Nếu lab cho phép, đặt reserved concurrency pipeline=2, relay=1, recovery=1 để hạn chế
 kết nối DB; quota thấp thì điều chỉnh theo người quản trị. Không đặt 0 vì sẽ throttle toàn bộ.
 
-### 4.3. Environment variables
+### 4.3. Biến môi trường
 
 **MANUAL AWS CONSOLE STEP:** mỗi function → Configuration → Environment variables → Edit.
 
@@ -406,7 +406,7 @@ nhưng bản này chọn lưu job ID + GetJob polling. Token
 [CreateJob chỉ dedupe trong một phút](https://docs.aws.amazon.com/mediaconvert/latest/apireference/idempotency.html),
 không thay cho ledger PostgreSQL.
 
-### 5.2. Chạy input mẫu và theo dõi graph
+### 5.2. Chạy input mẫu và theo dõi biểu đồ thực thi
 
 **MANUAL AWS CONSOLE STEP:** state machine → Start execution → đặt tên test dễ tìm →
 dùng schema `sample-upload-input.json`, thay lesson/key/ETag theo upload thật đã xin
@@ -590,7 +590,7 @@ Không log secrets, presigned URLs, Authorization/JWT, DATABASE_URL/password, ac
 keys/session tokens, transcript/prompt/quiz đáp án hoặc PII. Execution history còn lưu
 payload dù Include execution data OFF, cần giới hạn quyền xem history.
 
-## Phần 8 — End-to-End Test với cloud.mp4
+## Phần 8 — Kiểm thử end-to-end với cloud.mp4
 
 **MANUAL AWS CONSOLE STEP:** phần AWS trong bài test này do bạn làm sau deployment.
 Đây là checklist kiểm chứng cần chạy, không phải kết quả đã chạy bởi agent.
@@ -646,7 +646,7 @@ Tiêu chí video phase đạt: một owner/job cho mỗi upload+attempt; job COM
 thật; key DB đúng; không tự AI/approve/publish. Chỉ ghi **AWS VERIFIED cho phạm vi đã
 có bằng chứng thực tế**, ví dụ video phase; không suy ra AI phase cũng verified.
 
-## Phần 9 — Troubleshooting
+## Phần 9 — Xử lý sự cố
 
 Mọi thao tác thay cấu hình/thử lại ở phần này là **MANUAL AWS CONSOLE STEP**.
 
@@ -688,7 +688,7 @@ Mọi thao tác thay cấu hình/thử lại ở phần này là **MANUAL AWS CO
    không ép safe_to_retry bằng SQL: giữ chặn và nhờ người quản trị đối soát job history/
    audit/support. Đây là giới hạn có chủ ý để tránh hai job có phí cho cùng attempt.
 
-### 9.2. Recovery cho execution timeout/stop
+### 9.2. Phục hồi execution bị timeout/stop
 
 **MANUAL AWS CONSOLE STEP:** xác minh trạng thái terminal trong Step Functions trước.
 Nếu rule recovery chưa nhận event, Lambda recovery → Test với schema event thật,
@@ -704,7 +704,7 @@ MC, không tự chạy lại. Nếu DB vẫn mất kết nối, sửa mạng/DB 
 
 <a id="phan-10--cleanup"></a>
 
-## Phần 10 — Cleanup
+## Phần 10 — Dọn tài nguyên
 
 **MANUAL AWS CONSOLE STEP:** chỉ dọn tài nguyên test bạn sở hữu, xác nhận không dùng
 chung. Không xóa bucket LearnCloud, DB development, schema/seed, migration 0004 hoặc

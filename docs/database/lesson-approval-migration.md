@@ -1,4 +1,4 @@
-# Lesson approval migration review (historical)
+# Review migration phê duyệt Lesson (lịch sử)
 
 > Ghi chú review lịch sử. Trạng thái migration/DB trong tài liệu này không được kiểm tra lại; xác minh schema và registry của đúng database trước khi vận hành. Không xem câu “chưa áp dụng” là trạng thái hiện tại.
 
@@ -21,7 +21,7 @@ Kiểm tra DB `learncloud` thực tế bằng transaction READ ONLY cho thấy:
 - Router/service review còn trống trước thay đổi, nên chỉ bổ sung phần approve
   tối thiểu; không tự xây GET/PATCH AI review hoặc tạo nội dung thay thành viên C.
 
-## Trạng thái và validation
+## Trạng thái và kiểm tra hợp lệ
 
 `backend/app/lesson_states.py` là nguồn enum dùng chung cho model, response
 validation và các transition mới:
@@ -38,7 +38,7 @@ bất kỳ Lesson nào sang APPROVED. Hai điều kiện vẫn được phân bi
 - **Schema cho phép APPROVED** không có nghĩa nội dung đã được phê duyệt.
 - Chỉ hành động approve của instructor sở hữu course, sau kiểm tra, mới ghi APPROVED.
 
-## Endpoint approve
+## Endpoint phê duyệt
 
 `POST /lessons/{lesson_id}/approve`, không có request body; dùng
 `require_instructor`/identity hiện tại. Không nhận key, AI content hay status
@@ -79,7 +79,7 @@ Approve dùng khóa Course → Lesson và NOWAIT giống retry/publish; tranh kh
 trả 409 `REVIEW_BUSY`. Lỗi sau flush/commit được rollback; không tạo job mới,
 không đổi retry_count hoặc sửa nội dung AI. Lỗi pipeline cũ được xóa khi approve.
 
-## Course publish
+## Xuất bản khóa học
 
 Giữ nguyên ownership/role, khóa transaction và idempotency hiện có. Course
 DRAFT chỉ publish khi có section, mọi section có Lesson, mọi Lesson là
@@ -187,7 +187,7 @@ migration bắt buộc hoặc request/response lần này để tránh mở rộ
 Hiện log approval có lesson_id/instructor_id và request timestamp, nhưng không
 được coi là thay thế một audit trail bền vững trong DB.
 
-## Tests và giới hạn kiểm chứng
+## Kiểm thử và giới hạn xác minh
 
 Chạy từ backend:
 
@@ -210,7 +210,7 @@ $env:LEARNCLOUD_RUN_DB_TESTS = '1'
   chạy trên bản sao/test DB trước môi trường dùng chung.
 - S3 HEAD trong tests được stub; chưa tuyên bố đã approve nội dung/video AWS thật.
 
-## File liên quan thay đổi trong lượt điều chỉnh
+## File liên quan đã thay đổi trong lượt điều chỉnh
 
 | Nhóm | File |
 | --- | --- |

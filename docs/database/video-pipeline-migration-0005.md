@@ -1,4 +1,4 @@
-# Review migration 0005 — Video pipeline ledger
+# Review migration 0005 — ledger pipeline video
 
 > Tài liệu review và lệnh mẫu từ snapshot trước. Chưa xác minh trạng thái 0005 trên bất kỳ database hiện tại nào. Không chạy lệnh migration trực tiếp trước khi xác nhận target, backup và preflight theo quy trình hiện hành.
 
@@ -32,7 +32,7 @@ upload-id/attempt riêng. `verify_output` giữ khóa khi kiểm owner/generatio
 STALE_EXECUTION, không ghi lại key hay hạ trạng thái attempt mới. Runtime C cũng phải
 tuân thủ cùng ownership gate; quyền ghi SQL tùy ý ngoài service không được coi là an toàn.
 
-## Migration đã review
+## Migration đã được rà soát
 
 File [0005_video_pipeline_ledger.sql](../../database/migrations/0005_video_pipeline_ledger.sql):
 
@@ -75,7 +75,7 @@ Thông tin privilege CREATE/REFERENCES/INSERT giúp đối chiếu, không tự 
 [READ ONLY](https://www.postgresql.org/docs/16/sql-set-transaction.html) là cơ chế PostgreSQL
 chặn DDL/DML trong transaction này. Dùng psql ON_ERROR_STOP để trả mã lỗi khi có STOP.
 
-## PowerShell — backup, apply, verify thủ công
+## PowerShell — sao lưu, áp dụng, xác minh thủ công
 
 Các ví dụ chạy từ repository root, container `learncloud-db`, database/user `learncloud`
 theo compose hiện có. **Agent chưa chạy bất kỳ lệnh Docker/psql/pg_dump nào.** Không chạy
@@ -103,7 +103,7 @@ Chỉ tiếp tục khi đúng DB, READY_TO_APPLY, 0004 đúng, có đủ quyền
 ledger/version conflict. Ghi lại tổng số Lesson/Course theo trạng thái để đối chiếu.
 ALREADY_APPLIED nghĩa là bỏ qua bước apply, không phải lý do ghi đè hai bảng.
 
-### 2. Backup archive và kiểm tra archive
+### 2. Sao lưu archive và kiểm tra archive
 
 Tạo custom-format dump **bên trong container**, sau đó docker cp ra host. Không pipe
 binary pg_dump qua PowerShell `>`/Out-File vì có thể làm hỏng encoding trên bản shell cũ.
@@ -130,7 +130,7 @@ bản sao an toàn ngoài container. pg_restore --list chỉ kiểm khả năng 
 restore trên DB test riêng trước apply. [pg_dump -Fc](https://www.postgresql.org/docs/16/app-pgdump.html)
 là backup một database; không bao gồm toàn bộ roles/globals của cluster.
 
-### 3. Khuyến nghị thử trên DB test tách biệt trước
+### 3. Khuyến nghị thử trước trên database test riêng
 
 Chỉ người vận hành thực hiện, trong database mới do mình sở hữu. Không drop/overwrite
 database test có sẵn mà chưa review. Không dùng --clean trên development.
@@ -156,7 +156,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Test verification failed.' }
 Sau đó chạy PostgreSQL tests ở phần dưới nếu muốn. Các bước này do operator tự chạy;
 không được báo PostgreSQL migration verified chỉ từ unit tests/SQL review.
 
-### 4. Apply đúng một migration vào DB đã review
+### 4. Chỉ áp dụng migration đã review vào database đích
 
 Chạy sau khi backup và thử bản sao đạt. Biến pipelineDatabase vẫn là DB mục tiêu đã
 xác nhận, không dùng script “apply tất cả migrations” cho lần review này.
@@ -173,7 +173,7 @@ không commit; psql thoát và connection đóng sẽ rollback. Không chạy l�
 INSERT registry bằng tay khi có lỗi. Nếu mất kết nối lúc commit, kiểm tra lại bằng
 preflight trước khi quyết định có cần apply hay không.
 
-### 5. Verify chỉ đọc sau apply
+### 5. Xác minh chỉ đọc sau khi áp dụng
 
 ```powershell
 Get-Content .\database\checks\video_pipeline_preflight.sql -Encoding UTF8 -Raw |
@@ -208,7 +208,7 @@ migration đã review. Không drop ledger/xóa version 0005 để rollback vội
 toàn DB có thể mất dữ liệu phát sinh sau backup, cần quyết định và kế hoạch riêng của
 chủ dữ liệu; ví dụ restore ở trên chỉ dành cho DB test mới.
 
-## Tests và giới hạn kết quả
+## Kiểm thử và giới hạn kết quả
 
 Unit tests an toàn, không network:
 
@@ -253,7 +253,7 @@ Nhập password test qua cách quản lý secret của nhóm, không commit/in l
 test là bản sao có dữ liệu: giữ private. Chưa chạy các lệnh này thì chưa có kết quả
 kiểm chứng migration trên PostgreSQL, lock runtime hoặc AWS integration.
 
-## File thay đổi trong lần review
+## File thay đổi trong lần rà soát
 
 - `database/migrations/0005_video_pipeline_ledger.sql`
 - `database/checks/video_pipeline_preflight.sql`
