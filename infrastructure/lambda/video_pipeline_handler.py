@@ -44,6 +44,8 @@ def _execute(event, db):
     if action == "verify":
         return service.verify_output(db, run_id, owner, S3StorageAdapter(), _mediaconvert())
     if action == "finalize_ai":
+        if not settings.VIDEO_AI_ENABLED:
+            raise service.PipelineError("AI_PIPELINE_DISABLED")
         return service.finalize_ai(db, run_id, owner, event.get("proof"))
     if action == "fail":
         return service.fail(db, run_id, owner)

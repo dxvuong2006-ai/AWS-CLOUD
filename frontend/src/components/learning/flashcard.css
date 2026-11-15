@@ -1,0 +1,74 @@
+.flashcard-study { max-width: 760px; margin: clamp(28px, 8vh, 100px) auto 24px; }
+.flashcard-counter, .flashcard-actions { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 16px 0; }
+.flashcard-study progress { width: 100%; height: 8px; accent-color: var(--accent, #354ce4); }
+.flashcard-face { box-sizing: border-box; width: 100%; min-height: 320px; margin-top: 24px; padding: 36px; border: 1px solid #e1e5ee; border-radius: 20px; background: #fff; color: #101b34; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; font: inherit; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; }
+.flashcard-face h2 { margin: 0; font-size: clamp(22px, 3vw, 30px); }
+.flashcard-face.is-flipped { background: #f9faff; border-color: #c7d0ff; line-height: 1.6; }
+.flashcard-badge { border-radius: 20px; padding: 3px 12px; font-size: 13px; color: #354ce4; background: #eef2ff; }
+.is-flipped .flashcard-badge { color: #168452; background: #e8f7ef; }
+.flashcard-face small { font-size: 13px; color: #536287; }
+.flashcard-face:focus-visible { outline: 3px solid var(--accent, #354ce4); outline-offset: 4px; }
+.flashcard-finish { max-width: 600px; margin: auto; text-align: center; padding: 36px; }
+.flashcard-finish .flashcard-actions { justify-content: center; }
+.flashcard-success { display: inline-flex; width: 64px; height: 64px; align-items: center; justify-content: center; border-radius: 50%; background: #e8f7ef; }
+.flashcard-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+.flashcard-stats div { display: flex; flex-direction: column; gap: 8px; padding: 20px; border-radius: 12px; background: #e8f7ef; color: #167459; }
+.flashcard-stats div + div { background: #fff4df; color: #a8620c; }
+.flashcard-stats strong { font-size: 28px; }
+.flashcard-finish > span { font-size: 40px; color: var(--success, #168452); }
+.flashcard-picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.student-FlashcardPage:not(.flashcard-lesson-page) > h1,
+.student-FlashcardPage:not(.flashcard-lesson-page) section > h2 { font-weight: 750; }
+.student-FlashcardPage:not(.flashcard-lesson-page) .fc-course label,
+.student-FlashcardPage:not(.flashcard-lesson-page) .fc-course select,
+.student-FlashcardPage:not(.flashcard-lesson-page) .flashcard-picker .card {
+  font-weight: 650;
+}
+.student-FlashcardPage:not(.flashcard-lesson-page) .flashcard-picker .card {
+  display: flex;
+  align-items: center;
+  min-height: 72px;
+  box-sizing: border-box;
+  color: #173b9c;
+  border-color: #c7d2fe;
+  font-weight: 700;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.student-FlashcardPage:not(.flashcard-lesson-page) .flashcard-picker .card:hover,
+.student-FlashcardPage:not(.flashcard-lesson-page) .flashcard-picker .card:focus-visible {
+  color: #102a72;
+  background: #eef2ff;
+  border-color: #3453df;
+  box-shadow: 0 6px 16px rgb(52 83 223 / 16%);
+  font-weight: 800;
+  transform: translateY(-2px);
+}
+
+/* Two real faces, sharing a grid cell so long content stays inside the card. */
+.flashcard-flip { position: relative; perspective: 1400px; margin-top: 28px; }
+.flashcard-flip-rotor { display: grid; transform-style: preserve-3d; transition: transform 560ms cubic-bezier(.22,.7,.24,1); }
+.flashcard-flip[data-flipped="true"] .flashcard-flip-rotor { transform: rotateY(180deg); }
+.flashcard-study .flashcard-flip .flashcard-face {
+  grid-area: 1 / 1; margin: 0; min-width: 0; padding: 50px 36px 100px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.flashcard-side-front { transform: rotateY(0deg); }
+.flashcard-side-back { transform: rotateY(180deg); }
+.flashcard-flip-toggle { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+.flashcard-flip[data-flipped="true"] .flashcard-flip-toggle { bottom: 22px; }
+.flashcard-study .flashcard-flip[data-flipped="true"] + .flashcard-actions { justify-content: center; }
+.flashcard-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.student-page .flashcard-finish { display: flex; flex-direction: column; align-items: stretch; }
+.student-page .flashcard-finish .flashcard-success { align-self: center; }
+.student-page .flashcard-finish .flashcard-actions { margin-top: 0; }
+.student-page .flashcard-finish .flashcard-eligibility-note { order: 2; font-size: 12px; color: #657b9e; line-height: 1.6; }
+.student-page .flashcard-finish > button { align-self: center; border: 0; padding: 0; min-height: 24px; color: #657b9e; }
+.student-page .flashcard-stats div { color: #657b9e; font-size: 14px; }
+.student-page .flashcard-stats strong { color: #167459; }
+.student-page .flashcard-stats div + div strong { color: #a8620c; }
+@media (max-width: 700px) {
+  .flashcard-study .flashcard-flip .flashcard-face { padding: 36px 22px 100px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flashcard-flip-rotor { transition: none; }
+}

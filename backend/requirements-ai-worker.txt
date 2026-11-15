@@ -1,0 +1,9 @@
+# Dedicated AWS Lambda Python 3.12 x86_64 dependencies for the K5 worker.
+# Keep this smaller than the API requirements: the worker has no FastAPI routes.
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.10
+pydantic==2.5.2
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+jsonschema==4.26.0
+boto3==1.43.116

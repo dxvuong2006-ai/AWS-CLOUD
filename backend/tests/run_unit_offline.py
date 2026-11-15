@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
+sys.path.insert(0, str(root.parent))  # ai_pipeline is a repository-root package.
 os.environ.update({
     "DATABASE_URL": "sqlite:///:memory:",
     "JWT_SECRET_KEY": "offline-unit-test-placeholder-000000000000",
@@ -26,6 +27,9 @@ os.environ.update({
     "VIDEO_PROCESSOR_BACKEND": "disabled",
     "VIDEO_AI_ENABLED": "false",
     "APP_ENV": "production",
+    "COGNITO_REGION": "ap-southeast-1",
+    "COGNITO_USER_POOL_ID": "ap-southeast-1_offlinetest",
+    "COGNITO_APP_CLIENT_ID": "offline-test-client",
     "ALLOW_RAW_VIDEO_PLAYBACK": "false",
     "LOG_LEVEL": "WARNING",
     "LOG_FORMAT": "text",

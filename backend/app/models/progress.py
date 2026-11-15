@@ -4,7 +4,10 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Float,
     Integer,
+    JSON,
+    String,
     UniqueConstraint,
     func,
     text,
@@ -37,7 +40,12 @@ class LessonProgress(Base):
         nullable=False,
     )
     watched_seconds = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    last_position_seconds = Column(Float, nullable=False, default=0, server_default=text("0"))
+    watched_ranges = Column(JSON, nullable=False, default=list, server_default=text("'[]'"))
     completed = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    playback_session_id = Column(String(36), nullable=True)
+    last_sequence = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    last_request_id = Column(String(36), nullable=True)
     updated_at = Column(
         DateTime(timezone=True),
         nullable=False,

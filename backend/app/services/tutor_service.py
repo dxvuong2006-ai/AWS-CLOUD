@@ -5,6 +5,7 @@ import re
 import math
 from ai_pipeline.processors.build_tutor_context import build_tutor_context
 from app.models.tutor import TutorSession
+from app.config import PROJECT_ROOT
 from app.repositories import tutor_repo
 
 
@@ -63,9 +64,12 @@ def _segments(lesson):
 def _grounded_transcript(lesson):
     """Thêm mốc thời gian đã kiểm tra vào transcript gửi AI."""
     segments = _segments(lesson)
-    if segments:
-        return "\n".join(f"[{start} - {end}] {text}" for text, start, end in segments)
-    return _transcript(lesson)
+    transcript = ("\n".join(f"[{start} - {end}] {text}" for text, start, end in segments)
+                  if segments else _transcript(lesson))
+    concepts = getattr(lesson, "key_concepts_json", None)
+    definitions = [f"{item['term']}: {item['definition']}" for item in concepts
+                   if isinstance(item, dict) and item.get("term") and item.get("definition")] if isinstance(concepts, list) else []
+    return transcript + ("\nKhái niệm bài học:\n" + "\n".join(definitions) if definitions else "")
 
 
 def _public(session):
@@ -78,7 +82,24 @@ def _public(session):
                 for q in session.practice_questions]}
 
 
-def create_session(db, student_id, attempt_id, ai_client=None):
+def _bedrock_enabled():
+    """Đọc cờ Tutor từ môi trường hoặc .env mà không bật mặc định."""
+    from dotenv import dotenv_values
+    value = os.environ.get("TUTOR_USE_BEDROCK")
+    if value is None:
+        value = dotenv_values(PROJECT_ROOT / ".env").get("TUTOR_USE_BEDROCK", "")
+    return str(value).lower() == "true"
+
+
+def _bedrock_adapter():
+    """Tạo adapter với cấu hình .env; không ghi thông tin khóa vào log."""
+    from dotenv import load_dotenv
+    from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    return BedrockAIAdapter()
+
+
+def create_session(db, student_id, attempt_id, ai_client=None, defer_commit=False):
     """Tạo phiên cho lượt thi chưa đạt của học viên."""
     owner = tutor_repo.get_attempt_owner(db, attempt_id)
     if owner is not None and owner != student_id:
@@ -89,7 +110,10 @@ def create_session(db, student_id, attempt_id, ai_client=None):
     attempt, lesson, questions = row
     if attempt.passed:
         raise TutorError(409, "Attempt already passed.")
-    if lesson is None or not _transcript(lesson).strip():
+    if lesson is None:
+        raise TutorError(409, "Published lesson transcript is unavailable.")
+    lessons = tutor_repo.get_published_section_lessons(db, lesson.id)
+    if not any(_transcript(item).strip() for item in lessons):
         raise TutorError(409, "Published lesson transcript is unavailable.")
     incorrect = [
         {"question": question.question, "options": question.options_json,
@@ -100,11 +124,11 @@ def create_session(db, student_id, attempt_id, ai_client=None):
     ]
     if not incorrect:
         raise TutorError(409, "No incorrect questions found.")
-    if ai_client is None and os.getenv("TUTOR_USE_BEDROCK", "").lower() == "true":
+    if ai_client is None and _bedrock_enabled():
         from ai_pipeline.processors._common import AIClientError
-        from app.adapters.ai.bedrock_ai import AWS_FAILURES, BedrockAIAdapter
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
 
-        adapter = BedrockAIAdapter()
+        adapter = _bedrock_adapter()
 
         def ai_client(prompt):
             """Gọi Bedrock và chuyển lỗi AWS sang lỗi pipeline có dự phòng."""
@@ -113,12 +137,17 @@ def create_session(db, student_id, attempt_id, ai_client=None):
             except AWS_FAILURES as exc:
                 raise AIClientError("Bedrock unavailable.") from exc
 
-    result = build_tutor_context(_grounded_transcript(lesson), incorrect, ai_client)
+    context = "\n".join(
+        _grounded_transcript(item)
+        for item in lessons
+        if _transcript(item).strip()
+    )
+    result = build_tutor_context(context, incorrect, ai_client)
     session = TutorSession(student_id=student_id, lesson_id=lesson.id,
                            attempt_id=attempt_id,
                            practice_questions=result["practice_questions"],
                            remediation_completed=False)
-    tutor_repo.save_session(db, session, result["explanation"])
+    tutor_repo.save_session(db, session, result["explanation"], commit=not defer_commit)
     return {**_public(session), "explanation": result["explanation"]}
 
 
@@ -133,10 +162,28 @@ def send_message(db, student_id, session_id, message):
     lesson = tutor_repo.get_lesson(db, session.lesson_id)
     if lesson is None or lesson.status != "PUBLISHED":
         raise TutorError(403, "Lesson is unavailable.")
-    transcript = _transcript(lesson)
+    lessons = tutor_repo.get_published_section_lessons(db, lesson.id)
+    transcript = " ".join(_transcript(item) for item in lessons)
+    if _bedrock_enabled():
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
+
+        context = "\n".join(_grounded_transcript(item) for item in lessons)
+        prompt = (
+            "Chỉ trả lời dựa trên bài giảng sau; từ chối câu hỏi ngoài nội dung. "
+            "Gợi mở cách suy nghĩ, không tiết lộ đáp án quiz; chỉ trích dẫn "
+            "mốc thời gian có trong bài giảng.\n" + context
+            + "\nCâu hỏi học viên: " + message
+        )
+        try:
+            answer = _bedrock_adapter()._invoke(prompt).strip()
+        except AWS_FAILURES:
+            answer = ""
+        if answer:
+            tutor_repo.save_messages(db, session.id, message, answer)
+            return {"message": answer}
     words = {word.casefold() for word in re.findall(r"\w+", message)
              if len(word) > 3}
-    segments = _segments(lesson)
+    segments = [segment for item in lessons for segment in _segments(item)]
     relevant = [(text, start, end) for text, start, end in segments
                 if words & {word.casefold() for word in re.findall(r"\w+", text)}]
     if relevant:
@@ -161,6 +208,12 @@ def submit_practice(db, student_id, session_id, answers):
     session = tutor_repo.get_session(db, session_id, student_id, lock=True)
     if session is None:
         raise TutorError(404, "Tutor session not found.")
+    if session.workflow_state:
+        from app.services import remediation_service
+        payload = remediation_service.submit(db, student_id, session_id, answers)
+        result = payload["result"]
+        return {"correct": result["correct"], "total": result["total"],
+                "remediation_completed": payload["remediation_completed"]}
     questions = session.practice_questions
     if not questions or len(answers) != len(questions):
         raise TutorError(422, "Submit one answer per practice question.")
@@ -174,3 +227,81 @@ def submit_practice(db, student_id, session_id, answers):
         tutor_repo.complete(db, session)
     return {"correct": correct, "total": len(questions),
             "remediation_completed": session.remediation_completed}
+
+
+def remediate_question(db, student_id, payload, ai_client=None):
+    """Explain a submitted wrong answer and return one answer-hidden exercise."""
+    owner = tutor_repo.get_attempt_owner(db, payload.attempt_id)
+    if owner is not None and owner != student_id:
+        raise TutorError(403, "Attempt belongs to another student.")
+    row = tutor_repo.attempt_context(db, payload.attempt_id, student_id)
+    if row is None:
+        raise TutorError(404, "Attempt not found.")
+    _, lesson, answers = row
+    if lesson is None:
+        raise TutorError(409, "Published lesson is unavailable.")
+    lessons = tutor_repo.get_published_section_lessons(db, lesson.id)
+    target = next(
+        (item for item in lessons if item.id == payload.lesson_id), None,
+    )
+    if target is None:
+        raise TutorError(404, "Lesson not found in this section.")
+    selected = next(
+        (
+            (question, answer)
+            for question, answer in answers
+            if question.id == payload.question_id
+        ),
+        None,
+    )
+    if selected is None:
+        raise TutorError(404, "Question not found in this attempt.")
+    question, answer = selected
+    if (
+        answer is None
+        or answer.is_correct
+        or answer.selected_answer != payload.selected_option
+    ):
+        raise TutorError(409, "A submitted incorrect answer is required.")
+    context = _grounded_transcript(target)
+    if not context.strip():
+        raise TutorError(409, "Lesson transcript is unavailable.")
+
+    if (
+        ai_client is None
+        and _bedrock_enabled()
+    ):
+        from ai_pipeline.processors._common import AIClientError
+        from app.adapters.ai.bedrock_ai import AWS_FAILURES
+        adapter = _bedrock_adapter()
+
+        def ai_client(prompt):
+            try:
+                return adapter._invoke(prompt)
+            except AWS_FAILURES as exc:
+                raise AIClientError("Bedrock unavailable.") from exc
+
+    incorrect = [{
+        "question": question.question,
+        "options": question.options_json,
+        "selected_answer": payload.selected_option,
+        "correct_answer": question.correct_answer,
+        "explanation": question.explanation or "Hãy xem lại bài giảng.",
+    }]
+    result = build_tutor_context(
+        context, incorrect, ai_client, allow_fallback=True,
+    )
+    fallback = "Hãy xem lại nội dung bài giảng và thử lại các câu sai."
+    if result["explanation"] == fallback:
+        result["explanation"] = (
+            f"Lựa chọn {payload.selected_option!r} chưa đúng. "
+            + (question.explanation or "Hãy xem lại nội dung bài giảng.")
+        )
+    practice = result["practice_questions"][0]
+    return {
+        "explanation": result["explanation"],
+        "practice_question": {
+            "question": practice["question"],
+            "options": practice["options"],
+        },
+    }

@@ -1,0 +1,456 @@
+.login-screen {
+  display: grid;
+  grid-template-columns: 39.5% 60.5%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #fff;
+  color: #0f172a;
+}
+.login-brand-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 120px 4vw;
+  background: #eef1ff;
+}
+.login-brand {
+  position: absolute;
+  top: 62px;
+  left: 4vw;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.login-brand-logo {
+  display: block;
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+.login-brand-copy {
+  max-width: 440px;
+  transform: translateY(16px);
+}
+.login-brand-copy h2 {
+  margin: 0 0 22px;
+  color: #18246d;
+  font-size: clamp(30px, 2.57vw, 40px);
+  line-height: 1.18;
+  letter-spacing: -1.2px;
+  font-weight: 750;
+}
+.login-brand-copy p {
+  margin: 0;
+  color: #465d93;
+  font-size: 17px;
+  line-height: 1.6;
+}
+.login-form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 32px;
+}
+.login-form-content {
+  width: 100%;
+  max-width: 418px;
+}
+.login-form-content h1 {
+  margin: 0 0 6px;
+  font-size: 30px;
+  line-height: 1.25;
+  letter-spacing: -0.9px;
+  font-weight: 750;
+}
+.login-subtitle {
+  margin: 0 0 28px;
+  color: #65769c;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.login-form-content label {
+  display: block;
+  margin: 0 0 7px;
+  color: #334268;
+  font-size: 14px;
+  font-weight: 600;
+}
+.login-form-content input {
+  display: block;
+  width: 100%;
+  max-width: none;
+  height: 46px;
+  padding: 10px 15px;
+  border: 1px solid #e1e5ee;
+  border-radius: 11px;
+  color: #0f172a;
+  background: #fff;
+  font-size: 15px;
+}
+.login-form-content input::placeholder {
+  color: #93a0bd;
+}
+.login-form-content input[aria-invalid="true"] {
+  border-color: #b3261e;
+}
+.login-form-content #login-email {
+  margin-bottom: 18px;
+}
+.login-password,
+.account-password {
+  position: relative;
+}
+.login-password input,
+.account-password input {
+  padding-right: 46px;
+}
+.login-password-toggle {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8d9bc1;
+  cursor: pointer;
+}
+.account-password-icon {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 18px;
+  height: 18px;
+  color: #8d9bc1;
+  pointer-events: none;
+}
+.account-profile .account-password-icon {
+  display: none;
+}
+.login-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 11px 0 23px;
+}
+.login-text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2850ef;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.login-submit,
+.login-register {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 11px;
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+}
+.login-submit {
+  border: 1px solid #344fe3;
+  background: #344fe3;
+  color: #fff;
+}
+.login-submit:hover {
+  background: #293ed0;
+}
+.login-submit:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.login-register {
+  border: 1px solid #e1e5ee;
+  background: #fff;
+  color: #334268;
+}
+.login-register:hover {
+  background: #f7f8fe;
+}
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+  color: #93a0bd;
+  font-size: 13px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #e1e5ee;
+}
+.login-account-note {
+  margin: 22px 0 0;
+  color: #65769c;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.login-error {
+  color: #b3261e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.login-notice {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f2f4ff;
+  color: #445780;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.login-notice-success {
+  background: #e8f7ef;
+  color: #157347;
+}
+.login-screen button:focus-visible,
+.login-screen a:focus-visible,
+.login-screen summary:focus-visible {
+  outline: 2px solid #3453df;
+  outline-offset: 3px;
+}
+.account-field {
+  margin-bottom: 18px;
+}
+.account-hint {
+  margin: 6px 0 0;
+  color: #93a0bd;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.login-form-content .account-terms {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 0 24px;
+  font-weight: 400;
+}
+.login-form-content .account-terms input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: #3453df;
+}
+.account-footer {
+  margin: 20px 0 0;
+  text-align: center;
+  color: #65769c;
+  font-size: 14px;
+}
+.account-form a {
+  text-decoration: none;
+}
+.account-footer a,
+.account-back {
+  color: #2850ef;
+  font-weight: 600;
+}
+.account-secondary-link {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+}
+.account-secondary-link a {
+  color: #65769c;
+}
+.account-register {
+  display: flex;
+  flex-direction: column;
+}
+.account-register .account-secondary-link {
+  order: 1;
+}
+.account-icon {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 22px;
+  border-radius: 50%;
+  background: #eef1ff;
+  color: #3453ff;
+}
+.account-icon svg {
+  width: 32px;
+  height: 32px;
+}
+.account-icon-success {
+  background: #e8f7ef;
+  color: #26758a;
+}
+.account-verify,
+.account-success {
+  text-align: center;
+}
+.account-verify h1,
+.account-success h1 {
+  font-size: 28px;
+}
+.account-verify .login-subtitle strong {
+  color: #0f172a;
+}
+.account-success .login-subtitle {
+  margin-bottom: 30px;
+}
+.account-email-edit {
+  margin: 0 0 12px;
+  color: #65769c;
+  font-size: 12px;
+  text-align: left;
+}
+.account-email-edit summary {
+  width: fit-content;
+  cursor: pointer;
+}
+.account-email-edit[open] .account-field {
+  margin-top: 10px;
+}
+.account-code {
+  position: relative;
+  width: 372px;
+  max-width: 100%;
+  height: 62px;
+  margin: 28px auto 45px;
+}
+.account-code input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  height: 100%;
+  opacity: 0;
+  cursor: text;
+}
+.account-code-slots {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 11px;
+  height: 100%;
+}
+.account-code-slots span {
+  display: grid;
+  place-items: center;
+  border: 1px solid #e1e5ee;
+  border-radius: 13px;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 650;
+}
+.account-code:focus-within .is-current {
+  border-color: #3453ff;
+}
+.account-code:focus-within .account-code-slots {
+  outline: 1px solid #eef1ff;
+  outline-offset: 4px;
+  border-radius: 13px;
+}
+.account-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.account-resend {
+  display: block;
+  margin: 22px auto 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2850ef;
+  font-size: 14px;
+  cursor: pointer;
+}
+.account-resend:disabled {
+  color: #65769c;
+  cursor: default;
+}
+.account-verify .account-resend::before {
+  content: "Chưa nhận được mã? ";
+  color: #65769c;
+}
+.account-back {
+  display: block;
+  text-align: center;
+  font-size: 14px;
+}
+.account-reset .account-resend {
+  margin-top: 14px;
+  font-size: 12px;
+}
+.account-reset .account-back {
+  font-size: 12px;
+}
+.account-profile {
+  max-width: 760px;
+}
+.account-profile .card {
+  margin-bottom: 20px;
+}
+.account-profile input {
+  display: block;
+}
+@media (max-width: 1000px) {
+  .login-brand-panel {
+    padding-inline: 32px;
+  }
+  .login-brand {
+    left: 32px;
+  }
+  .login-brand-copy p {
+    font-size: 15px;
+  }
+}
+@media (max-width: 700px) {
+  .login-screen { grid-template-columns: 1fr; }
+  .login-brand-panel { padding: 90px 28px 32px; }
+  .login-brand { top: 24px; left: 28px; }
+  .login-brand-copy { transform: none; }
+  .login-brand-copy h2 { font-size: 28px; }
+  .login-form-panel { padding: 40px 24px 48px; }
+  .login-form-content h1 { font-size: 27px; }
+  .account-code-slots { gap: 8px; }
+}
+/* Screen 02/06: accessible password presentation control. */
+.account-password-toggle {
+  position: absolute; inset: 5px 8px auto auto;
+  display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 0; background: transparent; color: #8d9bc1; cursor: pointer;
+}
+.account-password-toggle .account-password-icon { position: static; width: 18px; height: 18px; }
+.account-form .account-countdown { color: #65769c; }
+.account-form .account-resend > span:first-child { color: #2850ef; }
+.account-verify .account-email-edit { text-align: center; margin-bottom: 0; }
+.account-verify .account-email-edit summary { margin-inline: auto; }
+.account-verify .account-email-edit[open] { text-align: left; }
+.account-code:focus-within .account-code-slots span { border-color: #c7d0ff; }
+.account-code:focus-within .account-code-slots .is-current { border-color: #3453ff; box-shadow: 0 0 0 1px #3453ff; }
+.login-form-content .account-sr-only { margin: 0; }
+.login-form-content .login-notice { text-align: left; }
+.login-form-content .login-notice-success { border: 1px solid #c7e8d7; }

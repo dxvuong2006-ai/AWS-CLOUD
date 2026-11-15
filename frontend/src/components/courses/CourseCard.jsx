@@ -1,3 +1,4 @@
+import CourseArtwork from "./CourseArtwork";
 import { Link } from "react-router-dom";
 import "./CourseCard.css";
 
@@ -5,6 +6,7 @@ export default function CourseCard({
   course,
   showProgress = false,
   progress = 0,
+  enrolled = false,
 }) {
   const title = course?.title || course?.name || "Khóa học chưa có tên";
   const instructor =
@@ -14,11 +16,11 @@ export default function CourseCard({
     "LearnCloud";
   const description =
     course?.description || "Khám phá nội dung và bắt đầu hành trình học tập.";
-  const image = course?.thumbnail_url || course?.thumbnail || course?.image;
+  const image = course?.cover_image || course?.thumbnail_url || course?.thumbnail || course?.image;
   const courseProgress = Math.min(100, Math.max(0, Number(progress) || 0));
 
   return (
-    <article className="course-card">
+    <article className={"course-card" + (enrolled ? " course-card--enrolled" : "")}>
       <Link
         to={`/courses/${course?.id}`}
         className="course-card__content"
@@ -30,12 +32,13 @@ export default function CourseCard({
             <img src={image} alt={title} loading="lazy" />
           ) : (
             <div className="course-card__placeholder">
-              <span>LC</span>
-              <p>LearnCloud</p>
+              <CourseArtwork title={title} />
+              
             </div>
           )}
 
-          {course?.category && (
+          {enrolled && <span className="course-card__enrolled">● Đã đăng ký</span>}
+          {!enrolled && course?.category && (
             <span className="course-card__category">{course.category}</span>
           )}
         </div>
@@ -43,14 +46,14 @@ export default function CourseCard({
         <div className="course-card__body">
           <h3 className="course-card__title">{title}</h3>
 
-          <p className="course-card__description">{description}</p>
+          <p className="course-card__meta">{course.section_count ?? course.sections?.length ?? "—"} section · {course.lesson_count ?? course.sections?.reduce((count, section) => count + (section.lessons?.length ?? 0), 0) ?? "—"} lesson</p><p className="course-card__description">{description}</p>
 
           <div className="course-card__instructor">
             <span className="course-card__instructor-avatar">
-              {String(instructor).charAt(0).toUpperCase()}
+              {String(typeof instructor === "string" ? instructor : "Giảng viên").trim().split(/\s+/).slice(-2).map(part => part[0]).join("").toUpperCase()}
             </span>
             <span>
-              {typeof instructor === "string" ? instructor : "Giảng viên"}
+              Giảng viên · <strong>{typeof instructor === "string" ? instructor : "Giảng viên"}</strong>
             </span>
           </div>
 
@@ -80,7 +83,7 @@ export default function CourseCard({
 
         <div className="course-card__footer">
           <span className="course-card__footer-label">
-            Xem chi tiết khóa học
+            {enrolled ? "Tiếp tục học" : "Xem khóa học"}
           </span>
           <span className="course-card__arrow" aria-hidden="true">
             →

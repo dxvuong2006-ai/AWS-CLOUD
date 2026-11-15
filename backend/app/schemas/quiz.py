@@ -1,118 +1,11 @@
 #Định nghĩa hợp đồng dữ liệu (Data Transfer Objects - DTO) cho luồng làm bài thi và kiểm tra mở khóa bài học.
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import (
     AliasChoices, BaseModel, ConfigDict, Field, model_validator,
 )
-
-
-class QuestionResponse(BaseModel):
-    """Biểu diễn câu hỏi cho học viên mà không lộ đáp án.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    id: int
-    quiz_id: int
-    question: str
-    options: list[str] = Field(
-        validation_alias=AliasChoices("options", "options_json"),
-        serialization_alias="options",
-    )
-    position: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class QuestionResultResponse(BaseModel):
-    """Biểu diễn đáp án và lời giải sau khi nộp bài.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    id: int
-    quiz_id: int
-    question: str
-    options: list[str] = Field(
-        validation_alias=AliasChoices("options", "options_json"),
-        serialization_alias="options",
-    )
-    selected_answer: str
-    correct_answer: str
-    is_correct: bool
-    explanation: str | None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class QuizDetailResponse(BaseModel):
-    """Biểu diễn đề thi với các câu hỏi đã ẩn đáp án.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    id: int
-    section_id: int
-    title: str
-    passing_score: float
-    questions: list[QuestionResponse]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class QuizAnswerSubmit(BaseModel):
-    """Tiếp nhận lựa chọn của học viên cho một câu hỏi.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    question_id: int
-    selected_answer: str
-
-
-class QuizSubmitRequest(BaseModel):
-    """Tiếp nhận danh sách câu trả lời trong lần nộp bài.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    answers: list[QuizAnswerSubmit]
-
-
-class QuizAttemptResponse(BaseModel):
-    """Biểu diễn điểm và chi tiết kết quả một lượt thi.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    id: int
-    quiz_id: int
-    student_id: int
-    score: float
-    passed: bool
-    attempt_number: int
-    created_at: datetime
-    results: list[QuestionResultResponse] | None = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class QuizHistoryItemResponse(BaseModel):
-    """Biểu diễn một lượt thi trong lịch sử học viên.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
-
-    id: int
-    quiz_id: int
-    quiz_title: str | None
-    score: float
-    passed: bool
-    attempt_number: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class QuizCreateRequest(BaseModel):
@@ -168,6 +61,19 @@ class QuestionCreateRequest(BaseModel):
         return self
 
 
+class QuestionResponse(BaseModel):
+    """Public question DTO. Review-only fields are excluded."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    quiz_id: int
+    question: str
+    options: list[str] = Field(
+        validation_alias=AliasChoices("options", "options_json"),
+        serialization_alias="options",
+    )
+    position: int
 
 class QuizResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -181,16 +87,36 @@ class QuizResponse(BaseModel):
     updated_at: datetime
 
 
+class QuizDetailResponse(QuizResponse):
+    questions: list[QuestionResponse]
+    attempt_count: int = 0
+    previous_score: Decimal | None = None
+    can_retry: bool = True
 
-class QuizAttemptSubmitRequest(BaseModel):
-    answers: list[QuizAnswerSubmit] = Field(min_length=1)
+
+class QuizAnswerSubmit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: int = Field(gt=0)
+    selected_answer: str | None = None
+
+class QuizSubmitRequest(BaseModel):
+    """Canonical replay-protected checkpoint submission contract."""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    lesson_id: int | None = Field(default=None, gt=0)
+    answers: list[QuizAnswerSubmit] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def validate_unique_questions(self) -> "QuizAttemptSubmitRequest":
+    def validate_unique_questions(self) -> "QuizSubmitRequest":
         question_ids = [answer.question_id for answer in self.answers]
         if len(question_ids) != len(set(question_ids)):
             raise ValueError("Each question may only be answered once")
         return self
+
+
+# Backward-compatible import name; both paths now enforce the same request ID.
+QuizAttemptSubmitRequest = QuizSubmitRequest
 
 
 
@@ -201,8 +127,24 @@ class QuizAnswerResult(BaseModel):
 
 
 
+class QuizAttemptResponse(BaseModel):
+    """Public attempt metadata without answer keys or explanations."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    quiz_id: int
+    score: Decimal
+    passed: bool
+    attempt_number: int
+    created_at: datetime
+
+
 class QuizAttemptResultResponse(QuizAttemptResponse):
     answers: list[QuizAnswerResult]
+    can_retry: bool
+    remediation_required: bool
 
 
 
@@ -218,10 +160,7 @@ class QuizAnswerResponse(BaseModel):
 
 
 class QuestionReviewResponse(BaseModel):
-    """Biểu diễn đầy đủ câu hỏi cho bước duyệt của giảng viên.
-
-    Vai trò kiến trúc: Pydantic DTO.
-    """
+    """Full question DTO for instructor review."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -236,3 +175,17 @@ class QuestionReviewResponse(BaseModel):
     position: int
     created_at: datetime
     correct_answer: str
+
+
+class QuizHistoryItemResponse(BaseModel):
+    """One student-owned attempt in paginated quiz history."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    quiz_id: int
+    quiz_title: str | None
+    score: float
+    passed: bool
+    attempt_number: int
+    created_at: datetime

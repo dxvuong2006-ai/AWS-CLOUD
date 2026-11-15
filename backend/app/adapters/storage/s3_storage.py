@@ -47,6 +47,12 @@ class S3StorageAdapter(StorageAdapter):
     def head_video(self, object_key: str) -> dict:
         return self.client.head_object(Bucket=self.bucket, Key=object_key)
 
+    def has_raw_video_objects(self, lesson_id: int) -> bool:
+        # Read-only preflight for legacy PUTs that were never recorded in DB.
+        prefix = f"lessons/{int(lesson_id)}/raw/"
+        result = self.client.list_objects_v2(Bucket=self.bucket, Prefix=prefix, MaxKeys=2)
+        return any(obj.get("Key") != prefix for obj in result.get("Contents", [])) or bool(result.get("IsTruncated"))
+
     def generate_upload_url(
         self,
         object_key: str,

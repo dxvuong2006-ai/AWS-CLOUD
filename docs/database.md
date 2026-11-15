@@ -11,6 +11,13 @@ Schema dùng khóa chính `SERIAL` (`INTEGER`) và thời gian `TIMESTAMPTZ` the
 Điều này là trạng thái hiện tại của code, dù một số tài liệu kiến trúc cũ từng
 đề cập UUID.
 
+Account state is stored in `users.status` as `ACTIVE` or `INACTIVE` (migration
+`0015_user_account_status.sql`). The backend checks this value on every
+authenticated request and coordinates admin changes with Cognito. Migration 0015
+requires registry version 0014 and the confirmed `learncloud_admin` LOGIN used by
+the current local Backend configuration. It grants only missing status-column
+SELECT/UPDATE privileges; it does not create a role or grant access to worker roles.
+
 ## 2. Quan hệ chính
 
 ```text
@@ -41,7 +48,7 @@ tham chiếu tới một `quiz_attempt` để tạo remediation từ bài làm c
 | `questions`         | Câu hỏi, lựa chọn và đáp án server-side.                        | Duy nhất `(quiz_id, position)`; đáp án phải là key trong `options_json`.                          |
 | `quiz_attempts`     | Kết quả một lần làm quiz.                                       | Duy nhất `(student_id, quiz_id, attempt_number)`; score 0–100.                                    |
 | `quiz_answers`      | Câu trả lời theo từng câu hỏi trong attempt.                    | Duy nhất `(attempt_id, question_id)`.                                                             |
-| `tutor_sessions`    | Phiên remediation của student.                                  | Trigger xác minh student/section khớp quiz attempt nếu có.                                        |
+| `tutor_sessions`    | Phiên remediation của student.                                  | `practice_questions`, `remediation_completed`, `workflow_state` do migration 0012 hội tụ; trigger xác minh student/section khớp quiz attempt nếu có. |
 | `tutor_messages`    | Hội thoại thuộc một Tutor session.                              | role chỉ `USER` hoặc `ASSISTANT`; content không rỗng.                                             |
 | `schema_migrations` | Các version schema đã được áp dụng.                             | `version` là khóa chính.                                                                          |
 | `video_uploads` (0005, optional) | Intent cho presigned upload, chưa phải biên nhận xác nhận. | Source key duy nhất; UNIQUE `(id, lesson_id)` cho FK ghép. |

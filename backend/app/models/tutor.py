@@ -43,6 +43,7 @@ class TutorSession(Base):
     remediation_completed = Column(
         Boolean, nullable=False, default=False, server_default=text("false"),
     )
+    workflow_state = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

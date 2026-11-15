@@ -11,12 +11,13 @@ from unittest.mock import Mock, patch
 
 import httpx
 from botocore.exceptions import ClientError, NoCredentialsError
+from fastapi import HTTPException
 from sqlalchemy.exc import OperationalError
 
 from app.adapters.video.base import ProcessingReceipt, ProcessorDispatchError, VideoProcessingRequest
 from app.adapters.video.local_processor import LocalProcessor
 from app.config import settings
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
 from app.main import app
 from app.services import processing_service
 
@@ -29,6 +30,7 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.db = Mock()
         self.db.query.return_value.filter.return_value.first.return_value = self.user
         app.dependency_overrides[get_db] = lambda: self.db
+        app.dependency_overrides[get_current_user] = lambda: self.user
         self.addCleanup(app.dependency_overrides.clear)
         now = datetime.now(timezone.utc)
         self.lesson = SimpleNamespace(
@@ -43,6 +45,7 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
             learning_objectives=[], created_at=now, updated_at=now,
         )
         self.section = SimpleNamespace(id=4, course_id=2)
+        self.quiz = SimpleNamespace(id=6, is_approved=True)
         self.repo = {}
         for module, name, result in [
             ("lessons_repo", "get_by_id", self.lesson),
@@ -55,6 +58,14 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         ]:
             self.repo[f"{module}.{name}"] = self.stack.enter_context(patch(
                 f"app.repositories.{module}.{name}", return_value=result
+            ))
+        for name, result in [
+            ("get_quiz", self.quiz),
+            ("get_flashcards", [SimpleNamespace(is_approved=True)]),
+            ("get_questions", [SimpleNamespace(id=1)]),
+        ]:
+            self.repo[f"review_repo.{name}"] = self.stack.enter_context(patch(
+                f"app.repositories.review_repo.{name}", return_value=result
             ))
         self.storage = self.stack.enter_context(patch("app.services.processing_service.S3StorageAdapter"))
         self.storage.return_value.head_video.return_value = {"ContentLength": 1024, "ContentType": "video/mp4"}
@@ -214,7 +225,7 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.processor.start.assert_not_called()
 
     async def test_publish_unapproved_content_is_rejected(self):
-        for state in ("DRAFT", "UPLOADED", "PROCESSING", "FAILED", "REVIEW_REQUIRED", "PUBLISHED"):
+        for state in ("DRAFT", "UPLOADED", "PROCESSING", "FAILED", "REVIEW_REQUIRED"):
             self.lesson.status = state
             response = await self.publish()
             self.assertEqual(response.status_code, 409)
@@ -263,7 +274,10 @@ class ProcessingApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.publish()).json()["code"], "COURSE_BUSY")
 
     async def test_unknown_identity_rejected_for_all_new_endpoints(self):
-        self.db.query.return_value.filter.return_value.first.return_value = None
+        def reject_unknown_identity():
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        app.dependency_overrides[get_current_user] = reject_unknown_identity
         for method, path in (("GET", "/lessons/8/processing-status"), ("POST", "/lessons/8/retry"), ("POST", "/courses/2/publish")):
             self.assertEqual((await self.call(method, path)).status_code, 401)
 

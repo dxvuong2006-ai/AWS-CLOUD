@@ -16,7 +16,7 @@ export default function TranscriptPanel({ segments, currentTime = 0, onSeek }) {
   );
 
   return (
-    <div className="card">
+    <div className="card lesson-transcript">
       <h3 className="card-title">Transcript</h3>
       {transcript.length === 0 && <p>Chưa có transcript</p>}
       <div className="transcript-list">

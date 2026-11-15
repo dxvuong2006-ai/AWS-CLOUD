@@ -8,6 +8,9 @@ Lambda (nhánh này không được gọi); tuyệt đối không bật AI trư�
 Luồng: claim upload → PROCESSING → submit một lần → Wait 30 giây/GetJob tối đa
 120 lượt → yêu cầu job COMPLETE và HEAD output không rỗng → lưu processed key →
 AI tùy chọn → kiểm tra completion proof và dữ liệu DB → REVIEW_REQUIRED.
+AI worker riêng chạy ba action: start Transcribe xác định theo run_id, poll qua Wait
+state, rồi đọc transcript và sinh/lưu draft bằng Bedrock. Worker không tự finalize,
+approve hoặc publish; pipeline Lambda vẫn là nơi duy nhất chuyển sang REVIEW_REQUIRED.
 Không có đường tự approve/publish. Khi AI tắt: execution SUCCEEDED nhưng ledger
 VIDEO_READY, Lesson PROCESSING; chưa phải toàn bộ pipeline học liệu thành công.
 

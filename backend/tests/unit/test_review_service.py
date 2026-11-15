@@ -12,18 +12,24 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
 
-from app.adapters.ai.bedrock_ai import BedrockAIAdapter
+from app.adapters.ai.bedrock_ai import BedrockAIAdapter, MAX_RESPONSE_BYTES
 from app.adapters.ai.mock_ai import MockAIAdapter
 from app.dependencies import get_current_user, get_db
 from app.main import app
 from app.models.enrollment import Enrollment
+from app.models.flashcard import Flashcard
 from app.models.lesson import Lesson
 from app.models.quiz import Question, Quiz, QuizAttempt
+from app.models.section import Section
 from app.models.user import User
 from app.schemas.review import (
     DraftApproval, DraftGeneration, DraftUpdate, ReviewQuestion,
 )
-from app.services import lesson_service, quiz_service, review_service
+from app.services import course_service, lesson_service, quiz_service, review_service
+from app.utils.errors import ConflictError, ForbiddenError
+
+CLAUDE_MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+NOVA_MODEL_ID = "apac.amazon.nova-micro-v1:0"
 
 
 @pytest.fixture
@@ -66,11 +72,14 @@ def make_draft(db, context):
         DTO REVIEW_REQUIRED đã lưu.
     """
     owner, _, _, lesson = context
-    return review_service.generate_draft(
+    draft = review_service.generate_draft(
         db, lesson_id=lesson.id, instructor_id=owner.id,
         payload=DraftGeneration(transcript="Cloud computing is useful."),
         ai=MockAIAdapter(),
     )
+    lesson.processed_video_key = f"lessons/{lesson.id}/processed/video.mp4"
+    db.commit()
+    return draft
 
 
 def test_generate_pending_and_hide_from_student(db_session, review_context):
@@ -107,7 +116,10 @@ def test_wrong_actor_cannot_read_edit_or_approve(
     _, outsider, student, lesson = review_context
     user_id = outsider.id if actor == "outsider" else student.id
     content = draft.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={
+            "title", "summary", "key_concepts", "flashcards",
+            "quiz_title", "questions",
+        },
     )
     operations = (
         (review_service.get_draft, {}),
@@ -133,7 +145,10 @@ def test_edit_then_explicit_approval(db_session, review_context):
     draft = make_draft(db_session, review_context)
     owner, _, student, lesson = review_context
     content = draft.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={
+            "title", "summary", "key_concepts", "flashcards",
+            "quiz_title", "questions",
+        },
     )
     content.update(title="Revised title", summary="Revised summary")
     content["questions"][0]["question"] = "Revised question?"
@@ -181,8 +196,15 @@ def test_quiz_waits_for_other_pending_lesson(db_session, review_context):
         section_id=lesson.section_id, title="Other pending", position=2,
         status="REVIEW_REQUIRED", summary="Summary",
         key_concepts_json=[{"term": "Cloud", "definition": "Compute"}],
+        processed_video_key="lessons/other/processed/video.mp4",
+        transcript_json={"text": "Other transcript"},
     )
     db_session.add(other)
+    db_session.flush()
+    db_session.add(Flashcard(
+        lesson_id=other.id, front="Other", back="Definition", position=1,
+        is_approved=False,
+    ))
     db_session.commit()
     result = review_service.approve_draft(
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
@@ -205,7 +227,7 @@ def test_replacement_failure_rolls_back_all(db_session, review_context):
     draft = make_draft(db_session, review_context)
     owner, _, _, lesson = review_context
     content = draft.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={"title", "summary", "key_concepts", "flashcards", "quiz_title", "questions"},
     )
     content["summary"] = "Must roll back"
 
@@ -305,15 +327,65 @@ def test_bedrock_validates_output_and_closes_stream(method):
     expected = getattr(MockAIAdapter(), method)("Transcript")
     stream = mock_response(expected)
     client.invoke_model.return_value = {"body": stream}
-    ai = BedrockAIAdapter(client=client)
+    ai = BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID)
     assert getattr(ai, method)("Transcript") == expected
     assert stream.closed
     request = client.invoke_model.call_args.kwargs
-    assert request["modelId"] == "anthropic.claude-3-haiku-20240307-v1:0"
+    assert request["modelId"] == CLAUDE_MODEL_ID
     body = json.loads(request["body"])
     assert body["anthropic_version"] == "bedrock-2023-05-31"
     assert body["messages"][0]["role"] == "user"
     assert not ai.used_fallback
+
+
+@pytest.mark.parametrize("method", [
+    "generate_summary", "generate_quiz", "extract_key_concepts",
+])
+def test_bedrock_nova_micro_uses_converse_contract(method):
+    client = Mock()
+    expected = getattr(MockAIAdapter(), method)("Transcript")
+    client.converse.return_value = {
+        "stopReason": "end_turn",
+        "output": {"message": {
+            "role": "assistant",
+            "content": [{"text": json.dumps(expected)}],
+        }},
+    }
+    ai = BedrockAIAdapter(client=client, model_id=NOVA_MODEL_ID)
+
+    assert getattr(ai, method)("Transcript") == expected
+    request = client.converse.call_args.kwargs
+    assert request["modelId"] == NOVA_MODEL_ID
+    assert request["inferenceConfig"] == {"maxTokens": 4096, "temperature": 0}
+    assert request["messages"][0]["role"] == "user"
+    assert request["messages"][0]["content"][0]["text"]
+    client.invoke_model.assert_not_called()
+    assert not ai.used_fallback
+
+
+def test_bedrock_nova_micro_rejects_truncated_converse_response():
+    client = Mock()
+    client.converse.return_value = {
+        "stopReason": "max_tokens",
+        "output": {"message": {"content": [{"text": "{}"}]}},
+    }
+    ai = BedrockAIAdapter(
+        client=client, model_id=NOVA_MODEL_ID, allow_fallback=True,
+    )
+    with pytest.raises(ValueError, match="token limit"):
+        ai.generate_summary("Transcript")
+    assert not ai.used_fallback
+
+
+def test_bedrock_rejects_oversized_response_and_closes_stream():
+    client = Mock()
+    stream = io.BytesIO(b"x" * (MAX_RESPONSE_BYTES + 1))
+    client.invoke_model.return_value = {"body": stream}
+    with pytest.raises(ValueError, match="oversized"):
+        BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID).generate_summary(
+            "Transcript"
+        )
+    assert stream.closed
 
 
 @pytest.mark.parametrize("error", [
@@ -328,10 +400,12 @@ def test_bedrock_fallback_requires_explicit_flag(error):
     """Lỗi AWS chỉ chuyển sang Mock khi có cờ cho phép."""
     client = Mock()
     client.invoke_model.side_effect = error
-    strict = BedrockAIAdapter(client=client)
+    strict = BedrockAIAdapter(client=client, model_id=CLAUDE_MODEL_ID)
     with pytest.raises(type(error)):
         strict.generate_summary("Transcript")
-    fallback = BedrockAIAdapter(client=client, allow_fallback=True)
+    fallback = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     assert fallback.generate_summary("Transcript") == (
         MockAIAdapter().generate_summary("Transcript")
     )
@@ -365,7 +439,9 @@ def test_invalid_ai_data_never_silently_falls_back(mode):
     )
     client = Mock()
     client.invoke_model.return_value = {"body": stream}
-    ai = BedrockAIAdapter(client=client, allow_fallback=True)
+    ai = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     with pytest.raises(ValueError):
         ai.generate_summary("Transcript")
     assert stream.closed
@@ -446,7 +522,7 @@ def test_published_content_cannot_be_edited(db_session, review_context):
         payload=DraftApproval(expected_revision=draft.revision),
     )
     content = approved.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={"title", "summary", "key_concepts", "flashcards", "quiz_title", "questions"},
     )
     with pytest.raises(review_service.ReviewError) as exc:
         review_service.update_draft(
@@ -463,7 +539,9 @@ def test_mock_fallback_still_requires_review(db_session, review_context):
     owner, _, _, lesson = review_context
     client = Mock()
     client.invoke_model.side_effect = NoCredentialsError()
-    ai = BedrockAIAdapter(client=client, allow_fallback=True)
+    ai = BedrockAIAdapter(
+        client=client, model_id=CLAUDE_MODEL_ID, allow_fallback=True,
+    )
     draft = review_service.generate_draft(
         db_session, lesson_id=lesson.id, instructor_id=owner.id,
         payload=DraftGeneration(transcript="Transcript", allow_fallback=True),
@@ -558,7 +636,7 @@ def test_api_generate_and_update_without_aws(db_session, review_context):
             content = {
                 key: draft[key] for key in (
                     "title", "summary", "key_concepts",
-                    "quiz_title", "questions",
+                    "flashcards", "quiz_title", "questions",
                 )
             }
             content["title"] = "Updated through API"
@@ -571,3 +649,368 @@ def test_api_generate_and_update_without_aws(db_session, review_context):
             assert not result.json()["quiz_approved"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_manual_flashcard_and_quiz_save_reload_and_repeated_saves(
+    db_session, review_context,
+):
+    """Manual review material survives full PUTs, commits, reloads and retries."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/review-draft"
+            payload = draft.model_dump(include={
+                "title", "summary", "key_concepts", "flashcards",
+                "quiz_title", "questions",
+            })
+            payload["flashcards"].append({
+                "front": "Instructor card", "back": "Instructor answer",
+                "position": len(payload["flashcards"]) + 1,
+            })
+            payload["questions"].append({
+                "question": "Instructor quiz question?",
+                "options": ["Correct", "Incorrect"],
+                "correct_answer": "Correct", "explanation": "Verified.",
+            })
+            payload["expected_revision"] = draft.revision
+            response = client.put(url, json=payload)
+            assert response.status_code == 200, response.text
+            saved = response.json()
+
+            # Saving the same material repeatedly replaces the draft atomically;
+            # it does not append duplicate rows.
+            for _ in range(2):
+                repeated = {**payload, "expected_revision": saved["revision"]}
+                response = client.put(url, json=repeated)
+                assert response.status_code == 200, response.text
+                saved = response.json()
+
+            reloaded = client.get(url)
+            assert reloaded.status_code == 200
+            data = reloaded.json()
+            assert data["flashcards"] == saved["flashcards"]
+            assert data["questions"] == saved["questions"]
+            assert len(data["flashcards"]) == len(payload["flashcards"])
+            assert len(data["questions"]) == len(payload["questions"])
+            assert db_session.query(Flashcard).filter(
+                Flashcard.lesson_id == lesson.id,
+            ).count() == len(payload["flashcards"])
+            assert db_session.query(Question).filter(
+                Question.quiz_id == data["quiz_id"],
+            ).count() == len(payload["questions"])
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_partial_flashcard_quiz_and_summary_edits_preserve_siblings(
+    db_session, review_context,
+):
+    """PATCH distinguishes omitted fields from explicitly replaced arrays."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/ai-content"
+            cards = [card.model_dump() for card in draft.flashcards]
+            questions = [question.model_dump() for question in draft.questions]
+
+            cards[0]["front"] = "Edited card only"
+            result = client.patch(url, json={
+                "flashcards": cards, "expected_revision": draft.revision,
+            })
+            assert result.status_code == 200, result.text
+            draft = result.json()
+            assert draft["flashcards"][0]["front"] == "Edited card only"
+            assert draft["questions"] == questions
+
+            questions[0]["question"] = "Edited quiz only?"
+            result = client.patch(url, json={
+                "questions": questions,
+                "expected_revision": draft["revision"],
+            })
+            assert result.status_code == 200, result.text
+            draft = result.json()
+            assert draft["questions"][0]["question"] == "Edited quiz only?"
+            assert draft["flashcards"][0]["front"] == "Edited card only"
+
+            result = client.patch(url, json={
+                "summary": "Summary edit only.",
+                "expected_revision": draft["revision"],
+            })
+            assert result.status_code == 200, result.text
+            assert result.json()["summary"] == "Summary edit only."
+            assert result.json()["flashcards"] == draft["flashcards"]
+            assert result.json()["questions"] == draft["questions"]
+
+            # An explicit [] means delete all cards; omission above preserved them.
+            result = client.patch(url, json={
+                "flashcards": [],
+                "expected_revision": result.json()["revision"],
+            })
+            assert result.status_code == 200, result.text
+            assert result.json()["flashcards"] == []
+            assert result.json()["questions"] == draft["questions"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_full_draft_put_rejects_omitted_flashcards(
+    db_session, review_context,
+):
+    """A missing collection is not silently interpreted as an empty collection."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    payload = draft.model_dump(include={
+        "title", "summary", "key_concepts", "quiz_title", "questions",
+    })
+    payload["expected_revision"] = draft.revision
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            response = client.put(
+                f"/lessons/{lesson.id}/review-draft", json=payload,
+            )
+        assert response.status_code == 422
+        assert review_service.get_draft(
+            db_session, lesson_id=lesson.id, instructor_id=owner.id,
+        ) == draft
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_invalid_quiz_answer_422_keeps_draft_and_corrected_retry_saves(
+    db_session, review_context,
+):
+    """Invalid answers are rejected without losing edits; correcting them saves."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    payload = draft.model_dump(include={
+        "title", "summary", "key_concepts", "flashcards",
+        "quiz_title", "questions",
+    })
+    payload["summary"] = "Instructor's unsaved summary edit."
+    payload["flashcards"][0]["front"] = "Instructor's unsaved card edit."
+    payload["questions"].append({
+        "question": "Fourth question?", "options": ["A", "B"],
+        "correct_answer": "Old option", "explanation": "Explanation.",
+    })
+    payload["expected_revision"] = draft.revision
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/review-draft"
+            rejected = client.put(url, json=payload)
+            assert rejected.status_code == 422
+            assert review_service.get_draft(
+                db_session, lesson_id=lesson.id, instructor_id=owner.id,
+            ) == draft
+
+            payload["questions"][3]["correct_answer"] = "A"
+            accepted = client.put(url, json=payload)
+            assert accepted.status_code == 200, accepted.text
+            result = accepted.json()
+            assert result["summary"] == "Instructor's unsaved summary edit."
+            assert result["flashcards"][0]["front"] == "Instructor's unsaved card edit."
+            assert result["questions"][3]["correct_answer"] == "A"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_ai_regeneration_cannot_overwrite_reviewed_draft(
+    db_session, review_context,
+):
+    """A stale AI generation request cannot replace instructor-reviewed material."""
+    draft = make_draft(db_session, review_context)
+    owner, _, _, lesson = review_context
+    content = draft.model_dump(include={
+        "title", "summary", "key_concepts", "flashcards",
+        "quiz_title", "questions",
+    })
+    content["summary"] = "Instructor's saved summary."
+    edited = review_service.update_draft(
+        db_session, lesson_id=lesson.id, instructor_id=owner.id,
+        payload=DraftUpdate(**content, expected_revision=draft.revision),
+    )
+    with pytest.raises(review_service.ReviewError) as exc:
+        make_draft(db_session, review_context)
+    assert exc.value.status_code == 409
+    assert review_service.get_draft(
+        db_session, lesson_id=lesson.id, instructor_id=owner.id,
+    ) == edited
+
+
+def test_patch_summary_preserves_flashcards_and_checkpoint(
+    db_session, review_context,
+):
+    """Regression P0.4: a summary-only PATCH must not delete sibling material."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    before_cards = [item.model_dump() for item in draft.flashcards]
+    before_concepts = [item.model_dump() for item in draft.key_concepts]
+    before_questions = [item.model_dump() for item in draft.questions]
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/lessons/{lesson.id}/ai-content",
+                json={
+                    "summary": "A revised summary only.",
+                    "expected_revision": draft.revision,
+                },
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["flashcards"] == before_cards
+        assert response.json()["key_concepts"] == before_concepts
+        assert response.json()["questions"] == before_questions
+        assert response.json()["summary"] == "A revised summary only."
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "code"),
+    [
+        (lambda lesson, db: setattr(lesson, "processed_video_key", None), "PROCESSED_VIDEO_REQUIRED"),
+        (lambda lesson, db: setattr(lesson, "transcript_json", {}), "REVIEW_CONTENT_INCOMPLETE"),
+    ],
+)
+def test_approve_rechecks_video_ai_and_checkpoint(
+    db_session, review_context, mutation, code,
+):
+    """Regression P0.5: approval cannot bypass persisted readiness gates."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    mutation(lesson, db_session)
+    db_session.commit()
+
+    with pytest.raises(ConflictError) as exc:
+        review_service.approve_draft(
+            db_session,
+            lesson_id=lesson.id,
+            instructor_id=owner.id,
+            payload=DraftApproval(expected_revision=draft.revision),
+        )
+    assert exc.value.code == code
+    assert lesson.status == "REVIEW_REQUIRED"
+
+
+def test_approve_rejects_missing_checkpoint(db_session, review_context):
+    """Regression P0.5: approval requires persisted checkpoint questions."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    quiz = review_service.review_repo.get_quiz(db_session, lesson.section_id)
+    db_session.query(Question).filter(Question.quiz_id == quiz.id).delete()
+    db_session.commit()
+
+    with pytest.raises(ConflictError) as exc:
+        review_service.approve_draft(
+            db_session,
+            lesson_id=lesson.id,
+            instructor_id=owner.id,
+            payload=DraftApproval(expected_revision=draft.revision),
+        )
+    assert exc.value.code == "CHECKPOINT_REQUIRED"
+    assert lesson.status == "REVIEW_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "code"),
+    [
+        (lambda lesson, quiz: setattr(lesson, "processed_video_key", None), "PROCESSED_VIDEO_REQUIRED"),
+        (lambda lesson, quiz: setattr(lesson, "summary", ""), "REVIEW_CONTENT_INCOMPLETE"),
+        (lambda lesson, quiz: setattr(quiz, "is_approved", False), "CHECKPOINT_NOT_APPROVED"),
+    ],
+)
+def test_publish_rechecks_video_ai_and_checkpoint(
+    db_session, review_context, mutation, code,
+):
+    """Regression P0.5: publish revalidates approved data inside its lock scope."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    review_service.approve_draft(
+        db_session,
+        lesson_id=lesson.id,
+        instructor_id=owner.id,
+        payload=DraftApproval(expected_revision=draft.revision),
+    )
+    lesson, course = review_service.review_repo.get_context(db_session, lesson.id)
+    quiz = review_service.review_repo.get_quiz(db_session, lesson.section_id)
+    course.status = "DRAFT"
+    db_session.query(Section).filter(
+        Section.course_id == course.id,
+        Section.id != lesson.section_id,
+    ).delete(synchronize_session=False)
+    mutation(lesson, quiz)
+    db_session.commit()
+
+    with pytest.raises(ConflictError) as exc:
+        course_service.publish_course(
+            db_session, course.id, instructor_id=owner.id,
+        )
+    assert exc.value.code == code
+    assert course.status == "DRAFT"
+
+
+def test_publish_rechecks_owner_access(db_session, review_context):
+    """Regression P0.5: a non-owner cannot publish an otherwise ready course."""
+    owner, outsider, _, lesson = review_context
+    _, course = review_service.review_repo.get_context(db_session, lesson.id)
+    course.status = "DRAFT"
+    db_session.commit()
+
+    with pytest.raises(ForbiddenError):
+        course_service.publish_course(
+            db_session, course.id, instructor_id=outsider.id,
+        )
+
+
+def test_publish_accepts_fully_reviewed_course(db_session, review_context):
+    """The P0.5 gates retain the valid approve-then-publish path."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    review_service.approve_draft(
+        db_session,
+        lesson_id=lesson.id,
+        instructor_id=owner.id,
+        payload=DraftApproval(expected_revision=draft.revision),
+    )
+    _, course = review_service.review_repo.get_context(db_session, lesson.id)
+    course.status = "DRAFT"
+    db_session.query(Section).filter(
+        Section.course_id == course.id,
+        Section.id != lesson.section_id,
+    ).delete(synchronize_session=False)
+    db_session.commit()
+
+    result = course_service.publish_course(
+        db_session, course.id, instructor_id=owner.id,
+    )
+    assert result.status == "PUBLISHED"

@@ -1,0 +1,17 @@
+{
+  "Variables": {
+    "AI_WORKER_ENABLED": "false",
+    "VIDEO_AI_ENABLED": "false",
+    "APP_ENV": "production",
+    "AWS_REGION": "ap-southeast-1",
+    "S3_BUCKET": "learncloud-videos-mentorcloud",
+    "TRANSCRIBE_OUTPUT_BUCKET": "learncloud-videos-mentorcloud",
+    "TRANSCRIBE_OUTPUT_PREFIX": "ai-transcripts",
+    "TRANSCRIBE_LANGUAGE_CODE": "vi-VN",
+    "AI_TRANSCRIPT_MAX_BYTES": "2000000",
+    "AI_TRANSCRIPT_MAX_CHARACTERS": "400000",
+    "BEDROCK_MODEL_ID": "apac.amazon.nova-micro-v1:0",
+    "AI_QUIZ_QUESTION_COUNT": "3",
+    "DATABASE_URL": "<supply-with-existing-production-secret-process>"
+  }
+}

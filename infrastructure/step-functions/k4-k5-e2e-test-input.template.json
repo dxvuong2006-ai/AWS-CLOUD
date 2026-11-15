@@ -1,0 +1,6 @@
+{
+  "kind": "upload",
+  "bucket": "learncloud-videos-mentorcloud",
+  "key": "lessons/__LESSON_ID__/raw/__UPLOAD_ID__.mp4",
+  "etag": "__S3_ETAG_WITHOUT_QUOTES__"
+}

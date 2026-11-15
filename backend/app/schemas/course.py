@@ -1,14 +1,36 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+import base64
+from app.schemas.lesson import LessonVideoFields
 
 
-class CourseCreateRequest(BaseModel):
+class CoverFields(BaseModel):
+    cover_image: str | None = Field(default=None, max_length=350000)
+
+    @field_validator("cover_image")
+    @classmethod
+    def validate_cover(cls, value):
+        if value is None:
+            return value
+        try:
+            prefix, encoded = value.split(",", 1)
+            data = base64.b64decode(encoded, validate=True)
+            valid = ((prefix == "data:image/png;base64" and data.startswith(b"\x89PNG\r\n\x1a\n")) or
+                     (prefix == "data:image/jpeg;base64" and data.startswith(b"\xff\xd8\xff")))
+            if not valid or len(data) > 256000:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ValueError("Cover must be PNG/JPEG, at most 250 KB")
+        return value
+
+
+class CourseCreateRequest(CoverFields):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     learning_objectives: list[str] = Field(default_factory=list)
 
-class CourseUpdateRequest(BaseModel):
+class CourseUpdateRequest(CoverFields):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     learning_objectives: list[str] = Field(default_factory=list)
@@ -20,7 +42,7 @@ class CourseUpdateRequest(BaseModel):
         return self
 
 
-class CourseLessonResponse(BaseModel):
+class CourseLessonResponse(LessonVideoFields):
     id: int
     title: str
     position: int
@@ -39,7 +61,7 @@ class CourseSectionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class CourseResponse(BaseModel):
+class CourseResponse(CoverFields):
     id: int
     instructor_id: int
     title: str

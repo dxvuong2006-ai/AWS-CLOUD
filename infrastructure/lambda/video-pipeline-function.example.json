@@ -1,0 +1,27 @@
+{
+  "FunctionName": "learncloud-video-pipeline",
+  "Runtime": "python3.12",
+  "Architectures": ["x86_64"],
+  "Handler": "video_pipeline_handler.handler",
+  "Role": "${PIPELINE_ROLE_ARN}",
+  "Timeout": 45,
+  "MemorySize": 256,
+  "EphemeralStorage": {"Size": 512},
+  "VpcConfig": {
+    "SubnetIds": ["${PRIVATE_SUBNET_A}", "${PRIVATE_SUBNET_B}"],
+    "SecurityGroupIds": ["${PIPELINE_SECURITY_GROUP}"]
+  },
+  "Environment": {
+    "Variables": {
+      "APP_ENV": "production",
+      "DATABASE_URL": "<inject-with-approved-production-secret-process>",
+      "AWS_REGION": "ap-southeast-1",
+      "S3_BUCKET": "learncloud-videos-mentorcloud",
+      "VIDEO_PIPELINE_ENABLED": "true",
+      "VIDEO_AI_ENABLED": "false",
+      "AI_WORKER_ENABLED": "false",
+      "MEDIACONVERT_ROLE_ARN": "${MEDIACONVERT_ROLE_ARN}",
+      "MEDIACONVERT_QUEUE_ARN": "arn:aws:mediaconvert:ap-southeast-1:${ACCOUNT_ID}:queues/${MEDIACONVERT_QUEUE_NAME}"
+    }
+  }
+}

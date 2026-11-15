@@ -121,7 +121,7 @@ function NavIcon({ name }) {
   );
 }
 
-export default function Navbar({ user, role, onLogout, collapsed, onToggle }) {
+export default function Navbar({ user, role, onLogout, collapsed = false, onToggleCollapsed }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
@@ -143,22 +143,31 @@ export default function Navbar({ user, role, onLogout, collapsed, onToggle }) {
           className="navbar__brand"
           aria-label="LearnCloud - Trang chủ"
         >
-          <img className="navbar__logo" src={logo} alt="LearnCloud" />
+          <img className="navbar__logo" src={logo} alt="" />
           <span className="navbar__brand-name">LearnCloud</span>
         </Link>
+
         <button
           type="button"
           className="navbar__collapse-toggle"
-          onClick={onToggle}
-          aria-label={
-            collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"
-          }
+          onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
-          title={collapsed ? "Mở rộng" : "Thu gọn"}
+          aria-label={collapsed ? "Mở navbar" : "Đóng navbar"}
+          title={collapsed ? "Mở navbar" : "Đóng navbar"}
         >
-          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="m12 4-6 6 6 6" />
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="m15 18-6-6 6-6" />
           </svg>
+        </button>
+
+        <button
+          type="button"
+          className="navbar__mobile-toggle"
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Đóng menu" : "Mở menu"}
+        >
+          {menuOpen ? "✕" : "☰"}
         </button>
       </div>
 
@@ -187,6 +196,7 @@ export default function Navbar({ user, role, onLogout, collapsed, onToggle }) {
       <div className="navbar__account">
         {accountMenuOpen && onLogout && (
           <div className="navbar__account-menu">
+            <Link className="navbar__logout" to="/profile" onClick={() => setAccountMenuOpen(false)}>Hồ sơ và mật khẩu</Link>
             <button
               type="button"
               className="navbar__logout"

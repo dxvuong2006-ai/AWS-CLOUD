@@ -1,22 +1,19 @@
 #HTTP Router tiếp nhận request Quiz & Unlock
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, require_student
 from app.models.user import User
+from app.models.course import Course
+from app.models.enrollment import Enrollment
 from app.schemas.quiz import (
-    QuizAttemptResponse,
+    QuizAttemptResultResponse,
     QuizDetailResponse,
     QuizHistoryItemResponse,
     QuizSubmitRequest,
 )
 from app.services import quiz_service, unlock_service
-from app.services.quiz_service import (
-    InvalidSubmissionError,
-    QuizAccessDeniedError,
-    QuizNotApprovedError,
-    QuizNotFoundError,
-)
 
 router = APIRouter(tags=["Quizzes"])
 
@@ -31,44 +28,27 @@ router = APIRouter(tags=["Quizzes"])
 )
 def get_section_quiz(
     section_id: int,
+    lesson_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_student),
 ):
-    """Trả đề thi đã duyệt sau khi kiểm tra mở khóa chương học.
-
-    Args:
-        section_id: Mã chương học cần xử lý.
-        db: Session SQLAlchemy được bên gọi cung cấp.
-        current_user: Học viên được dependency xác định cho yêu cầu hiện
-            tại.
-
-    Returns:
-        Dữ liệu được lọc qua QuizDetailResponse, không gồm đáp án/lời giải.
-
-    Raises:
-        HTTPException: HTTP 403 khi bị khóa/chưa duyệt; 404 khi không có
-            đề.
-    """
-    try:
-        return quiz_service.get_unlocked_quiz_for_student(
-            db,
-            student_id=current_user.id,
-            section_id=section_id,
-        )
-    except (QuizNotApprovedError, QuizAccessDeniedError) as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except QuizNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return quiz_service.get_checkpoint(
+        db,
+        section_id=section_id,
+        student_id=current_user.id,
+        lesson_id=lesson_id,
+    )
 
 
 @router.post(
     "/quizzes/{quiz_id}/attempts",
-    response_model=QuizAttemptResponse,
+    response_model=QuizAttemptResultResponse,
     status_code=200,
     responses={
-        400: {"description": "Quiz submission is invalid."},
         403: {"description": "Section is locked or quiz is not approved."},
         404: {"description": "Quiz or its section was not found."},
+        409: {"description": "Request ID was reused with different content."},
+        422: {"description": "Quiz submission is invalid."},
     },
 )
 def submit_quiz(
@@ -77,37 +57,32 @@ def submit_quiz(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_student),
 ):
-    """Tạo tài nguyên lượt thi từ câu trả lời của học viên.
+    return quiz_service.submit_attempt(
+        db,
+        quiz_id=quiz_id,
+        student_id=current_user.id,
+        payload=body,
+    )
 
-    Kết quả được trả sau khi Service hoàn tất giao dịch nộp bài.
 
-    Args:
-        quiz_id: Mã bài trắc nghiệm cần xử lý.
-        body: DTO chứa các câu trả lời của yêu cầu nộp bài.
-        db: Session SQLAlchemy được bên gọi cung cấp.
-        current_user: Học viên được dependency xác định cho yêu cầu hiện
-            tại.
-
-    Returns:
-        QuizAttemptResponse với HTTP 200 và kết quả chấm bài.
-
-    Raises:
-        HTTPException: HTTP 400 cho bài nộp sai; 403 khi bị chặn; 404 nếu
-            thiếu đề.
-    """
-    try:
-        return quiz_service.submit_quiz(
-            db,
-            student_id=current_user.id,
-            quiz_id=quiz_id,
-            submission=body,
-        )
-    except (QuizNotApprovedError, QuizAccessDeniedError) as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except QuizNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except InvalidSubmissionError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+@router.get(
+    "/quizzes/{quiz_id}/attempts",
+    response_model=list[QuizAttemptResultResponse],
+)
+def get_quiz_attempt_history(
+    quiz_id: int,
+    limit: int = Query(default=20, ge=1),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    return quiz_service.attempt_history(
+        db,
+        quiz_id=quiz_id,
+        student_id=current_user.id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(
@@ -160,6 +135,18 @@ def get_course_unlock_status(
     Returns:
         Danh sách section_id/is_unlocked của các chương trong khóa học.
     """
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(404, "Course not found.")
+    if course.status != "PUBLISHED":
+        raise HTTPException(403, "Course is not published.")
+    if db.scalar(
+        select(Enrollment.id).where(
+            Enrollment.course_id == course_id,
+            Enrollment.student_id == current_user.id,
+        )
+    ) is None:
+        raise HTTPException(403, "Course enrollment is required.")
     return unlock_service.get_course_unlock_status(
         db,
         student_id=current_user.id,

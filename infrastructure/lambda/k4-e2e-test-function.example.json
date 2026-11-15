@@ -1,0 +1,26 @@
+{
+  "FunctionName": "learncloud-video-pipeline-k5-e2e-test",
+  "Runtime": "python3.12",
+  "Architectures": ["x86_64"],
+  "Handler": "video_pipeline_test_handler.handler",
+  "Role": "arn:aws:iam::${ACCOUNT_ID}:role/learncloud-video-pipeline-k5-e2e-test-role",
+  "Timeout": 90,
+  "MemorySize": 512,
+  "VpcConfig": {
+    "SubnetIds": ["${PRIVATE_SUBNET_A}", "${PRIVATE_SUBNET_B}"],
+    "SecurityGroupIds": ["${K5_E2E_TEST_LAMBDA_SECURITY_GROUP}"]
+  },
+  "Environment": {
+    "Variables": {
+      "APP_ENV": "k5-integration-test",
+      "DATABASE_URL": "<inject-learncloud_k5_test-url-with-approved-secret-process>",
+      "AWS_REGION": "ap-southeast-1",
+      "S3_BUCKET": "learncloud-videos-mentorcloud",
+      "VIDEO_PIPELINE_ENABLED": "true",
+      "VIDEO_AI_ENABLED": "true",
+      "AI_WORKER_ENABLED": "false",
+      "MEDIACONVERT_ROLE_ARN": "arn:aws:iam::${ACCOUNT_ID}:role/learncloud-mediaconvert-k5-e2e-test-role",
+      "MEDIACONVERT_QUEUE_ARN": "${MEDIACONVERT_QUEUE_ARN}"
+    }
+  }
+}
