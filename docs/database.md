@@ -1,155 +1,52 @@
-# Database LearnCloud
+# Cơ sở dữ liệu
 
-## 1. Phạm vi và nguồn chuẩn
+## Nguồn chuẩn
 
-LearnCloud sử dụng PostgreSQL. Bản schema khởi tạo hiện tại nằm ở
-[`database/schema.sql`](../database/schema.sql), dữ liệu demo ở
-[`database/seed.sql`](../database/seed.sql), và thay đổi sau baseline phải theo
-[quy ước migration](../database/migrations/README.md).
+`database/schema.sql` là snapshot khởi tạo cho database mới. `database/migrations/` chứa các thay đổi tiếp theo cùng những migration lịch sử/nhánh thay thế. Không thể suy ra version database đang chạy chỉ từ các file này; phải kiểm tra registry và object thực tế. Lịch sử migration có các version trùng quanh `0004`; đọc [lịch sử và quy ước migration](../database/migrations/README.md) trước khi chạy SQL.
 
-Schema dùng khóa chính `SERIAL` (`INTEGER`) và thời gian `TIMESTAMPTZ` theo UTC.
-Điều này là trạng thái hiện tại của code, dù một số tài liệu kiến trúc cũ từng
-đề cập UUID.
+Database sử dụng PostgreSQL; schema khởi tạo dùng khóa chính `SERIAL` kiểu integer. SQLAlchemy model nằm trong `backend/app/models/`. Schema RDS và migration registry hiện tại chưa được kiểm tra trong lượt cập nhật tài liệu này.
 
-Account state is stored in `users.status` as `ACTIVE` or `INACTIVE` (migration
-`0015_user_account_status.sql`). The backend checks this value on every
-authenticated request and coordinates admin changes with Cognito. Migration 0015
-requires registry version 0014 and the confirmed `learncloud_admin` LOGIN used by
-the current local Backend configuration. It grants only missing status-column
-SELECT/UPDATE privileges; it does not create a role or grant access to worker roles.
+## Các bảng khởi tạo
 
-## 2. Quan hệ chính
+| Bảng | Mục đích và quan hệ chính |
+|---|---|
+| `users` | Danh tính người dùng, email/Cognito subject duy nhất, role và trạng thái hoạt động. |
+| `courses` | Khóa học do instructor/admin sở hữu. |
+| `sections` | Các chương có thứ tự thuộc khóa học. |
+| `lessons` | Nội dung bài học có thứ tự và trạng thái xử lý video, thuộc một chương. |
+| `enrollments` | Quan hệ student-khóa học; mỗi cặp chỉ có một bản ghi. |
+| `lesson_progress` | Tiến độ phát video và trạng thái hoàn tất theo student/bài học. |
+| `viewing_sessions` | Theo dõi thứ tự cập nhật trong phiên xem. |
+| `progress_updates` | Ledger request/response cho cập nhật tiến độ idempotent. |
+| `quizzes` | Tối đa một quiz cho mỗi chương theo schema khởi tạo. |
+| `questions` | Câu hỏi, lựa chọn và đáp án đúng lưu phía server. |
+| `quiz_attempts` | Lượt nộp quiz, điểm và trạng thái đạt. |
+| `quiz_answers` | Câu trả lời từng câu thuộc một lượt làm quiz. |
+| `flashcards` | Flashcard có thứ tự, gắn với bài học. |
+| `tutor_sessions` | Phiên học bù của student, có thể liên kết tới một lượt làm quiz. |
+| `tutor_messages` | Tin nhắn user/assistant trong phiên Tutor. |
+| `schema_migrations` | Registry ghi nhận version migration đã áp dụng. |
 
-```text
-users (instructor) 1 ── * courses 1 ── * sections 1 ── * lessons
-users (student)    * ── * courses qua enrollments
-users (student)    1 ── * lessons qua lesson_progress
-sections            1 ── 1 quizzes 1 ── * questions
-users (student)     1 ── * quiz_attempts 1 ── * quiz_answers
-lessons              1 ── * flashcards
-users (student)      1 ── * tutor_sessions 1 ── * tutor_messages
-```
+Migration bổ sung hoặc đối soát các cấu trúc khác, gồm bảng upload/pipeline ledger, trạng thái idempotency/remediation cho checkpoint và các trường tài khoản/tiến độ. Bản nháp review được lưu theo model nội dung lesson/quiz hiện có, không dùng bảng riêng `review_drafts`. Không giả định bảng/cột chỉ có trong migration đã tồn tại ở mọi database nếu chưa kiểm tra registry/schema.
 
-`quiz_attempts` đồng thời tham chiếu tới `quizzes`; `tutor_sessions` có thể
-tham chiếu tới một `quiz_attempt` để tạo remediation từ bài làm chưa đạt.
-
-## 3. Bảng và trách nhiệm
-
-| Bảng                | Mục đích                                                        | Ràng buộc đáng chú ý                                                                              |
-| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `users`             | Danh tính người dùng demo/Cognito và vai trò.                   | `email`, `cognito_sub` là duy nhất; role là `STUDENT`, `INSTRUCTOR` hoặc `ADMIN`.                 |
-| `courses`           | Metadata và trạng thái course.                                  | `instructor_id` phải là instructor/admin; status `DRAFT` hoặc `PUBLISHED`.                        |
-| `sections`          | Phân đoạn có thứ tự của course.                                 | Duy nhất `(course_id, position)`.                                                                 |
-| `lessons`           | Nội dung bài học, video, transcript, summary và pipeline state. | Duy nhất `(section_id, position)`; status bị giới hạn; `duration_seconds`/`retry_count` không âm. |
-| `flashcards`        | Flashcard sinh từ hoặc gắn với lesson.                          | Duy nhất `(lesson_id, position)`; front/back không rỗng.                                          |
-| `enrollments`       | Liên kết student-course.                                        | Duy nhất `(student_id, course_id)`; student phải có role `STUDENT`.                               |
-| `lesson_progress`   | Tiến độ theo student-lesson.                                    | Duy nhất `(student_id, lesson_id)`; watched time không âm.                                        |
-| `quizzes`           | Checkpoint của một section.                                     | Một quiz/section; `passing_score` từ 0 đến 100.                                                   |
-| `questions`         | Câu hỏi, lựa chọn và đáp án server-side.                        | Duy nhất `(quiz_id, position)`; đáp án phải là key trong `options_json`.                          |
-| `quiz_attempts`     | Kết quả một lần làm quiz.                                       | Duy nhất `(student_id, quiz_id, attempt_number)`; score 0–100.                                    |
-| `quiz_answers`      | Câu trả lời theo từng câu hỏi trong attempt.                    | Duy nhất `(attempt_id, question_id)`.                                                             |
-| `tutor_sessions`    | Phiên remediation của student.                                  | `practice_questions`, `remediation_completed`, `workflow_state` do migration 0012 hội tụ; trigger xác minh student/section khớp quiz attempt nếu có. |
-| `tutor_messages`    | Hội thoại thuộc một Tutor session.                              | role chỉ `USER` hoặc `ASSISTANT`; content không rỗng.                                             |
-| `schema_migrations` | Các version schema đã được áp dụng.                             | `version` là khóa chính.                                                                          |
-| `video_uploads` (0005, optional) | Intent cho presigned upload, chưa phải biên nhận xác nhận. | Source key duy nhất; UNIQUE `(id, lesson_id)` cho FK ghép. |
-| `video_pipeline_runs` (0005, optional) | Ledger claim/job/output và outbox retry. | UNIQUE `(upload_id, attempt)`; FK `(upload_id, lesson_id)` tới đúng cặp của video_uploads. |
-
-Hai bảng video chỉ có sau khi operator review/apply migration 0005; không nằm trong
-bootstrap và không tự tạo khi backend chạy. Gate xác nhận là S3 HEAD tại claim,
-không thêm confirmed_at/confirm-upload. Course/Lesson row locks và generation/owner/
-raw identity checks trong service ngăn callback cũ ghi đè output mới. Xem
-[review 0005, preflight và backup/apply/verify](video-pipeline-migration-0005.md).
-
-## 4. Quy tắc nghiệp vụ được database bảo vệ
-
-- Course chỉ có thể tham chiếu tới user role `INSTRUCTOR` hoặc `ADMIN`.
-- Enrollment, progress, quiz attempt và Tutor session chỉ có thể tham chiếu
-  tới user role `STUDENT`.
-- Dữ liệu con của course/section/lesson bị xóa theo quan hệ `CASCADE` nơi phù
-  hợp; không xóa instructor khi còn course (`RESTRICT`).
-- `questions.correct_answer` là dữ liệu chấm điểm ở server. API student không
-  được trả trường này trước khi nộp bài.
-- Một Tutor session có attempt phải thuộc cùng student và cùng section với
-  lesson của session; trigger `trg_validate_tutor_session_consistency` kiểm tra
-  điều đó.
-
-Các constraint ở database là lớp bảo vệ cuối. Backend vẫn phải kiểm tra quyền
-owner, enrollment, publish/review và unlock trước khi đọc/ghi dữ liệu.
-
-## 5. Trạng thái lesson và nội dung AI
-
-`lessons.status` chấp nhận:
+## Quan hệ và ràng buộc
 
 ```text
-DRAFT → UPLOADED → PROCESSING → TRANSCRIBING → AI_PROCESSING
-      → REVIEW_REQUIRED → PUBLISHED
+users ──< courses ──< sections ──< lessons ──< flashcards
+users >──< courses       qua enrollments
+users ──< lesson_progress / viewing_sessions / progress_updates
+sections ── 0..1 quizzes ──< questions
+users ──< quiz_attempts ──< quiz_answers >── questions
+users ──< tutor_sessions ──< tutor_messages
 ```
 
-`FAILED` có thể phát sinh tại các bước xử lý; `error_message` và `retry_count`
-giúp theo dõi lỗi/retry. Bootstrap và SQLAlchemy model hiện hỗ trợ chín trạng
-thái trên. **Database hiện hữu cần migration `0004_add_lesson_approved_status.sql`
-được operator review và chạy thủ công để loại `APPROVED` khỏi Lesson state**; việc sửa file schema
-không tự thay đổi DB đang chạy. Migration chưa được áp dụng tự động.
-Việc ép đúng chuyển trạng thái và quyền retry vẫn do service/API thực hiện.
+Foreign key và trigger xác minh role bảo vệ các quan hệ quan trọng. Unique constraint ngăn enrollment trùng, trùng vị trí lesson/section, trùng số lượt quiz và trùng câu trả lời theo question/attempt. Đáp án quiz được giữ ở server; response quiz trước khi nộp không được làm lộ đáp án. Backend vẫn phải kiểm tra quyền ngoài các ràng buộc SQL.
 
-Approve tách khỏi publish: Instructor sở hữu course DRAFT thực hiện
-`REVIEW_REQUIRED → PUBLISHED`; Course publish chỉ nhận các Lesson đã `PUBLISHED`
-và chuyển chúng sang PUBLISHED cùng transaction. Không tự approve dữ liệu
-legacy/seed, không tự đổi trạng thái sau upload. Xem
-[hướng dẫn migration và kiểm thử](lesson-approval-migration.md).
+## Trạng thái migration và kiểm thử
 
-`approved_by`/`approved_at` là đề xuất audit hữu ích, không phải trường bắt buộc
-trong API Contract Draft hiện tại; migration 0004 không thêm hai cột này và
-không suy diễn người/thời gian approve cho dữ liệu cũ.
+- SQL bootstrap và migration script hiện có trong source.
+- Có integration test bao phủ migration PostgreSQL. Báo cáo regression backend gần nhất ghi nhận 69 test có PostgreSQL gate bị skip; các trường hợp đó chưa chứng minh hành vi trên PostgreSQL thật.
+- Trạng thái migration trên AWS/RDS **chưa được xác minh**. Không chạy migration runner trên database dùng chung/production nếu chưa review target, backup, preflight, kế hoạch apply và postflight.
+- Tài liệu chuyên biệt về review/backup/apply/verify nằm trong [`database/`](database/); quy trình chuẩn ở [migration README](../database/migrations/README.md).
 
-`transcript_json`, `key_concepts_json`, `learning_objectives` và
-`options_json` dùng JSONB để lưu cấu trúc linh hoạt. Code gọi API cần validate
-payload bằng schema; không nên coi JSONB là thay thế cho API contract.
-
-## 6. Dữ liệu demo
-
-`seed.sql` tạo idempotent:
-
-- `Demo Instructor` — `instructor@example.com`;
-- `Demo Student` — `student@example.com`;
-- `Demo Student 2` — `student2@example.com`;
-- course published `Introduction to AWS` cùng sections/lessons mẫu;
-- course draft `Introduction to Docker`;
-- enrollment hai student vào course AWS.
-
-Seed chỉ dành cho local development. Không thêm password thật, access key hoặc
-dữ liệu cá nhân vào file này.
-
-## 8. Kiểm tra nhanh
-
-```sql
--- Danh sách bảng
-\dt
-
--- Kiểm tra phiên bản schema
-SELECT version, description, applied_at
-FROM schema_migrations
-ORDER BY version;
-
--- Xem course cùng số section
-SELECT c.id, c.title, c.status, COUNT(s.id) AS section_count
-FROM courses c
-LEFT JOIN sections s ON s.course_id = c.id
-GROUP BY c.id, c.title, c.status
-ORDER BY c.id;
-```
-
-Có thể chạy truy vấn qua Docker, ví dụ:
-
-```powershell
-docker exec -it learncloud-db psql -U learncloud -d learncloud
-```
-
-## 9. Khi thay đổi database
-
-1. Xác định contract/API/model nào bị ảnh hưởng.
-2. Tạo migration version mới; không sửa migration đã được merge.
-3. Cập nhật SQLAlchemy model, schema Pydantic và tài liệu này trong cùng PR.
-4. Thử migration trên database sạch và database có seed.
-5. Review constraint, index, `ON DELETE`, khả năng rollback và nguy cơ mất dữ
-   liệu trước khi merge.
+Để xem đầy đủ DDL, constraint và index, đọc [schema khởi tạo](../database/schema.sql) cùng từng migration. Phần tóm tắt này không giả định database đang chạy trùng với snapshot trong repository.

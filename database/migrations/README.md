@@ -60,7 +60,7 @@ upload/lesson. Yêu cầu 0004 đã ghi/validated; không thay đổi migration 
 Đây là file **one-time**: tự từ chối chạy lại hoặc nhận schema tồn tại không rõ lịch sử;
 bộ chạy registry bên dưới sẽ bỏ qua version đã có. Không drop/adopt bảng cũ để ép pass.
 Chạy [preflight chỉ đọc](../checks/video_pipeline_preflight.sql) và xem
-[review + PowerShell backup/apply/verify](../../docs/video-pipeline-migration-0005.md)
+[review + PowerShell backup/apply/verify](../../docs/database/video-pipeline-migration-0005.md)
 trước khi tự triển khai; không chạy mọi migration chỉ để kiểm tra riêng 0005.
 
 `seed.sql` là dữ liệu demo, không phải migration. Kiểu khóa chính hiện tại là
