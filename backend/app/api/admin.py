@@ -189,7 +189,9 @@ def set_user_status(
     new_status = "ACTIVE" if enabled else "INACTIVE"
     try:
         if user.cognito_sub:
-            auth_service.admin_set_user_enabled(email=user.email, enabled=enabled)
+            auth_service.admin_set_user_enabled(
+                cognito_sub=user.cognito_sub, enabled=enabled
+            )
     except auth_service.CognitoAuthError as exc:
         db.rollback()
         if user.cognito_sub:
@@ -197,7 +199,8 @@ def set_user_status(
                 # Cognito timeouts can be ambiguous: the remote operation may
                 # have completed even though its response did not arrive.
                 auth_service.admin_set_user_enabled(
-                    email=user.email, enabled=(old_status == "ACTIVE")
+                    cognito_sub=user.cognito_sub,
+                    enabled=(old_status == "ACTIVE"),
                 )
             except Exception as rollback_exc:
                 raise HTTPException(
@@ -220,7 +223,8 @@ def set_user_status(
         if user.cognito_sub:
             try:
                 auth_service.admin_set_user_enabled(
-                    email=user.email, enabled=(old_status == "ACTIVE")
+                    cognito_sub=user.cognito_sub,
+                    enabled=(old_status == "ACTIVE"),
                 )
             except Exception as rollback_exc:
                 raise HTTPException(

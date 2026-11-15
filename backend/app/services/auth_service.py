@@ -529,11 +529,14 @@ def admin_update_profile(*, cognito_sub: str, email: str, name: str | None = Non
         _raise_cognito_error(exc)
 
 
-def admin_set_user_enabled(*, email: str, enabled: bool):
-    """Enable or disable a Cognito account using the configured admin pool."""
+def admin_set_user_enabled(*, cognito_sub: str, enabled: bool):
+    """Enable or disable the Cognito identity linked to the database user."""
     try:
         client = cognito_client()
-        params = {"UserPoolId": settings.COGNITO_USER_POOL_ID, "Username": email.lower()}
+        params = {
+            "UserPoolId": settings.COGNITO_USER_POOL_ID,
+            "Username": cognito_sub,
+        }
         if enabled:
             client.admin_enable_user(**params)
         else:

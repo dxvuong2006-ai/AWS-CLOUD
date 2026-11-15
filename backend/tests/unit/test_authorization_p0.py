@@ -344,7 +344,7 @@ def test_admin_can_disable_and_enable_user_and_response_shows_status(security, m
     )
     assert response.status_code == 200
     assert response.json()["status"] == "INACTIVE"
-    sync.assert_called_once_with(email="user2@example.com", enabled=False)
+    sync.assert_called_once_with(cognito_sub="sub-2", enabled=False)
 
     sync.reset_mock()
     response = security.client.patch(
@@ -352,7 +352,7 @@ def test_admin_can_disable_and_enable_user_and_response_shows_status(security, m
     )
     assert response.status_code == 200
     assert response.json()["status"] == "ACTIVE"
-    sync.assert_called_once_with(email="user2@example.com", enabled=True)
+    sync.assert_called_once_with(cognito_sub="sub-2", enabled=True)
 
 
 def test_non_admin_cannot_change_account_status(security, monkeypatch):
@@ -385,7 +385,7 @@ def test_admin_cannot_disable_self_or_remove_last_active_admin(security, monkeyp
     )
     assert last_admin_demotion.status_code == 409
     assert security.db.get(User, 4).role == "ADMIN"
-    sync.assert_called_once_with(email="user3@example.com", enabled=False)
+    sync.assert_called_once_with(cognito_sub="sub-3", enabled=False)
 
 
 def test_disabled_account_cannot_reuse_an_unexpired_access_token(security):
@@ -414,10 +414,25 @@ def test_cognito_status_service_calls_expected_admin_operation(monkeypatch, enab
     client = Mock()
     monkeypatch.setattr(auth_service, "cognito_client", lambda: client)
     monkeypatch.setattr(settings, "COGNITO_USER_POOL_ID", "test-pool")
-    auth_service.admin_set_user_enabled(email="Example@Email.com", enabled=enabled)
+    auth_service.admin_set_user_enabled(cognito_sub="stable-cognito-sub", enabled=enabled)
     getattr(client, operation).assert_called_once_with(
-        UserPoolId="test-pool", Username="example@email.com"
+        UserPoolId="test-pool", Username="stable-cognito-sub"
     )
+
+
+def test_status_sync_uses_cognito_sub_even_when_email_changes(security, monkeypatch):
+    user = security.db.get(User, 2)
+    user.email = "changed-address@example.com"
+    security.db.commit()
+    sync = Mock()
+    monkeypatch.setattr(auth_service, "admin_set_user_enabled", sync)
+
+    response = security.client.patch(
+        "/admin/users/2/status", headers=security.headers(4), json={"enabled": False}
+    )
+
+    assert response.status_code == 200
+    sync.assert_called_once_with(cognito_sub="sub-2", enabled=False)
 
 
 def test_cognito_failure_and_failed_restore_reports_possible_drift(security, monkeypatch):
