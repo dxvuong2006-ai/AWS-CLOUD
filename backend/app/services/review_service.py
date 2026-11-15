@@ -219,6 +219,8 @@ def generate_draft(
     with review_repo.transaction(db):
         review_repo.lock_section(db, lesson_id)
         lesson = _owned_lesson(db, lesson_id, instructor_id)
+        if lesson.status != "DRAFT":
+            raise ReviewError(409, "AI generation cannot replace an existing review draft.")
         quiz = review_repo.get_quiz(db, lesson.section_id, lock=True)
         _editable(db, quiz)
         quiz = review_repo.replace_content(db, lesson, quiz, content)

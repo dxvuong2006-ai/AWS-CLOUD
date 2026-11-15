@@ -192,10 +192,12 @@ def replace_content(
             lesson_id=lesson.id,
             front=item.front,
             back=item.back,
-            position=item.position,
+            # The array order is canonical. Never trust stale or duplicate
+            # client positions when replacing the complete list.
+            position=position,
             is_approved=False,
         )
-        for item in content.flashcards
+        for position, item in enumerate(content.flashcards, 1)
     ])
     quiz.title = content.quiz_title
     quiz.is_approved = False

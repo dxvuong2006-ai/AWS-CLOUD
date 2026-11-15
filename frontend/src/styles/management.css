@@ -37,8 +37,11 @@
 .review-row { padding: 10px 0; border-bottom: 1px solid #edf0f5; }
 .review-edit-card { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid #edf0f5; }
 .review-edit-card label { display: grid; gap: 6px; color: #334155; font-weight: 650; }
-.review-edit-card input, .review-edit-card textarea { width: 100%; border: 1px solid #dde3ed; border-radius: 10px; padding: 10px 12px; font: inherit; }
+.review-edit-card input, .review-edit-card textarea, .review-edit-card select { width: 100%; border: 1px solid #dde3ed; border-radius: 10px; padding: 10px 12px; font: inherit; }
 .review-edit-card textarea { min-height: 72px; resize: vertical; }
+.review-question-options { display: grid; gap: 9px; margin: 0; padding: 12px; border: 1px solid #e2e6ee; border-radius: 10px; }
+.review-question-options legend { padding: 0 5px; color: #334155; font-weight: 650; }
+.review-question-option { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .review-delete { justify-self: start; border: 0; background: transparent; cursor: pointer; }
 .workflow-modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #0f172a77; }
 .workflow-modal { width: min(550px, 100%); padding: 30px; border-radius: 20px; background: #fff; box-shadow: 0 25px 60px #0f172a33; }

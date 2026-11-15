@@ -227,7 +227,7 @@ def test_replacement_failure_rolls_back_all(db_session, review_context):
     draft = make_draft(db_session, review_context)
     owner, _, _, lesson = review_context
     content = draft.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={"title", "summary", "key_concepts", "flashcards", "quiz_title", "questions"},
     )
     content["summary"] = "Must roll back"
 
@@ -522,7 +522,7 @@ def test_published_content_cannot_be_edited(db_session, review_context):
         payload=DraftApproval(expected_revision=draft.revision),
     )
     content = approved.model_dump(
-        include={"title", "summary", "key_concepts", "quiz_title", "questions"},
+        include={"title", "summary", "key_concepts", "flashcards", "quiz_title", "questions"},
     )
     with pytest.raises(review_service.ReviewError) as exc:
         review_service.update_draft(
@@ -636,7 +636,7 @@ def test_api_generate_and_update_without_aws(db_session, review_context):
             content = {
                 key: draft[key] for key in (
                     "title", "summary", "key_concepts",
-                    "quiz_title", "questions",
+                    "flashcards", "quiz_title", "questions",
                 )
             }
             content["title"] = "Updated through API"
@@ -649,6 +649,217 @@ def test_api_generate_and_update_without_aws(db_session, review_context):
             assert not result.json()["quiz_approved"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_manual_flashcard_and_quiz_save_reload_and_repeated_saves(
+    db_session, review_context,
+):
+    """Manual review material survives full PUTs, commits, reloads and retries."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/review-draft"
+            payload = draft.model_dump(include={
+                "title", "summary", "key_concepts", "flashcards",
+                "quiz_title", "questions",
+            })
+            payload["flashcards"].append({
+                "front": "Instructor card", "back": "Instructor answer",
+                "position": len(payload["flashcards"]) + 1,
+            })
+            payload["questions"].append({
+                "question": "Instructor quiz question?",
+                "options": ["Correct", "Incorrect"],
+                "correct_answer": "Correct", "explanation": "Verified.",
+            })
+            payload["expected_revision"] = draft.revision
+            response = client.put(url, json=payload)
+            assert response.status_code == 200, response.text
+            saved = response.json()
+
+            # Saving the same material repeatedly replaces the draft atomically;
+            # it does not append duplicate rows.
+            for _ in range(2):
+                repeated = {**payload, "expected_revision": saved["revision"]}
+                response = client.put(url, json=repeated)
+                assert response.status_code == 200, response.text
+                saved = response.json()
+
+            reloaded = client.get(url)
+            assert reloaded.status_code == 200
+            data = reloaded.json()
+            assert data["flashcards"] == saved["flashcards"]
+            assert data["questions"] == saved["questions"]
+            assert len(data["flashcards"]) == len(payload["flashcards"])
+            assert len(data["questions"]) == len(payload["questions"])
+            assert db_session.query(Flashcard).filter(
+                Flashcard.lesson_id == lesson.id,
+            ).count() == len(payload["flashcards"])
+            assert db_session.query(Question).filter(
+                Question.quiz_id == data["quiz_id"],
+            ).count() == len(payload["questions"])
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_partial_flashcard_quiz_and_summary_edits_preserve_siblings(
+    db_session, review_context,
+):
+    """PATCH distinguishes omitted fields from explicitly replaced arrays."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/ai-content"
+            cards = [card.model_dump() for card in draft.flashcards]
+            questions = [question.model_dump() for question in draft.questions]
+
+            cards[0]["front"] = "Edited card only"
+            result = client.patch(url, json={
+                "flashcards": cards, "expected_revision": draft.revision,
+            })
+            assert result.status_code == 200, result.text
+            draft = result.json()
+            assert draft["flashcards"][0]["front"] == "Edited card only"
+            assert draft["questions"] == questions
+
+            questions[0]["question"] = "Edited quiz only?"
+            result = client.patch(url, json={
+                "questions": questions,
+                "expected_revision": draft["revision"],
+            })
+            assert result.status_code == 200, result.text
+            draft = result.json()
+            assert draft["questions"][0]["question"] == "Edited quiz only?"
+            assert draft["flashcards"][0]["front"] == "Edited card only"
+
+            result = client.patch(url, json={
+                "summary": "Summary edit only.",
+                "expected_revision": draft["revision"],
+            })
+            assert result.status_code == 200, result.text
+            assert result.json()["summary"] == "Summary edit only."
+            assert result.json()["flashcards"] == draft["flashcards"]
+            assert result.json()["questions"] == draft["questions"]
+
+            # An explicit [] means delete all cards; omission above preserved them.
+            result = client.patch(url, json={
+                "flashcards": [],
+                "expected_revision": result.json()["revision"],
+            })
+            assert result.status_code == 200, result.text
+            assert result.json()["flashcards"] == []
+            assert result.json()["questions"] == draft["questions"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_full_draft_put_rejects_omitted_flashcards(
+    db_session, review_context,
+):
+    """A missing collection is not silently interpreted as an empty collection."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    payload = draft.model_dump(include={
+        "title", "summary", "key_concepts", "quiz_title", "questions",
+    })
+    payload["expected_revision"] = draft.revision
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            response = client.put(
+                f"/lessons/{lesson.id}/review-draft", json=payload,
+            )
+        assert response.status_code == 422
+        assert review_service.get_draft(
+            db_session, lesson_id=lesson.id, instructor_id=owner.id,
+        ) == draft
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_invalid_quiz_answer_422_keeps_draft_and_corrected_retry_saves(
+    db_session, review_context,
+):
+    """Invalid answers are rejected without losing edits; correcting them saves."""
+    owner, _, _, lesson = review_context
+    draft = make_draft(db_session, review_context)
+    payload = draft.model_dump(include={
+        "title", "summary", "key_concepts", "flashcards",
+        "quiz_title", "questions",
+    })
+    payload["summary"] = "Instructor's unsaved summary edit."
+    payload["flashcards"][0]["front"] = "Instructor's unsaved card edit."
+    payload["questions"].append({
+        "question": "Fourth question?", "options": ["A", "B"],
+        "correct_answer": "Old option", "explanation": "Explanation.",
+    })
+    payload["expected_revision"] = draft.revision
+
+    def database_override():
+        yield db_session
+
+    app.dependency_overrides[get_db] = database_override
+    app.dependency_overrides[get_current_user] = lambda: owner
+    try:
+        with TestClient(app) as client:
+            url = f"/lessons/{lesson.id}/review-draft"
+            rejected = client.put(url, json=payload)
+            assert rejected.status_code == 422
+            assert review_service.get_draft(
+                db_session, lesson_id=lesson.id, instructor_id=owner.id,
+            ) == draft
+
+            payload["questions"][3]["correct_answer"] = "A"
+            accepted = client.put(url, json=payload)
+            assert accepted.status_code == 200, accepted.text
+            result = accepted.json()
+            assert result["summary"] == "Instructor's unsaved summary edit."
+            assert result["flashcards"][0]["front"] == "Instructor's unsaved card edit."
+            assert result["questions"][3]["correct_answer"] == "A"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_ai_regeneration_cannot_overwrite_reviewed_draft(
+    db_session, review_context,
+):
+    """A stale AI generation request cannot replace instructor-reviewed material."""
+    draft = make_draft(db_session, review_context)
+    owner, _, _, lesson = review_context
+    content = draft.model_dump(include={
+        "title", "summary", "key_concepts", "flashcards",
+        "quiz_title", "questions",
+    })
+    content["summary"] = "Instructor's saved summary."
+    edited = review_service.update_draft(
+        db_session, lesson_id=lesson.id, instructor_id=owner.id,
+        payload=DraftUpdate(**content, expected_revision=draft.revision),
+    )
+    with pytest.raises(review_service.ReviewError) as exc:
+        make_draft(db_session, review_context)
+    assert exc.value.status_code == 409
+    assert review_service.get_draft(
+        db_session, lesson_id=lesson.id, instructor_id=owner.id,
+    ) == edited
 
 
 def test_patch_summary_preserves_flashcards_and_checkpoint(
