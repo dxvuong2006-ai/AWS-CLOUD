@@ -4,6 +4,13 @@ Tài liệu này hướng dẫn dựng môi trường demo theo kiến trúc tro
 
 > Các bước tạo dịch vụ AWS không tự bổ sung tính năng còn thiếu trong mã nguồn. Trước khi làm các mục được đánh dấu **Cần chuẩn bị mã**, hoàn thiện handler, auth và workflow theo mục 1. Môi trường HTTP/API công khai chỉ dùng dữ liệu demo; dự kiến có phí trong thời gian chạy.
 
+> **Phạm vi tài liệu:** đây là runbook tham chiếu, không phải inventory và không
+> phải bằng chứng các bước đã được thực hiện. Baseline bàn giao ngày 15/11/2026
+> cho biết frontend đã chạy trên S3/CloudFront và backend chạy Lambda version 6;
+> phải đối chiếu inventory mới nhất trong `agent/input/`, tên/ARN/Region và quyền
+> hiện có trước mọi thay đổi. Không tạo lại tài nguyên chỉ vì tài liệu bên dưới có
+> bước "Create". Repository cleanup không được chạy bất kỳ bước AWS nào.
+
 ## Kiến trúc cần tạo
 
 ```text
@@ -45,29 +52,31 @@ aws sts get-caller-identity --profile learncloud
 
 Xác nhận đúng account ID trước khi tạo tài nguyên. Region thống nhất toàn tài liệu là **Asia Pacific (Singapore) `ap-southeast-1`**.
 
-## 1. Kiểm tra mã nguồn trước khi tạo AWS resources
+## 1. Kiểm tra mã nguồn trước khi thay đổi AWS resources
 
-Kiến trúc báo cáo là kiến trúc đích. Repository hiện có FastAPI, React/Vite, schema PostgreSQL, S3 adapter và một ASL placeholder rỗng; chưa có Lambda handler/Mangum, Cognito JWT integration hay workflow Step Functions hoàn chỉnh. Làm các việc sau trước khi kỳ vọng toàn hệ thống chạy:
+Repository hiện đã có FastAPI/React, Mangum handler trong `backend/app/main.py`,
+Cognito integration, adapter S3 và định nghĩa Step Functions trong
+`infrastructure/step-functions/video_pipeline.asl.json`. Sự tồn tại của source
+không chứng minh cùng version/config đang chạy trên AWS. Trước một deployment
+được phê duyệt, phải thực hiện các gate sau:
 
-1. **K2 – Lambda:** thêm `mangum` vào `backend/requirements.txt`; tạo `backend/app/lambda_handler.py`:
+1. Chốt commit SHA và build package mới từ commit đó; không deploy ZIP lấy từ
+   Git history hoặc working tree không có provenance.
+2. Đối chiếu API Gateway authorizer, Cognito pool/client và mapping verified
+   `sub` tới `users.cognito_sub`; không dùng email làm Cognito `Username` cho
+   thao tác enable/disable account.
+3. Đối chiếu frontend environment với API Gateway/Cognito/CloudFront của đúng
+   environment; không đưa secret vào biến `VITE_*`.
+4. Review S3 prefix, overwrite protection và CloudFront playback authorization.
+5. Validate ASL/handler/IAM/model contract của pipeline; source ASL không phải
+   bằng chứng execution end-to-end đã thành công.
+6. Migration cần change request, backup, preflight và postflight riêng. Không
+   tự động chạy toàn bộ migration hoặc dùng cleanup repository để thay đổi RDS.
+7. Chạy regression phù hợp và ghi kết quả, skip, warning, artifact hash cùng
+   Lambda version/alias vào biên bản deployment.
 
-   ```python
-   from mangum import Mangum
-   from app.main import app
-
-   handler = Mangum(app, lifespan="off")
-   ```
-
-   Cập nhật cấu hình backend để lấy database secret từ Secrets Manager hoặc SSM, thay vì yêu cầu `DATABASE_URL` dạng mật khẩu thuần trong Lambda environment.
-
-2. **M1 – Cognito:** API Gateway JWT authorizer xác minh issuer, audience và thời hạn token. Cập nhật backend để đọc claims đã xác minh từ API Gateway request context, ánh xạ `sub` tới `users.cognito_sub`, rồi kiểm tra role, ownership, enrollment và unlock. Cập nhật `backend/app/config.py` để không còn bắt buộc `JWT_SECRET_KEY` khi Cognito là issuer. Không đưa `X-Demo-User` ra môi trường AWS.
-3. **K1 – frontend:** đặt API base URL theo API Gateway; đăng nhập bằng Cognito OIDC/authorization code + PKCE; gửi `Authorization: Bearer <token>`.
-4. **K3 – video:** triển khai signed URL cho video processed qua CloudFront; presigned upload chỉ ghi đúng prefix `lessons/{lesson_id}/raw/`.
-5. **K4 – pipeline:** viết và kiểm tra state machine ASL cùng các Lambda/task handlers cho MediaConvert, Transcribe, Bedrock, update trạng thái RDS và ghi output S3. File `infrastructure/step-functions/video_pipeline.asl.json` hiện chưa có định nghĩa.
-6. Tạo một **migration Lambda dùng một lần** chạy trong VPC để nạp `database/schema.sql`, rồi migration chưa áp dụng từ `database/migrations/`. RDS là private nên không chạy migration từ máy cá nhân. Xóa/quyền thu hồi handler migration sau khi xác nhận schema.
-7. Xác nhận adapter và dependencies chọn đúng AWS implementations; fixture/mock chỉ dùng khi chưa kết nối dịch vụ thật.
-
-Nếu các việc trên chưa hoàn thành, chỉ có thể kiểm tra từng dịch vụ độc lập; không đánh dấu LearnCloud đã deploy hoàn chỉnh.
+Nếu chưa đủ các gate trên, chỉ xác nhận từng thành phần có bằng chứng; không
+đánh dấu toàn bộ LearnCloud đã được nghiệm thu end-to-end.
 
 ## 2. Tạo cảnh báo ngân sách trước
 
@@ -328,6 +337,19 @@ Gửi giảng viên CloudFront URL, tài khoản LearnCloud demo và thời hạ
 6. Xóa RDS/snapshot theo quyết định nhóm; xóa DB subnet group, VPC endpoints, security groups và VPC sau cùng.
 7. Gỡ quyền IAM Identity Center của thành viên rời nhóm. Kiểm tra Billing để tìm endpoint hoặc tài nguyên còn tồn tại.
 
-## Trạng thái hiện tại của repository
+## Cách đọc trạng thái hiện tại
 
-Repo có FastAPI/React, schema và adapter S3; các hạng mục Cognito JWT, Lambda/Mangum, đóng gói ZIP, signed video delivery, và state machine/EventBridge/MediaConvert/Transcribe cần hoàn thiện trước khi có thể nghiệm thu toàn bộ K1–K6. Không coi `/health` của local hoặc Lambda mẫu là bằng chứng pipeline và xác thực Cognito đã hoạt động.
+Phân biệt rõ năm lớp bằng chứng:
+
+1. `docs/requirements.md` mô tả hệ thống cần làm gì.
+2. `architecture.md` và runbook này mô tả thiết kế/cách triển khai dự kiến.
+3. Source trong `frontend/`, `backend/`, `ai_pipeline/` và `infrastructure/`
+   cho biết implementation đang có trong Git.
+4. AWS inventory mới nhất cho biết tài nguyên nào thực sự tồn tại và phần nào
+   chưa xác minh do thiếu quyền.
+5. Test report và smoke test có timestamp cho biết hành vi nào đã được kiểm tra.
+
+Không dùng package ZIP đang nằm trong working tree làm nguồn chân lý lâu dài;
+package phải được build lại từ commit đã review, lưu ở artifact store được phê
+duyệt và gắn version/hash trong biên bản deployment. `/health` hoặc một Lambda
+mẫu không chứng minh Cognito, RDS, pipeline video hay AI end-to-end đã hoạt động.

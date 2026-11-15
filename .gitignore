@@ -2,15 +2,49 @@
 .env
 .env.*
 !.env.example
+!**/.env.example
 
 .venv/
+venv/
 __pycache__/
-
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 node_modules/
 dist/
+.vite/
+.npm/
+.eslintcache
 .local-video-jobs/
 build/
+coverage/
 
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*~
 
-learncloud-rds-probe.zip
+.DS_Store
+Thumbs.db
+.idea/
+
+# Local test/runtime databases are generated artifacts.
+/backend/tests.db
+*.sqlite
+*.sqlite3
+
+# Lambda deployment packages are reproducible build artifacts. Keep them local
+# or in the approved artifact store, not in Git.
+/learncloud-lambda.zip
+/learncloud-lambda-auth-sync.zip
+/learncloud-lambda-cors.zip
+/learncloud-rds-probe.zip
+/backend/learncloud-lambda.zip

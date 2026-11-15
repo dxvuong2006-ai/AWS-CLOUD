@@ -1,84 +1,34 @@
 # Thiết lập môi trường local
 
-Tài liệu này hướng dẫn khởi tạo một môi trường LearnCloud sạch trên Windows
-PowerShell. Docker Compose chỉ chạy PostgreSQL; backend và frontend chạy trực
-tiếp trên máy phát triển.
+Tài liệu này dùng cho môi trường phát triển/test cô lập. Không dùng RDS,
+credential AWS production hoặc database dùng chung. Các lệnh dưới đây không
+chạy migration và không thay đổi AWS.
 
 ## 1. Điều kiện cần
 
-- Docker Desktop đang chạy và có Docker Compose v2 (`docker compose version`).
 - Python 3.11+ và `pip`.
-- Node.js LTS và npm.
-- Cổng `5434`, `8000`, `5173` chưa bị ứng dụng khác chiếm.
+- Node.js/npm tương thích với `frontend/package-lock.json`.
+- Docker Desktop chỉ khi cần PostgreSQL local.
+- Các cổng `5434`, `8000`, `5173` còn trống nếu dùng cấu hình mặc định.
 
-AWS CLI/credential **không cần** để chạy course flow local. Chỉ cần chúng khi
-gọi route tạo S3 presigned upload URL.
+AWS CLI không cần cho regression offline. Chỉ cấu hình AWS trong một đợt test
+riêng đã được phê duyệt; không dùng profile production để chạy test.
 
-## 2. Tạo cấu hình local
+## 2. Cấu hình local
 
-Từ thư mục gốc repository, tạo `.env` từ mẫu nếu chưa có:
+Từ root repository:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Mở `.env` và đặt tối thiểu các giá trị sau. Mật khẩu database phải khớp với
-`docker-compose.yml`; không commit file này.
+Chỉ điền giá trị local. Không commit `.env`. Với backend offline, tối thiểu cần
+`DATABASE_URL` và các secret local đủ dài theo validation trong
+`backend/app/config.py`. Frontend dùng `frontend/.env.example` làm danh sách
+biến; các biến bắt đầu bằng `VITE_` được đưa vào bundle trình duyệt nên không
+được chứa secret.
 
-```dotenv
-DATABASE_URL=postgresql://learncloud:learncloud_dev_password@localhost:5434/learncloud
-JWT_SECRET_KEY=replace-with-a-local-random-secret-at-least-32-characters
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
-
-# Chỉ cần khi thử upload S3; config backend hiện dùng tên S3_BUCKET.
-S3_BUCKET=learncloud-videos-mentorcloud
-AWS_REGION=ap-southeast-1
-```
-
-> `.env.example` còn có một số biến dành cho kế hoạch mở rộng. Backend hiện
-> yêu cầu `DATABASE_URL` và `JWT_SECRET_KEY`; `S3_BUCKET`/`AWS_REGION` có giá
-> trị mặc định nhưng nên khai báo rõ khi dùng S3.
-
-## 3. Khởi động và nạp database
-
-```powershell
-docker compose up -d learncloud-db
-docker compose ps
-```
-
-Chờ service có trạng thái `healthy`, sau đó nạp schema, migration tương thích
-database cũ và dữ liệu demo theo thứ tự:
-
-```powershell
-Get-Content .\database\schema.sql -Raw |
-  docker exec -i learncloud-db psql -v ON_ERROR_STOP=1 -U learncloud -d learncloud
-
-Get-Content .\database\migrations\0003_reconcile_legacy_schema.sql -Raw |
-  docker exec -i learncloud-db psql -v ON_ERROR_STOP=1 -U learncloud -d learncloud
-
-Get-Content .\database\seed.sql -Raw |
-  docker exec -i learncloud-db psql -v ON_ERROR_STOP=1 -U learncloud -d learncloud
-```
-
-Schema và migration có thể chạy lại an toàn; migration chỉ thêm cột còn thiếu,
-không xóa dữ liệu hiện có. Không xóa volume để xử lý lỗi schema nếu cần giữ dữ
-liệu local.
-
-Xác minh dữ liệu:
-
-```powershell
-docker exec learncloud-db psql -U learncloud -d learncloud -c "SELECT id, email, role FROM users ORDER BY id;"
-docker exec learncloud-db psql -U learncloud -d learncloud -c "SELECT id, title, status FROM courses ORDER BY id;"
-```
-
-Seed tạo một instructor `instructor@example.com` và hai student; cả hai
-student được enrollment vào course `Introduction to AWS` đã publish. ID không
-nên được hard-code ngoài database sạch; tra cứu ID bằng các lệnh ở kịch bản
-demo.
-
-## 4. Chạy backend
-
-Tạo virtual environment (một lần) và cài dependencies:
+## 3. Cài backend
 
 ```powershell
 python -m venv .venv
@@ -86,85 +36,95 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
 ```
 
-Khởi động FastAPI từ thư mục gốc:
+Chạy từ root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
-Kiểm tra bằng một PowerShell khác:
+Kiểm tra health và OpenAPI:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
+Start-Process http://127.0.0.1:8000/docs
 ```
 
-Kết quả mong đợi là `status : ok`. Swagger UI nằm tại
-`http://127.0.0.1:8000/docs`.
-
-## 5. Chạy frontend
-
-Mở một PowerShell khác:
+## 4. Cài frontend
 
 ```powershell
 Set-Location .\frontend
-npm.cmd install
+npm.cmd ci
 npm.cmd run dev
 ```
 
-Dùng `npm.cmd` trên Windows nếu PowerShell chặn `npm.ps1` theo execution
-policy. Mở `http://localhost:5173` sau khi Vite thông báo URL local.
-
-Để kiểm tra build production mà không chạy server dev:
+Mở `http://localhost:5173`. Để kiểm tra trước bàn giao:
 
 ```powershell
-Set-Location .\frontend
+npm.cmd test
 npm.cmd run build
 ```
 
-## 6. Smoke test API và user demo
+`frontend/dist/` là build artifact và không được commit.
 
-Danh sách course đã publish không cần header:
+## 5. Backend regression offline
+
+Chạy từ `backend/`. Cấu hình này dùng SQLite in-memory, credential giả và bỏ
+AWS profile khỏi tiến trình; không gọi AWS/RDS:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/courses
+$env:DATABASE_URL = "sqlite:///:memory:"
+$env:AWS_ACCESS_KEY_ID = "testing"
+$env:AWS_SECRET_ACCESS_KEY = "testing"
+Remove-Item Env:AWS_PROFILE -ErrorAction SilentlyContinue
+Remove-Item Env:AWS_DEFAULT_PROFILE -ErrorAction SilentlyContinue
+python -m pytest tests -q -rs -p no:cacheprovider
 ```
 
-Các route nghiệp vụ local hiện nhận `X-Demo-User`. Ví dụ, instructor tạo
-course nháp:
+Các suite PostgreSQL opt-in sẽ skip nếu không có database test chuyên dụng.
+Đây là hành vi có chủ đích, không phải bằng chứng các case đó đã pass. Danh sách
+gate/port/database guard nằm trong `BACKEND_REGRESSION_REPORT.md`.
+
+## 6. PostgreSQL local và migration safety
+
+Khởi động database local nếu cần:
 
 ```powershell
-$instructorId = (docker exec learncloud-db psql -U learncloud -d learncloud -tAc "SELECT id FROM users WHERE email = 'instructor@example.com'").Trim()
-$headers = @{ "X-Demo-User" = $instructorId }
-$body = @{ title = "Local test course"; description = "Created locally"; learning_objectives = @("Verify setup") } | ConvertTo-Json
-Invoke-RestMethod http://127.0.0.1:8000/courses -Method Post -Headers $headers -ContentType "application/json" -Body $body
-```
-
-`X-Demo-User` chỉ là cách giả lập danh tính trong môi trường local. Không đưa
-header này hoặc API hiện tại ra môi trường công khai.
-
-## 7. Reset database local
-
-Chỉ dùng khi bạn đồng ý xóa toàn bộ dữ liệu trong volume local:
-
-```powershell
-docker compose down -v
 docker compose up -d learncloud-db
+docker compose ps
 ```
 
-Chờ database healthy rồi lặp lại mục 3. Không dùng `down -v` trên môi trường
-dùng chung hoặc RDS.
+Không tự động áp dụng toàn bộ `database/migrations/`: repository có lịch sử
+migration cần kế hoạch reconcile và các integration test có guard riêng. Trước
+mọi thao tác schema, đọc `database/migrations/README.md`, dùng database local
+cô lập, chụp trạng thái ban đầu và xác nhận target không phải RDS/production.
+
+Các file trong `database/checks/` là preflight/postflight để review. Không chạy
+chúng như migration. Cleanup repository không chạy SQL nào.
+
+## 7. Đăng nhập local
+
+Backend hỗ trợ các luồng auth được mô tả trong `docs/api-contract.md`. Không
+dùng `X-Demo-User` cho route bảo vệ. Khi cần provision mật khẩu local cho đúng
+tài khoản test, dùng script tương tác và chỉ trên database test đã xác minh:
+
+```powershell
+Set-Location .\backend
+python scripts/set_user_password.py --email EMAIL_TEST
+```
+
+Script không có mật khẩu mặc định; không ghi password vào command history,
+source, fixture hoặc báo cáo.
 
 ## 8. Lỗi thường gặp
 
-| Hiện tượng | Cách xử lý |
+| Hiện tượng | Kiểm tra an toàn |
 | --- | --- |
-| `connection refused` tới cổng 5434 | Chạy `docker compose ps`, xem `docker compose logs learncloud-db`, rồi chờ healthcheck xanh. |
-| Backend báo thiếu `DATABASE_URL` hoặc `JWT_SECRET_KEY` | Kiểm tra `.env` nằm ở root và `JWT_SECRET_KEY` dài ít nhất 32 ký tự. |
-| API báo thiếu cột như `courses.created_at` | Nạp lại `database/schema.sql`, sau đó áp dụng migration `0003_reconcile_legacy_schema.sql` như mục 3; không cần xóa volume. |
-| `psycopg2`/Python dependency lỗi | Kích hoạt lại `.venv`, nâng pip, sau đó cài lại `backend/requirements.txt`. |
-| `npm` bị policy chặn | Dùng `npm.cmd` như mục 5, không cần đổi execution policy của máy. |
-| `401`/`403` khi gọi API | Dùng ID có thật trong header `X-Demo-User` và đúng role (instructor cho create/update; student cho enroll). |
-| Route kỳ vọng progress/quiz/Tutor trả `404` | Những router này chưa được đăng ký đầy đủ trong backend hiện tại; xem README để biết phạm vi chạy được. |
+| `connection refused` tới `5434` | `docker compose ps` và healthcheck của `learncloud-db`. |
+| Thiếu dependency Python | Cài lại `backend/requirements.txt` trong `.venv`. |
+| `ProfileNotFound` khi chạy test | Gỡ `AWS_PROFILE`/`AWS_DEFAULT_PROFILE` khỏi tiến trình test. |
+| npm bị PowerShell policy chặn | Dùng `npm.cmd`, không cần đổi execution policy. |
+| `401`/`403` | Xác minh đúng auth mode, token test và role; không bypass bằng header demo. |
+| PostgreSQL test bị skip | Đọc guard của suite; không trỏ sang RDS để ép chạy. |
 
 ## 9. Dừng môi trường
 
@@ -172,36 +132,5 @@ dùng chung hoặc RDS.
 docker compose down
 ```
 
-Lệnh này giữ volume dữ liệu. Dừng server FastAPI/Vite bằng `Ctrl+C` trong từng
-terminal.
-
-
-## Đăng nhập JWT và kiểm tra mục 1–3 (04/11/2026)
-
-1. Chuẩn bị PostgreSQL, migration password_hash và seed theo phần hướng dẫn trên.
-2. Cài backend/requirements.txt. Đặt DATABASE_URL và JWT_SECRET_KEY (ít nhất 32 ký tự bí mật)
-   trong file .env ở gốc repository. Không commit giá trị bí mật.
-3. Từ thư mục backend, đặt mật khẩu cho tài khoản seed qua:
-   python scripts/set_user_password.py --email EMAIL_SEED
-   Script hỏi mật khẩu tương tác; không có mật khẩu mặc định trong source.
-4. Chạy uvicorn app.main:app --reload. Frontend cần VITE_API_URL=http://127.0.0.1:8000.
-5. VITE_USE_MOCK=true vẫn yêu cầu đăng nhập backend, nhưng nội dung/tiến độ/quiz dùng mock.
-   VITE_USE_MOCK=false chưa có đầy đủ video/quiz/progress runtime, xem api-contract.md.
-6. Mở /login, thử từng vai trò. Không dùng X-Demo-User; API bảo vệ không nhận header đó.
-
-Frontend: npm test và npm run build.
-Backend (thư mục backend): python -m unittest discover -s tests/unit -p test_auth_integration.py -v
-Bộ test auth dùng repository giả và HTTP ASGI trong bộ nhớ, không sửa database thật.
-
-Reset mock: về trang danh sách, F12 Console rồi chạy:
-```js
-const session = JSON.parse(sessionStorage.getItem("learncloud.auth.session"));
-const userId = session?.user?.id;
-if (userId != null) {
-  localStorage.removeItem("learncloud.mock.progress.v2:user:" + userId);
-  localStorage.removeItem("learncloud.mock.attempts:user:" + userId);
-  location.reload();
-}
-```
-Dữ liệu cũ chưa gắn user không được chuyển tự động sang tài khoản mới.
-Ngưỡng video mock hiện giữ 10% phục vụ test; giá trị dự kiến chính thức là 95%.
+Lệnh này giữ volume local. Việc xóa volume/backup phải được người sở hữu dữ liệu
+phê duyệt riêng; không nằm trong quy trình cleanup repository.
