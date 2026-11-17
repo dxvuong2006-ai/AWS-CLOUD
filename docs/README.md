@@ -42,7 +42,7 @@ Dành cho người nghiệm thu cần biết test nào đã chạy, số liệu 
 
 Runbook dưới đây chứa quy trình riêng chưa bị thay thế bởi 17 tài liệu chính. Nội dung đã được đối chiếu với source, nhưng vẫn phải xác minh inventory và target trước mọi thao tác ghi:
 
-- [Đối soát danh tính Cognito/RDS](aws/cognito-rds-reconciliation.md)
+- [Đối soát danh tính Cognito/RDS](../infrastructure/cognito/cognito-rds-reconciliation.md)
 - [Quy ước migration](../database/migrations/README.md)
 
 ## Tài liệu lưu trữ
