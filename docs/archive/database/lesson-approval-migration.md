@@ -1,4 +1,6 @@
-# Review migration phê duyệt Lesson (lịch sử)
+# [Lịch sử] Review migration phê duyệt Lesson
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot review quanh ngày 30/10/2026, trước khi source loại trạng thái `APPROVED`. Không dùng hướng dẫn này để chọn migration hiện tại; xem [thiết kế database](../../02-architecture/database-design.md) và registry/schema của database đích.
 
 > Ghi chú review lịch sử. Trạng thái migration/DB trong tài liệu này không được kiểm tra lại; xác minh schema và registry của đúng database trước khi vận hành. Không xem câu “chưa áp dụng” là trạng thái hiện tại.
 
@@ -221,4 +223,4 @@ $env:LEARNCLOUD_RUN_DB_TESTS = '1'
 | Repository | backend/app/repositories/lessons_repo.py; courses_repo.py |
 | Service đồng bộ | backend/app/services/course_service.py; processing_service.py |
 | Tests | backend/tests/unit/test_lesson_approval.py; test_video_processing.py; backend/tests/integration/test_video_processing_db.py |
-| Tài liệu | database/migrations/README.md; docs/database.md; docs/video-processing-phase1.md; tài liệu này |
+| Tài liệu | database/migrations/README.md; tài liệu tổng hợp hiện nay ở docs/02-architecture/database-design.md; snapshot video hiện ở docs/archive/operations/video-processing-phase1.md; tài liệu này |

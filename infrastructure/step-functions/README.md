@@ -1,4 +1,4 @@
-# Video pipeline — CODE READY / AWS NOT DEPLOYED
+# Video pipeline
 
 `video_pipeline.asl.json` dùng **Standard**, JSONPath, Lambda optimized integration
 `arn:aws:states:::lambda:invoke`. Thay `${PIPELINE_LAMBDA_ARN}` và `${AI_WORKER_ARN}`
@@ -34,5 +34,5 @@ Dùng API retry sau đối soát job cũ; outbox chạy lại bằng event mới
 và object thật; input mẫu không tạo dữ liệu DB, không xác nhận một upload tùy ý.
 
 **MANUAL AWS CONSOLE STEP:** import, validate, cấu hình logging và chạy thử theo
-[hướng dẫn tiếng Việt](../../docs/aws/video-pipeline-console-setup.md).
+[hướng dẫn tiếng Việt lưu trữ](../../docs/archive/aws/video-pipeline-console-setup.md).
 Local tests kiểm tra JSON, graph, payload SDK và guards; chưa phải AWS ASL validation.

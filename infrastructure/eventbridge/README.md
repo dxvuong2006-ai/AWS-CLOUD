@@ -1,4 +1,4 @@
-# EventBridge — CODE READY / AWS NOT DEPLOYED
+# EventBridge
 
 **MANUAL AWS CONSOLE STEP:** mọi rule/target/permission bên dưới do người dùng tạo.
 Các file chứa `${ACCOUNT_ID}`, `${STATE_MACHINE_ARN}` phải được thay trên bản sao.
@@ -49,4 +49,4 @@ không dùng legacy S3 `Records[0]` hay URL-decode key của schema khác.
 
 Xem [cấu trúc S3 event](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ev-events.html),
 [input transformer](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-transform-target-input.html)
-và [hướng dẫn thao tác](../../docs/aws/video-pipeline-console-setup.md#phan-6--eventbridge).
+và [hướng dẫn thao tác lịch sử](../../docs/archive/aws/video-pipeline-console-setup.md#phan-6--eventbridge).

@@ -1,8 +1,10 @@
-# Ghi chú API Gateway và Lambda
+# [Lịch sử] Ghi chú API Gateway và Lambda
 
-> Lưu ý lịch sử: bản bàn giao trước có endpoint AWS và giá trị database credential cố định. Các giá trị định danh/endpoint cũ đã được gỡ khỏi tài liệu; credential cũ không được lặp lại. Không dùng bản ghi bàn giao này để xác định cấu hình hiện tại. Xem [quy trình triển khai và xác minh](../aws-deployment.md).
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot bàn giao trước 17/11/2026; ngày chính xác không được ghi. Chỉ dùng để tra cứu quyết định tại thời điểm đó và luôn đối chiếu [hướng dẫn triển khai hiện tại](../../03-implementation/aws-deployment.md), OpenAPI, source cùng inventory AWS trước khi thao tác.
 
-> Các ví dụ route/CORS bên dưới là ghi chú lịch sử, không phải xác nhận cấu hình đang chạy. Dùng [OpenAPI hiện tại](../api-contract.md) để tra API source và xác minh route/auth trên API Gateway riêng.
+> Lưu ý lịch sử: bản bàn giao trước có endpoint AWS và giá trị database credential cố định. Các giá trị định danh/endpoint cũ đã được gỡ khỏi tài liệu; credential cũ không được lặp lại. Không dùng bản ghi bàn giao này để xác định cấu hình hiện tại. Xem [quy trình triển khai và xác minh](../../03-implementation/aws-deployment.md).
+
+> Các ví dụ route/CORS bên dưới là ghi chú lịch sử, không phải xác nhận cấu hình đang chạy. Dùng [OpenAPI hiện tại](../../02-architecture/api-contract.md) để tra API source và xác minh route/auth trên API Gateway riêng.
 
 Tài liệu dưới đây giữ lại các hướng dẫn cấu hình chung từ runbook cũ. Những phần phụ thuộc tài nguyên AWS, endpoint, user pool, stage hoặc role cụ thể cần được đối chiếu với inventory hiện hành trước khi thao tác.
 

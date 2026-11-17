@@ -1,4 +1,6 @@
-# Runbook E2E K4 + K5 cô lập trên AWS
+# [Lịch sử] Runbook E2E K4 + K5 cô lập trên AWS
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot E2E trước 17/11/2026; ngày chính xác không được ghi. Fixture, resource name và handler test bên dưới chỉ dành cho môi trường cô lập cũ; xem [hướng dẫn triển khai hiện tại](../../03-implementation/aws-deployment.md) trước khi thiết kế E2E mới.
 
 > Giữ fixture Lesson 3 làm bằng chứng lần chạy thất bại. Hướng dẫn fixture Lesson 4, thứ tự sao chép S3, IAM policy đã render và cách dùng lại workflow cho Lesson N nằm trong `database/k5/e2e4/README.md`.
 

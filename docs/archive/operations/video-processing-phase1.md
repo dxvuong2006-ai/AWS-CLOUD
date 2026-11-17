@@ -1,7 +1,9 @@
-# Backend xử lý video
+# [Lịch sử] Backend xử lý video giai đoạn 1
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot triển khai và test quanh ngày 30/10/2026. Trạng thái `APPROVED`, route và cơ chế dispatch trong tài liệu đã thay đổi; xem [luồng dữ liệu hiện tại](../../02-architecture/data-flows.md) và [trạng thái chức năng](../../03-implementation/feature-results.md).
 
 > Ghi nhận lịch sử: một thay đổi Lesson approval đã được chuẩn bị;
-> trạng thái migration/DB hiện tại chưa xác minh. Xem [hướng dẫn review](../database/lesson-approval-migration.md).
+> trạng thái migration/DB hiện tại chưa xác minh. Xem [hướng dẫn review lưu trữ](../database/lesson-approval-migration.md).
 > Các nhận xét bên dưới về việc giữ nguyên schema/chặn publish là snapshot
 > của giai đoạn triển khai ban đầu, không phải quyết định hiện tại.
 > Đây là ghi chú lịch sử; kiểm tra route, trạng thái migration và AWS riêng trước khi dựa vào bất kỳ kết luận nào.
@@ -24,7 +26,7 @@ worker transcode hoặc workflow AWS. `202 PROCESSING` chỉ nghĩa request loca
 
 ## Thành phần có trước
 
-- Ghi chú snapshot cũ: ví dụ xác thực dùng `X-Demo-User`; không còn là hướng dẫn hiện hành. Backend hiện dùng bearer access token; xem [API contract](../api-contract.md).
+- Ghi chú snapshot cũ: ví dụ xác thực dùng `X-Demo-User`; không còn là hướng dẫn hiện hành. Backend hiện dùng bearer access token; xem [API contract](../../02-architecture/api-contract.md).
 - S3 adapter thật: Presigned PUT, HEAD và Presigned GET SigV4; playback service
   có development raw policy và log lỗi an toàn.
 - Lesson repository và các cột raw/processed key, status, retry_count,

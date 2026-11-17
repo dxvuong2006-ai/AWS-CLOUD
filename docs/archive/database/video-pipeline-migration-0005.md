@@ -1,4 +1,6 @@
-# Review migration 0005 — ledger pipeline video
+# [Lịch sử] Review migration 0005 - ledger pipeline video
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: review và test local ngày 31/10/2026. Migration history hiện có nhiều nhánh `0004`; không chạy lệnh bên dưới nếu chưa đối chiếu [thiết kế database hiện tại](../../02-architecture/database-design.md), registry, target và backup.
 
 > Tài liệu review và lệnh mẫu từ snapshot trước. Chưa xác minh trạng thái 0005 trên bất kỳ database hiện tại nào. Không chạy lệnh migration trực tiếp trước khi xác nhận target, backup và preflight theo quy trình hiện hành.
 
@@ -11,7 +13,7 @@ và cấu hình test hiện hành trước khi chạy.
 | Điểm | Đã có trong code trước review | Thay đổi lần này |
 | --- | --- | --- |
 | Version 0005 | Migration chưa ghi registry. | INSERT version + description ở cuối cùng transaction; kiểm tra 0004, version conflict và bảng tồn tại trước DDL. |
-| Upload confirmation | Snapshot review mô tả upload intent và kiểm object tại claim. | Source hiện tại cũng có `POST /lessons/{lesson_id}/confirm-upload`; xem [API contract](../api-contract.md). Cơ chế pipeline hiện hành cần đối chiếu source/infra riêng. |
+| Upload confirmation | Snapshot review mô tả upload intent và kiểm object tại claim. | Source hiện tại cũng có `POST /lessons/{lesson_id}/confirm-upload`; xem [API contract](../../02-architecture/api-contract.md). Cơ chế pipeline hiện hành cần đối chiếu source/infra riêng. |
 | Hai upload/run ghi cùng Lesson; job cũ ghi đè | Course → Lesson FOR UPDATE NOWAIT; claim chỉ khi DRAFT/retry_count=0; callback kiểm execution owner + attempt=retry_count + raw upload identity. | Giữ cơ chế; tăng kiểm tra upload/lesson qua repository; thêm regression tests và PostgreSQL tests cho lock/callback cũ. |
 | Hai FK riêng không bảo đảm cùng Lesson | Service tạo run theo upload.lesson_id, nhưng DB chưa ràng buộc cặp. | UNIQUE video_uploads(id, lesson_id) và FK run(upload_id, lesson_id) → upload(id, lesson_id); đồng bộ ORM/repository/service/Lambda path/tests. |
 
@@ -34,7 +36,7 @@ tuân thủ cùng ownership gate; quyền ghi SQL tùy ý ngoài service không 
 
 ## Migration đã được rà soát
 
-File [0005_video_pipeline_ledger.sql](../../database/migrations/0005_video_pipeline_ledger.sql):
+File [0005_video_pipeline_ledger.sql](../../../database/migrations/0005_video_pipeline_ledger.sql):
 
 - Một transaction, lock_timeout 5s, statement_timeout 60s, schema `public` rõ ràng.
 - Yêu cầu version/description 0004 đúng và ck_lessons_status đã validated, có APPROVED.
@@ -59,7 +61,7 @@ cặp tham chiếu cần một unique key tương ứng trên bảng cha; PK ri�
 
 ## Preflight chỉ đọc
 
-File [video_pipeline_preflight.sql](../../database/checks/video_pipeline_preflight.sql)
+File [video_pipeline_preflight.sql](../../../database/checks/video_pipeline_preflight.sql)
 chạy trong REPEATABLE READ READ ONLY, có timeout, không DDL/DML hoặc ghi version.
 Nó in DB/role/version, quyền cần thiết, trạng thái Lesson/Course dạng tổng hợp,
 columns/constraints/indexes nếu bảng có; không in presigned URL, credentials hay nội dung AI.
@@ -201,7 +203,7 @@ Kỳ vọng: ALREADY_APPLIED; version 0004 giữ nguyên, 0005 có đúng descri
 FK/unique/checks đã validated; hai bảng mới rỗng; cross_lesson_runs=0; tổng Lesson/Course,
 status/retry/key giữ nguyên so baseline khi application đã tạm dừng ghi. Không tự tạo
 upload/run mẫu trong development để chứng minh constraint. Chỉ bật pipeline sau khi
-source/DB/schema/network đã cùng sẵn sàng; xem [hướng dẫn AWS](../aws/video-pipeline-console-setup.md).
+source/DB/schema/network đã cùng sẵn sàng; xem [hướng dẫn AWS lưu trữ](../aws/video-pipeline-console-setup.md).
 
 Nếu apply có vấn đề sau commit: giữ feature flag tắt, xem preflight và roll-forward
 migration đã review. Không drop ledger/xóa version 0005 để rollback vội. Backup restore
@@ -222,7 +224,7 @@ sau output mới, Lambda guard, original upload-time validation ở retry, ORM/S
 preflight read-only và guard không cho PostgreSQL suite vào development/remote target.
 Migration 0004 không có diff; các API upload/playback/retry/approve/publish regression vẫn đạt.
 
-[PostgreSQL integration tests](../../backend/tests/integration/test_video_pipeline_ledger_db.py)
+[PostgreSQL integration tests](../../../backend/tests/integration/test_video_pipeline_ledger_db.py)
 được **chuẩn bị, chưa chạy** trong phiên agent. Có 6 tests: registry/constraints,
 composite FK thật, hai upload cùng Lesson, khóa NOWAIT với hai connections, unique
 upload+attempt và callback cũ không ghi đè key mới. Chúng không chạy DDL/migrations,
@@ -264,7 +266,7 @@ kiểm chứng migration trên PostgreSQL, lock runtime hoặc AWS integration.
 - `backend/tests/unit/test_video_pipeline.py`
 - `backend/tests/unit/test_video_pipeline_migration.py`
 - `backend/tests/integration/test_video_pipeline_ledger_db.py`
-- `database/migrations/README.md`, `docs/database.md`
+- `database/migrations/README.md`; tài liệu tổng hợp hiện nay là `docs/02-architecture/database-design.md`
 - `docs/aws-video-pipeline-console-setup.md`, tài liệu review này.
 
 Không sửa migration 0004, ASL, cấu trúc event, endpoint upload/confirm/retry hoặc kiến

@@ -1,32 +1,70 @@
 # Tài liệu LearnCloud
 
-Tài liệu này là điểm vào cho nhóm bảo trì và bàn giao LearnCloud. Tài liệu mô tả source và cấu hình trong repository; source không chứng minh một tài nguyên AWS đang chạy. Báo cáo kiểm thử ghi rõ phạm vi, kết quả, skip và giới hạn xác minh. Trạng thái AWS production hiện chưa được kiểm tra trong đợt dọn tài liệu này.
+## 01 - Tổng quan
 
-## Đọc theo nhu cầu
+Dành cho người đọc muốn hiểu bài toán, phạm vi MVP, vai trò và luồng nghiệp vụ.
 
-| Tài liệu | Nội dung |
-|---|---|
-| [Yêu cầu và quy tắc nghiệp vụ](requirements.md) | Hành vi có trong backend/frontend và các giới hạn đã biết. |
-| [Kiến trúc](architecture.md) | Các thành phần source, luồng local/AWS dự kiến và trạng thái xác minh. |
-| [API contract](api-contract.md) | Toàn bộ operation hiện có trong FastAPI OpenAPI. |
-| [Database](database.md) | Bảng, quan hệ, nguồn schema và lịch sử migrations. |
-| [Thiết lập local](local-setup.md) | Cài dependencies, khởi động dịch vụ local và cấu hình an toàn. |
-| [Triển khai AWS](aws-deployment.md) | Quy trình kiểm tra, triển khai, rollback và ranh giới bằng chứng. |
-| [Kịch bản demo](demo-script.md) | Demo local giới hạn ở những bước có thể xác minh an toàn. |
+- [Tổng quan dự án](01-overview/project-overview.md)
+- [Luồng người dùng](01-overview/user-workflows.md)
 
-## Tài liệu chuyên sâu
+## 02 - Kiến trúc
 
-- `aws/`: API Gateway/Lambda, Cognito/RDS, S3 playback và pipeline video. Nội dung triển khai cũ được giữ làm runbook tham khảo; phải kiểm tra cấu hình hiện hành trước khi dùng.
-- `database/`: hướng dẫn review migration chuyên biệt; không phải migrations đã áp dụng.
-- `operations/`: runbook E2E và báo cáo kiểm thử có phạm vi cụ thể.
-- [Quy ước migrations](../database/migrations/README.md): lịch sử version, nhánh lịch sử và các guard.
-- [Infrastructure source](../infrastructure/): cấu hình mẫu và scripts. Tệp cấu hình không xác minh trạng thái tài khoản AWS.
+Dành cho nhà phát triển, người review bảo mật và người vận hành cần phân biệt M1–M8 với K1–K6.
 
-## Cách diễn giải trạng thái
+- [Kiến trúc chức năng M1–M8](02-architecture/functional-architecture.md)
+- [Kiến trúc AWS K1–K6](02-architecture/aws-architecture.md)
+- [Luồng dữ liệu](02-architecture/data-flows.md)
+- [Bảo mật và rủi ro](02-architecture/security-and-risks.md)
+- [Hợp đồng API](02-architecture/api-contract.md)
+- [Thiết kế database](02-architecture/database-design.md)
 
-- **Có trong source**: route, component, adapter, schema hoặc hạ tầng đã được định nghĩa trong repository.
-- **Được kiểm thử**: có báo cáo hoặc test tương ứng; cần đọc phạm vi và loại môi trường.
-- **Đã xác nhận trên AWS**: chỉ ghi khi có biên bản/inventory triển khai có thể đối chiếu. Tài liệu hiện có chứa các ghi nhận lịch sử, nhưng lần dọn này không gọi AWS và không xác nhận chúng còn đúng.
-- **Chưa xác minh**: không có bằng chứng hiện hành đủ để kết luận.
+## 03 - Hiện thực và triển khai
 
-Không ghi credentials, access tokens, password thật, private key hoặc presigned URL còn hiệu lực trong docs. Không chạy migration hay deploy chỉ bằng cách làm theo các ví dụ nếu chưa xác nhận môi trường đích.
+Dành cho thành viên cần chạy local, chuẩn bị thay đổi AWS hoặc đối chiếu kết quả chức năng.
+
+- [Thiết lập local](03-implementation/local-setup.md)
+- [Triển khai AWS](03-implementation/aws-deployment.md)
+- [Kết quả chức năng](03-implementation/feature-results.md)
+
+## 04 - Đánh giá
+
+Dành cho người nghiệm thu cần biết test nào đã chạy, số liệu nào chỉ đến từ báo cáo và các giới hạn còn lại.
+
+- [Kiểm thử](04-evaluation/testing.md)
+- [AI và hiệu năng](04-evaluation/ai-and-performance.md)
+- [Giới hạn](04-evaluation/limitations.md)
+
+## 05 - Demo
+
+- [Hướng dẫn demo theo vai trò](05-demo/demo-guide.md)
+
+## Runbook vận hành
+
+Runbook dưới đây chứa quy trình riêng chưa bị thay thế bởi 17 tài liệu chính. Nội dung đã được đối chiếu với source, nhưng vẫn phải xác minh inventory và target trước mọi thao tác ghi:
+
+- [Đối soát danh tính Cognito/RDS](aws/cognito-rds-reconciliation.md)
+- [Quy ước migration](../database/migrations/README.md)
+
+## Tài liệu lưu trữ
+
+`docs/archive/` chứa các snapshot triển khai, migration và kiểm thử theo thời điểm. Mỗi file có cảnh báo **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI**; chúng không phải hướng dẫn mặc định và không được dùng làm inventory AWS/RDS.
+
+### AWS và pipeline
+
+- [Bàn giao API Gateway/Lambda](archive/aws/api-gateway-lambda.md)
+- [Rollout production K4/K5](archive/aws/k4-k5-production-rollout.md)
+- [Playback MP4 từ S3](archive/aws/s3-video-playback.md)
+- [Thiết lập pipeline qua AWS Console](archive/aws/video-pipeline-console-setup.md)
+
+### Database và migration
+
+- [Migration phê duyệt Lesson](archive/database/lesson-approval-migration.md)
+- [Migration ledger video 0005](archive/database/video-pipeline-migration-0005.md)
+
+### Kiểm thử và giai đoạn triển khai
+
+- [Regression backend lịch sử](archive/operations/backend-regression-report.md)
+- [K4/K5 E2E cô lập](archive/operations/k4-k5-e2e-test-runbook.md)
+- [Video processing giai đoạn 1](archive/operations/video-processing-phase1.md)
+
+Không đưa credential, token, mật khẩu, OTP, private key, presigned URL hay tài khoản demo vào tài liệu/issue. Các file đầu vào tạm thời của bộ tài liệu không thuộc phạm vi Git.

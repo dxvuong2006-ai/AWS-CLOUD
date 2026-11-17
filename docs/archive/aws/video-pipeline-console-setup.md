@@ -1,6 +1,8 @@
-# LearnCloud — triển khai Video Processing Pipeline bằng AWS Console
+# [Lịch sử] Triển khai Video Processing Pipeline bằng AWS Console
 
-> Runbook được giữ lại từ một snapshot cũ. Các câu khẳng định về endpoint (gồm confirm-upload), trạng thái migration, source, AWS deployment và test là ghi nhận tại thời điểm viết, không phải trạng thái hiện tại. Đối chiếu [API contract hiện tại](../api-contract.md), [source infrastructure](../../infrastructure/) và inventory trước khi dùng. Không có AWS production state nào được xác minh trong lần dọn docs này.
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot pipeline và test local ngày 31/10/2026, trước 17/11/2026. Đây không phải runbook triển khai hiện hành; phải đối chiếu [hướng dẫn triển khai hiện tại](../../03-implementation/aws-deployment.md), source, migration registry và inventory AWS trước khi dùng.
+
+> Runbook được giữ lại từ một snapshot cũ. Các câu khẳng định về endpoint (gồm confirm-upload), trạng thái migration, source, AWS deployment và test là ghi nhận tại thời điểm viết, không phải trạng thái hiện tại. Đối chiếu [API contract hiện tại](../../02-architecture/api-contract.md), [source infrastructure](../../../infrastructure/) và inventory trước khi dùng. Không có AWS production state nào được xác minh trong lần dọn docs này.
 
 Ghi nhận lúc tài liệu được soạn: tác giả đánh dấu source **CODE READY**, **LOCAL TESTED**,
 **AWS NOT DEPLOYED**; các nhãn này không được kiểm tra lại. Tài liệu cũng ghi phiên làm
@@ -34,7 +36,7 @@ flowchart LR
 Dispatch duy nhất qua EventBridge: S3 cho upload đầu tiên; outbox relay cho retry chủ động.
 Không cấu hình thêm S3→Lambda transcode hoặc backend→StartExecution.
 Snapshot lúc viết tài liệu này cho rằng chưa có `confirm-upload` route. Source hiện tại
-đã đăng ký `POST /lessons/{lesson_id}/confirm-upload`; xem [API contract](../api-contract.md).
+đã đăng ký `POST /lessons/{lesson_id}/confirm-upload`; xem [API contract](../../02-architecture/api-contract.md).
 Route tồn tại không tự xác minh AWS dispatch/claim behavior; đối chiếu implementation
 hiện tại trước khi chọn cơ chế xác nhận và giữ một đường dispatch duy nhất.
 
@@ -79,7 +81,7 @@ phù hợp; không đổi region rời rạc hoặc xin AdministratorAccess đ�
 1. Đã có Lesson DRAFT thuộc Section/Course DRAFT và Instructor sở hữu; migration 0004
    APPROVED đã áp dụng theo thông tin dự án. Không chạy lại 0004 chỉ để test pipeline.
 2. Chủ DB xem xét, backup và **tự quyết định áp dụng**
-   [0005_video_pipeline_ledger.sql](../../database/migrations/0005_video_pipeline_ledger.sql).
+   [0005_video_pipeline_ledger.sql](../../../database/migrations/0005_video_pipeline_ledger.sql).
    Đây là migration mới **chỉ được chuẩn bị file**, chưa chạy. Nó tạo hai bảng ledger,
    không update Lesson/Course, không tạo sample data. Không có auto-migrate khi khởi động.
    Đọc [review 0005 và lệnh PowerShell backup/apply/verify](../database/video-pipeline-migration-0005.md),

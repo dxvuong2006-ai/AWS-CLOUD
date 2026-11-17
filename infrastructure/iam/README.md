@@ -134,4 +134,4 @@ hiện có nếu Lambda kết nối RDS trong VPC. Quyền SQL vẫn do database
 security group quản lý, không nằm trong IAM policy video.
 
 Thao tác chi tiết, ARN và kiểm tra quyền:
-[phần IAM trong hướng dẫn](../../docs/aws/video-pipeline-console-setup.md#phan-2--iam-roles-va-policies).
+[phần IAM trong hướng dẫn lịch sử](../../docs/archive/aws/video-pipeline-console-setup.md#phan-2--iam-roles-va-policies).

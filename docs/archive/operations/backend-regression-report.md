@@ -1,4 +1,6 @@
-# Báo cáo kiểm thử hồi quy Backend — LearnCloud
+# [Lịch sử] Báo cáo kiểm thử hồi quy Backend - LearnCloud
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG PHẢI KẾT QUẢ MỚI NHẤT.** Thời điểm áp dụng: lượt regression được lưu trước đợt tài liệu ngày 17/11/2026. Kết quả 463 pass/69 skip không được chạy lại trong lần dọn tài liệu này; xem [tài liệu kiểm thử hiện tại](../../04-evaluation/testing.md) để phân biệt các lượt đo.
 
 ## Kết quả thực tế
 

@@ -1,4 +1,4 @@
-# CloudWatch — CODE READY / AWS NOT DEPLOYED
+# CloudWatch
 
 **MANUAL AWS CONSOLE STEP:** tạo các log groups trước Lambda vì policy mẫu không
 cấp CreateLogGroup. Chọn ap-southeast-1; retention khởi đầu 7 ngày cho môi trường lab.
@@ -70,4 +70,4 @@ execution input/output đầy đủ vào ticket công khai. Khóa quyền xem La
 Kiểm soát phí: 7 ngày lab / 14–30 ngày theo nhu cầu thật, tắt DEBUG, ERROR thay ALL,
 không log từng nội dung video, giới hạn query time range, theo dõi Billing/Budgets.
 Xóa log groups chỉ sau lưu bằng chứng cần thiết; xem
-[cleanup](../../docs/aws/video-pipeline-console-setup.md#phan-10--cleanup).
+[cleanup lịch sử](../../docs/archive/aws/video-pipeline-console-setup.md#phan-10--cleanup).

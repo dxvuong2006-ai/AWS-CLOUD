@@ -1,4 +1,6 @@
-# Phát MP4 từ S3 private trên LearnCloud
+# [Lịch sử] Phát MP4 từ S3 private trên LearnCloud
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: kết quả test ngày 29/10/2026 và cập nhật chẩn đoán sau đó, trước 17/11/2026. Lesson ID, bucket, cấu hình và kết quả runtime bên dưới không phải inventory hiện hành; xem [luồng dữ liệu hiện tại](../../02-architecture/data-flows.md) và [hướng dẫn triển khai](../../03-implementation/aws-deployment.md).
 
 > Ghi nhận triển khai/test lịch sử, bao gồm lỗi thiếu AWS credentials ở lần kiểm tra được mô tả. Không phải xác nhận playback AWS hiện tại. Source/tests đã thay đổi từ thời điểm ghi; kiểm tra lại cấu hình và test trong môi trường cô lập trước khi dùng.
 

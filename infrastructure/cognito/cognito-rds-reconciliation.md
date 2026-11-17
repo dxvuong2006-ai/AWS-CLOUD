@@ -1,8 +1,6 @@
 # Đối soát danh tính Cognito/RDS
 
-Tài liệu này là kế hoạch vận hành, không phải migration. Thay đổi code trong đợt
-audit này không kết nối RDS/Cognito production và không tự chạy `INSERT`,
-`UPDATE`, `DELETE`.
+Tài liệu này là runbook vận hành để phân loại và xử lý lệch danh tính giữa Cognito và RDS; đây không phải migration hay bằng chứng production. Nội dung được đối chiếu với source ngày 17/11/2026, nhưng inventory Cognito/RDS hiện hành chưa được kiểm tra và mọi thao tác ghi cần change request riêng.
 
 ## Kết luận rà soát
 
@@ -50,7 +48,7 @@ audit này không kết nối RDS/Cognito production và không tự chạy `INS
 
 Template least-privilege nằm tại
 `infrastructure/iam/lambda-auth-cognito-permissions.json`. Nếu toàn bộ FastAPI
-routes chạy chung một Lambda execution role, role cần đúng sáu actions sau trên
+routes chạy chung một Lambda execution role, role hiện cần đúng tám actions sau trên
 ARN của một User Pool cụ thể:
 
 - `cognito-idp:AdminGetUser` cho first-login/verify provisioning;
@@ -62,7 +60,7 @@ ARN của một User Pool cụ thể:
 - `cognito-idp:AdminDisableUser` and `cognito-idp:AdminEnableUser` for the admin account status endpoint.
 
 Nếu tách admin routes sang Lambda khác, Lambda auth thông thường chỉ cần
-`AdminGetUser`; năm quyền ghi thuộc Lambda admin. `SignUp`, `ConfirmSignUp`,
+`AdminGetUser`; bảy quyền quản trị còn lại thuộc Lambda admin. `SignUp`, `ConfirmSignUp`,
 `ResendConfirmationCode`, `ForgotPassword`, `ConfirmForgotPassword` là public
 Cognito operations và `ChangePassword` được authorize bằng access token, nên
 không thêm chúng vào execution-role policy. JWKS HTTPS read cũng không phải IAM
@@ -88,39 +86,7 @@ Phân loại từng Cognito user:
 - `SUB_CONFLICT`: cùng `sub` nhưng dữ liệu chỉ ra hai chủ thể khác nhau. Khoá xử
   lý và điều tra; không copy role hoặc dữ liệu giữa các row.
 
-Theo hiện trạng đã cung cấp, ba email sau là ứng viên `SAFE_MISSING` **chỉ khi
-snapshot tại thời điểm xử lý vẫn xác nhận không có row cùng email hoặc sub**:
-
-- `nemarsanto1@gmail.com`
-- `ok@gmail.com`
-- `dxvuong2007@gmail.com`
-
-Không suy ra role cũ cho ba tài khoản này. Cơ chế first-login chỉ tạo `STUDENT`.
-Nếu nghiệp vụ yêu cầu role khác, admin phải thực hiện quy trình cấp quyền riêng.
-
-`o@gmail.com` đã gọi `/auth/me` thành công nên chỉ cần kiểm tra `EXACT_SUB`; không
-cập nhật row nếu đã khớp.
-
-## Xử lý riêng RDS user ID 10
-
-`vuongthuy1998@gmail.com` phải được phân loại `EMAIL_CONFLICT`: row ID 10 và
-Cognito hiện tại có `cognito_sub` khác nhau. Backend mới sẽ từ chối liên kết và
-giữ nguyên ID 10, role, tên, email, password hash và subject cũ.
-
-Operator cần xác minh ngoài hệ thống:
-
-1. Subject cũ còn tồn tại trong đúng User Pool hay không.
-2. Lịch sử tạo/cập nhật row ID 10 và lịch sử Cognito của cả hai subject.
-3. Chủ tài khoản đã chứng minh quyền sở hữu email và account nào là account cần
-   giữ lại.
-4. Có dữ liệu nghiệp vụ tham chiếu ID 10 (course, enrollment, progress, attempt)
-   hay không.
-
-Chỉ khi review kết luận Cognito subject hiện tại chính là chủ thể hợp lệ của row
-ID 10, một change request được duyệt mới được phép thay exact `cognito_sub` trong
-transaction có backup và kiểm tra precondition. Không đổi role, không đổi ID,
-không ghi đè profile. Nếu chưa đủ bằng chứng, giữ nguyên xung đột và từ chối đăng
-nhập là kết quả an toàn.
+Không đưa email, user ID, Cognito subject hoặc danh sách account thực vào tài liệu công khai. Operator phải giữ bảng phân loại `EXACT_SUB`/`SAFE_MISSING`/`EMAIL_CONFLICT`/`SUB_CONFLICT` trong nơi lưu trữ riêng có kiểm soát truy cập. Với mỗi conflict, xác minh lịch sử hai hệ thống, quyền sở hữu account và các bản ghi nghiệp vụ tham chiếu; chỉ cập nhật exact `cognito_sub` khi có change request, backup và precondition được duyệt. Nếu chưa đủ bằng chứng, giữ nguyên xung đột và từ chối liên kết là kết quả an toàn.
 
 ## Kiểm tra sau đối soát
 

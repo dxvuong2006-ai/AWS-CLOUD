@@ -1,4 +1,6 @@
-# Kế hoạch rollout production K4 + K5
+# [Lịch sử] Kế hoạch rollout production K4 + K5
+
+> **TÀI LIỆU LỊCH SỬ - KHÔNG XÁC MINH HIỆN TẠI.** Thời điểm áp dụng: snapshot chuẩn bị rollout trước 17/11/2026; ngày chính xác không được ghi. Các tên resource, artifact hash, test result và quyết định readiness dưới đây chỉ có giá trị lịch sử; xem [hướng dẫn triển khai hiện tại](../../03-implementation/aws-deployment.md) trước mọi thao tác.
 
 > Tài liệu chuẩn bị rollout lịch sử. Định danh account AWS và ARN tĩnh đã được gỡ. Lần dọn tài liệu không truy vấn AWS/RDS; mọi tài nguyên và kết quả readiness/test nêu dưới đây cần được xác minh lại trước khi xem là hiện trạng.
 

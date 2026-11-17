@@ -1,72 +1,113 @@
 # LearnCloud
 
-LearnCloud là nền tảng học trực tuyến lấy video làm trung tâm, tích hợp trí tuệ nhân tạo (AI) để hỗ trợ quá trình học tập. Dự án bao gồm Frontend React/Vite, Backend FastAPI, cơ sở dữ liệu PostgreSQL cùng hệ thống xử lý video và sinh nội dung AI, hỗ trợ chạy trên môi trường local và AWS.
+LearnCloud là hệ thống quản lý học tập lấy video làm trung tâm, hỗ trợ giảng viên biến video bài giảng thành transcript, tóm tắt, khái niệm, flashcard và checkpoint để duyệt trước khi công bố. Học viên học theo section, làm checkpoint và ôn tập có ngữ cảnh qua AI Tutor; quản trị viên quản lý tài khoản và theo dõi job.
 
-## 1. Cấu trúc dự án
 
-| Thư mục | Chức năng |
+## Giá trị và phạm vi MVP
+
+- **Instructor:** quản lý course/section/lesson, upload video trực tiếp lên S3, theo dõi xử lý, duyệt nội dung AI, publish và xem báo cáo học tập.
+- **Student:** đăng ký course đã publish, xem video cùng transcript, học flashcard, lưu tiến độ, làm checkpoint và remediation/Tutor.
+- **Admin:** quản lý user, role/trạng thái tài khoản và xem danh sách job giám sát trong ứng dụng.
+- MVP **không có thanh toán**, livestream, DRM, mobile app hay adaptive learning hoàn chỉnh.
+
+## Kiến trúc tóm tắt
+
+```mermaid
+flowchart TB
+    U[Student / Instructor / Admin]
+
+    subgraph K1[K1 - Truy cập và xác thực]
+      WEB[(S3 static web)]
+      CF[CloudFront]
+      CG[Cognito]
+    end
+    subgraph K2[K2 - Ứng dụng nghiệp vụ]
+      GW[API Gateway]
+      LA[Lambda + FastAPI/Mangum]
+    end
+    subgraph K3[K3 - Dữ liệu và lưu trữ]
+      RDS[(RDS PostgreSQL)]
+      S3R[(S3 raw)]
+      S3P[(S3 processed)]
+    end
+    subgraph K4[K4 - Xử lý bất đồng bộ]
+      EB[EventBridge]
+      SF[Step Functions]
+      PL[Pipeline Lambda]
+      MC[MediaConvert]
+      TR[Transcribe]
+    end
+    subgraph K5[K5 - AI tạo sinh]
+      AI[AI worker]
+      BR[Bedrock]
+    end
+    subgraph K6[K6 - Giám sát và chi phí]
+      CW[CloudWatch]
+      BU[AWS Budgets]
+    end
+
+    U --> CF --> WEB
+    U --> CG
+    U --> GW --> LA --> RDS
+    LA -->|presigned URL| U
+    U --> S3R --> EB --> SF
+    SF --> PL --> MC --> S3P
+    SF --> AI --> TR
+    AI --> BR
+    PL & AI --> RDS
+    GW & LA & SF & PL & AI --> CW
+```
+
+Thiết kế AWS trong báo cáo gồm K1–K6; repository có template/worker cho luồng này nhưng các cờ video/AI mặc định tắt. Xem [kiến trúc AWS](docs/02-architecture/aws-architecture.md) và [trạng thái chức năng](docs/03-implementation/feature-results.md).
+
+## Công nghệ
+
+| Lớp | Công nghệ có trong repository |
 |---|---|
-| `frontend/` | Giao diện React/Vite, tích hợp xác thực, API và kiểm thử trình duyệt. |
-| `backend/` | FastAPI, các API, services, repositories, adapters và bộ kiểm thử. |
-| `ai_pipeline/` | Xử lý transcript, sinh nội dung AI, schemas, dữ liệu mẫu và kiểm thử. |
-| `database/` | Khởi tạo PostgreSQL, migrations, scripts kiểm tra và dữ liệu mẫu. |
-| `infrastructure/` | Cấu hình AWS, đóng gói Lambda và các ví dụ triển khai. |
-| `docs/` | Tài liệu dự án, hướng dẫn cài đặt, triển khai và vận hành. |
+| Giao diện | React 19, Vite 8, React Router, AWS Amplify |
+| API | FastAPI, Pydantic, SQLAlchemy, Mangum |
+| Dữ liệu | PostgreSQL 16; SQLite cho test/local cô lập |
+| AWS | Cognito, API Gateway, Lambda, RDS, S3, CloudFront, EventBridge, Step Functions, MediaConvert, Transcribe, Bedrock, CloudWatch, AWS Budgets |
+| Kiểm thử | Python `unittest`/`pytest`, Node test runner, PostgreSQL integration gates |
 
-## 2. Chạy dự án trên máy local
+## Khởi động nhanh
 
-Xem [hướng dẫn cài đặt](docs/local-setup.md) để biết các yêu cầu về môi trường, cấu hình cơ sở dữ liệu và xác thực.
-
-Backend cần biến môi trường `DATABASE_URL` để kết nối PostgreSQL. Các biến `VITE_*` của Frontend được sử dụng trong trình duyệt, vì vậy không được chứa thông tin bí mật.
-
-**Bước 1: Cài đặt môi trường và dependencies**
+Yêu cầu Python 3.11+, Node.js/npm và PowerShell. Luồng dưới đây chỉ khởi động backend cô lập với SQLite và frontend; không gọi AWS.
 
 ```powershell
-Copy-Item .env.example .env
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r .\backend\requirements.txt
+$env:DATABASE_URL = 'sqlite:///./backend/tests.db'
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+Mở terminal thứ hai:
+
+```powershell
 Set-Location .\frontend
 npm.cmd ci
 npm.cmd run dev
 ```
 
-**Bước 2: Khởi chạy Backend**
+Kiểm tra `http://127.0.0.1:8000/health`, `http://127.0.0.1:8000/docs` và `http://localhost:5173`. Cấu hình local auth/PostgreSQL và các giới hạn an toàn được trình bày trong [hướng dẫn local](docs/03-implementation/local-setup.md).
 
-Mở Terminal thứ hai tại thư mục gốc của dự án:
+## Tài liệu
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
-```
+- [Mục lục tài liệu](docs/README.md)
+- [Tổng quan dự án](docs/01-overview/project-overview.md)
+- [Luồng người dùng](docs/01-overview/user-workflows.md)
+- [Kiến trúc chức năng M1–M8](docs/02-architecture/functional-architecture.md)
+- [Hợp đồng API - 80 operations](docs/02-architecture/api-contract.md)
+- [Cài đặt local](docs/03-implementation/local-setup.md)
+- [Kiểm thử](docs/04-evaluation/testing.md)
+- [Kịch bản demo](docs/05-demo/demo-guide.md)
 
-## 3. Tài liệu dự án
+## Nhóm thực hiện: MentorCloud - Nhóm 2:
 
-Xem [docs/README.md](docs/README.md) để tra cứu danh sách tài liệu và quy ước xác minh thông tin.
 
-Các tài liệu chính:
-
-- [Yêu cầu hệ thống](docs/requirements.md)
-- [Kiến trúc hệ thống](docs/architecture.md)
-- [Danh sách và đặc tả API](docs/api-contract.md)
-- [Cơ sở dữ liệu](docs/database.md)
-- [Hướng dẫn triển khai AWS](docs/aws-deployment.md)
-- [Kịch bản demo](docs/demo-script.md)
-
-## 4. Kiểm thử và lưu ý bảo mật
-
-Sự tồn tại của source code hoặc cấu hình không đồng nghĩa với việc chức năng đã hoạt động thành công trên môi trường thực tế.
-
-[Báo cáo kiểm thử Backend](docs/operations/backend-regression-report.md) ghi nhận kết quả của lần kiểm thử offline được lưu:
-
-- **463 tests PASS**
-- **0 tests FAIL**
-- **69 tests SKIP** do yêu cầu môi trường PostgreSQL riêng.
-
-Các trường hợp SKIP chưa được xác minh trên PostgreSQL và không được tính là kiểm thử thành công.
-
-Trạng thái triển khai AWS Production chưa được xác minh trong quá trình dọn dẹp tài liệu.
-
-**Lưu ý bảo mật:**
-
-- Không commit `.env`, credentials, tokens, mật khẩu, private keys hoặc presigned URLs lên GitHub.
-- Không chạy migrations hoặc triển khai AWS chỉ dựa trên các cấu hình ví dụ trong repository.
-- Kiểm tra [lịch sử migration và các biện pháp an toàn](database/migrations/README.md) trước khi thực thi SQL.
+| Thành viên | Trách nhiệm|
+|---|---|
+| Vương Xuân Dũng (nhóm trưởng) | M1, M8, Lambda/API Gateway/JWT authorizer, điều phối và review |
+| Nguyễn Minh Hùng | Frontend ba vai trò, tích hợp API, tiến độ học, S3/CloudFront frontend |
+| Bùi Công Huy | M2, M3, phần video M4, PostgreSQL/RDS, S3/EventBridge/Step Functions/MediaConvert |
+| Đào Minh Tuấn | AI pipeline M4, M5, quiz/unlock M6, M7, schema AI và test |

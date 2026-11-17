@@ -60,7 +60,7 @@ upload/lesson. Yêu cầu 0004 đã ghi/validated; không thay đổi migration 
 Đây là file **one-time**: tự từ chối chạy lại hoặc nhận schema tồn tại không rõ lịch sử;
 bộ chạy registry bên dưới sẽ bỏ qua version đã có. Không drop/adopt bảng cũ để ép pass.
 Chạy [preflight chỉ đọc](../checks/video_pipeline_preflight.sql) và xem
-[review + PowerShell backup/apply/verify](../../docs/database/video-pipeline-migration-0005.md)
+[review lịch sử + PowerShell backup/apply/verify](../../docs/archive/database/video-pipeline-migration-0005.md)
 trước khi tự triển khai; không chạy mọi migration chỉ để kiểm tra riêng 0005.
 
 `seed.sql` là dữ liệu demo, không phải migration. Kiểu khóa chính hiện tại là
@@ -187,10 +187,10 @@ does not apply the migration.
 
 ## 6. Quy trình PR và checklist review
 
-1. Cập nhật `docs/api-contract.md` nếu request/response bị ảnh hưởng.
+1. Cập nhật `docs/02-architecture/api-contract.md` nếu request/response bị ảnh hưởng.
 2. Chọn số version chưa dùng, tạo migration và cập nhật model/schema Pydantic.
 3. Thử trên database sạch và database đã nạp seed.
-4. Cập nhật [docs/database.md](../../docs/database.md) trong cùng PR.
+4. Cập nhật [thiết kế database](../../docs/02-architecture/database-design.md) trong cùng PR.
 5. Review/merge theo thứ tự version; người merge sau đổi version khi xung đột.
 
 - [ ] File có `BEGIN`/`COMMIT` và tự ghi version vào `schema_migrations`.

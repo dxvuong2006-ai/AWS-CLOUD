@@ -1,8 +1,12 @@
 # Hợp đồng API
 
-Nguồn chuẩn là OpenAPI được FastAPI tạo từ `backend/app/main.py`. Mỗi hàng tương ứng một operation đang đăng ký, gồm method, endpoint, mục đích, đầu vào, phản hồi thành công và xác thực. Body liệt kê các trường cấp một; `*` đánh dấu trường bắt buộc. Kiểu phản hồi là schema thành công được OpenAPI khai báo. Có thể xem OpenAPI tại `/openapi.json` hoặc `/docs` khi backend chạy.
 
-“Bearer bắt buộc” nghĩa là gửi access token qua `Authorization: Bearer <token>`. Route công khai không yêu cầu token. Backend vẫn áp dụng vai trò, ownership, enrollment và trạng thái dữ liệu theo từng operation. JSON object ghi chú “schema chưa khai báo cụ thể” khi route không khai báo response model trong OpenAPI.
+## Quyền và mã lỗi
+
+- `require_student`, `require_instructor` và `require_admin` buộc đúng vai trò; service/repository kiểm tra thêm ownership, enrollment, publish, unlock và trạng thái tài khoản.
+- Nhóm `/instructor/**`, upload, review và quản lý course yêu cầu Instructor và quyền sở hữu tài nguyên. Nhóm học/quiz/progress/Tutor yêu cầu Student và các gate nghiệp vụ. Nhóm `/admin/**` yêu cầu Admin.
+- `401` là thiếu/sai/hết hạn danh tính; `403` là đã xác thực nhưng không đủ quyền; `404` giữ kín tài nguyên không tồn tại/không truy cập được; `409` là xung đột trạng thái/idempotency; `422` là sai schema/validation. Các mã `5xx` phụ thuộc adapter dịch vụ ngoài.
+- Cột phản hồi dưới đây chỉ liệt kê success schema. Danh sách status khai báo chi tiết xem trong OpenAPI runtime; business service có thể trả thêm lỗi thông qua exception handler chung.
 
 ## Tình trạng dịch vụ
 

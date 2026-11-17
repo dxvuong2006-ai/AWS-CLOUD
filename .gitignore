@@ -36,15 +36,17 @@ coverage/
 Thumbs.db
 .idea/
 
-# Local test/runtime databases are generated artifacts.
+/.doc-input/
+/.docs-input/
+
 /backend/tests.db
 *.sqlite
 *.sqlite3
 
-# Lambda deployment packages are reproducible build artifacts. Keep them local
-# or in the approved artifact store, not in Git.
+
 /learncloud-lambda.zip
 /learncloud-lambda-auth-sync.zip
 /learncloud-lambda-cors.zip
 /learncloud-rds-probe.zip
 /backend/learncloud-lambda.zip
+/infrastructure/lambda/learncloud-rds-probe.zip

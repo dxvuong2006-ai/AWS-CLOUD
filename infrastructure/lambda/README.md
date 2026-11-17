@@ -92,7 +92,7 @@ K5 dùng `backend/scripts/build_ai_worker_package.py`; ZIP phải chứa `app/`,
 Giữ `AI_WORKER_ENABLED=false` và `VIDEO_AI_ENABLED=false` cho tới khi role, VPC,
 S3 output, Bedrock model access và State Machine ARN đã được kiểm tra ở non-production.
 Environment, packaging, VPC, IAM và thao tác upload ZIP:
-[hướng dẫn Console](../../docs/aws/video-pipeline-console-setup.md#phan-4--lambda).
+[hướng dẫn Console lịch sử](../../docs/archive/aws/video-pipeline-console-setup.md#phan-4--lambda).
 
 Điểm C: worker nhận `{run_id, execution_arn}`, xác minh ownership/attempt, tạo và lưu
 transcript/summary/concepts (và quiz/flashcard theo contract C), trả
